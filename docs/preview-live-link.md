@@ -99,3 +99,15 @@ address to anyone who should not see the demo. **Ctrl-C** stops everything and r
 
 It cannot show how the real helper installs on macOS, ProPresenter's own lazy loading, the Search import, or whether ProPresenter honours the
 selected arrangement when a song is loaded from a playlist: those are in the PR's "Not proven without the rig".
+
+## The section gallery (every state of the three Live Link blocks, no backend)
+
+For a design review of the Lighting, Playback and Presentation blocks side by side, without any stand-in or backend, build and serve the gallery:
+
+```sh
+cd frontend && npm run build:gallery && cd ..        # writes frontend/dist-gallery (not part of the app or the desktop bundle)
+python3 tools/preview_sections.py --bind 0.0.0.0 --port 8102
+```
+
+Open `http://<this computer>:8102/`. It draws the real blocks with made-up data in every state (ready, searching, not connected, an error or a held change on the address, Link not installed, update available by hand and by itself, needs the command again, not answering, import blocked, on this computer, scanning) at 360 px or 1280 px (the buttons at the top). Press **Details** on a block to open or close it. `npm run gallery` runs the same page with the Vite dev server.
+

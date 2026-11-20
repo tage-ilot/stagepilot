@@ -8,6 +8,8 @@
     "dev:lan": "vite --host 0.0.0.0 --port 8101 --strictPort",
     "ui:gallery": "vite --config vite.ui-gallery.config.ts --open /ui-gallery.html",
     "ui:gallery:build": "tsc --noEmit && vite build --config vite.ui-gallery.config.ts",
+    "gallery": "vite --config vite.gallery.config.ts --open /sections.html",
+    "build:gallery": "tsc --noEmit && vite build --config vite.gallery.config.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ignore-pattern 'dist-gallery/**'",

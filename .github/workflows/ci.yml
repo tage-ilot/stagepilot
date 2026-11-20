@@ -40,6 +40,9 @@ jobs:
       - name: Build UI gallery
         run: npm --prefix frontend run ui:gallery:build
 
+      - name: Build section gallery
+        run: npm --prefix frontend run build:gallery
+
       - name: Build frontend
         run: npm --prefix frontend run build
 
@@ -74,6 +77,9 @@ jobs:
 
       - name: ProPresenter Link stand-ins (the helper on a temp folder, ProPresenter's own API)
         run: python -m unittest discover -s tools -p "test_fake_propresenter_*.py" -v
+
+      - name: Section gallery server (read-only, only its own folder)
+        run: python -m unittest discover -s tools -p "test_preview_sections.py" -v
 
       - name: Helper signing script tests
         run: node --test scripts/helper_signing.test.mjs

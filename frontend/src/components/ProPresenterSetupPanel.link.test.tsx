@@ -51,13 +51,14 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
     for (let i = 0; i < order.length - 1; i += 1) expect(before(order[i]!, order[i + 1]!), `${i} before ${i + 1}`).toBe(true);
   });
 
-  it("holds the connection: Host, Port and Test connection are inside the block, under the two status lines and above the setup box", () => {
+  it("holds the connection: Host, Port and Test connection are inside the block, above the status line and the setup box", () => {
     panel(linkController(helperStatus("not_installed")));
     const inside = within(block());
     for (const control of [inside.getByLabelText("Host"), inside.getByLabelText("Port"), inside.getByRole("button", { name: "Test connection" })]) expect(block()).toContainElement(control);
     const lines = screen.getByTestId("propresenter-live-link-sub");
     const row = screen.getByTestId("propresenter-live-link-line");
-    expect(before(lines, row)).toBe(true);
+    // The connection row is on top (DOM order changed on purpose: it used to sit under the status lines).
+    expect(before(row, lines)).toBe(true);
     expect(before(row, screen.getByTestId("propresenter-install"))).toBe(true);
     // Everything that is not the connection stays outside of it.
     for (const outside of [screen.getByRole("combobox", { name: /Detected timer/i }), screen.getByLabelText("Timeout (seconds)"), screen.getByLabelText("ProPresenter Look"), screen.getByRole("button", { name: "Refresh timers and Looks" }), screen.getByRole("button", { name: "Save configuration" })]) expect(block()).not.toContainElement(outside);
@@ -109,7 +110,7 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
 });
 
 describe("ProPresenterSetupPanel: tab order follows the new visual order", () => {
-  it("Setup button, Host, Port, Test connection, then Detected timer, Timeout, Look, Refresh, Save", async () => {
+  it("Host, Port, Test connection, the Details button, then Detected timer, Timeout, Look, Refresh, Save", async () => {
     const user = userEvent.setup();
     panel(linkController(helperStatus("ready")));
     const seen: string[] = [];
@@ -120,7 +121,7 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
       if (active.textContent === "Save configuration") break;
     }
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
-      "Set up the ProPresenter computer", "Host", "Port", "Test connection",
+      "Host", "Port", "Test connection", "Presenter Link setup",
       "Detected timer", "Timeout (seconds)", "ProPresenter Look", "Refresh timers and Looks", "Save configuration",
     ]);
   });

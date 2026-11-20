@@ -1,13 +1,13 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 
 import { RecentAddresses } from "./RecentAddresses";
 
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ProPresenterStatusResponse } from "../types";
 import { helperUpdateLine, updatesItself } from "./lightkeyProject";
-import { DisclosureButton, LiveLinkField, LiveLinkPill, LiveLinkShell } from "./LightingOscParts";
+import { proPresenterBoxProps } from "./helperBoxProps";
+import { ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill } from "./sections";
 import { CONTROL_40 } from "./liveLink";
-import { ProPresenterInstallBox } from "./ProPresenterInstallBox";
 import { PRESENTER_LINK_NAME, apiWords, importBlocked, linkLine, linkNote, linkPill, linkWords, proPresenterLine, proPresenterPill } from "./proPresenterLinkState";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
@@ -61,13 +61,10 @@ function HeldMarker({ id }: { id: string }) {
  * setup; left out, `connection` draws no boxes.
  */
 export function ProPresenterLinkBlock({ propresenter, link, connection }: { propresenter: ProPresenterStatusResponse | null; link?: ProPresenterLinkController; connection?: ProPresenterConnectionFields }) {
-  const setupId = useId();
-  const heldHostId = useId();
+    const heldHostId = useId();
   const heldPortId = useId();
   const errorHostId = useId();
   const errorPortId = useId();
-  // The box under the strip, opened by its button (null = the default: open while the Link is not ready).
-  const [setupOpen, setSetupOpen] = useState<boolean | null>(null);
   const status = link?.status ?? null;
   const hasComputer = Boolean(propresenter?.enabled && propresenter.host);
   const local = Boolean(link) && status?.mode === "local";
@@ -80,8 +77,8 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
   // A Link that is behind and can update itself is updated by StagePilot: its setup box stays closed, with only a line to read.
   const updatesBySelf = state === "outdated" && updatesItself(status?.update);
   const needsSetup = helper && state !== "ready" && state !== null && state !== "checking" && !updatesBySelf;
-  const setupShown = helper && (setupOpen ?? needsSetup);
-  const setupLabel = state === "outdated" && !updatesBySelf ? `Update the ${PRESENTER_LINK_NAME}` : "Set up the ProPresenter computer";
+  // The Details button: "Presenter Link setup", or what is to be done when the Link is behind and StagePilot cannot update it.
+  const detailsLabel = state === "outdated" && !updatesBySelf ? `Update the ${PRESENTER_LINK_NAME}` : `${PRESENTER_LINK_NAME} setup`;
   const updateLine = helperUpdateLine(status?.update);
   const note = link ? linkNote(status) : null;
 
@@ -89,42 +86,14 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
   const hostMarker = fields?.held.host ? <HeldMarker id={heldHostId} /> : undefined;
   const portMarker = fields?.held.port ? <HeldMarker id={heldPortId} /> : undefined;
 
+  const hasDetails = Boolean(link) && (helper || local || Boolean(note) || Boolean(updateLine));
+
   return (
-    <LiveLinkShell
+    <ConnectionSection
+      attention={needsSetup || (Boolean(note) && !importBlocked(status))}
       className="!mt-0"
-      pill={(
+      connection={fields && (
         <>
-          <LiveLinkPill detail={api.text} name="" testId="propresenter-api-pill" text={apiWords(pillApi.word)} tone={pillApi.tone} />
-          {link && <LiveLinkPill detail={line.text} name="" testId="propresenter-link-pill" text={linkWords(pillLink.word)} tone={pillLink.tone} />}
-        </>
-      )}
-      testId="propresenter-live-link"
-      title={TITLE}
-    >
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.78125rem] text-ink-muted" data-testid="propresenter-live-link-sub">
-        <p aria-live="polite" className="min-w-0 flex-[1_1_16rem]" role="status">
-          <span className="block sm:inline" data-testid="propresenter-banner" data-tone={api.tone}>{apiWords(`${api.text}.`)}</span>
-          {link && (
-            <>
-              <span aria-hidden="true" className="hidden sm:inline">{" \u00B7 "}</span>
-              <span className="block sm:inline" data-testid="propresenter-link-status" data-tone={line.tone}>{linkWords(`${line.text}.`)}</span>
-            </>
-          )}
-        </p>
-        {helper && (
-          <div className="flex min-w-0 flex-wrap items-center gap-2" data-testid="propresenter-live-link-actions">
-            <DisclosureButton controls={setupId} onToggle={() => setSetupOpen(!setupShown)} open={setupShown}>{setupLabel}</DisclosureButton>
-          </div>
-        )}
-      </div>
-
-      {note && <p className={`mt-2 text-type-body-sm ${importBlocked(status) ? "text-ink-body" : "text-warning-text"}`} data-testid="propresenter-link-note" role="status">{note}</p>}
-      {updateLine && link && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="propresenter-link-update" role="status">{updateLine}</p>}
-      {local && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="propresenter-link-local">ProPresenter runs on this computer, so there is nothing to set up. StagePilot uses its folder directly.</p>}
-
-      {fields && (
-        <>
-          {/* The connection, the way the Lighting strip holds its Host and port: under the status lines, above the setup box. */}
           <div className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="propresenter-live-link-line">
             <LiveLinkField caption="Host" className="live-link-host" marker={hostMarker}>
               <Input
@@ -161,13 +130,29 @@ export function ProPresenterLinkBlock({ propresenter, link, connection }: { prop
           {fields.errors.port && <p className="mt-1 text-type-body-sm text-danger-text" id={errorPortId} role="alert">{fields.errors.port}</p>}
         </>
       )}
-
-      {link && helper && (
-        <div hidden={!setupShown} id={setupId}>
-          <ProPresenterInstallBox autoStart={setupOpen === true} hasComputer={hasComputer} link={link} />
-        </div>
+      details={hasDetails && link ? ({ byChoice }) => (
+        <>
+          {local && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="propresenter-link-local">ProPresenter runs on this computer, so there is nothing to set up. StagePilot uses its folder directly.</p>}
+          {note && <p className={`mt-2 text-type-body-sm ${importBlocked(status) ? "text-ink-body" : "text-warning-text"}`} data-testid="propresenter-link-note" role="status">{note}</p>}
+          {updateLine && <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="propresenter-link-update" role="status">{updateLine}</p>}
+          {helper && <HelperSetupBox {...proPresenterBoxProps(link, hasComputer)} autoStart={byChoice} />}
+        </>
+      ) : undefined}
+      detailsLabel={detailsLabel}
+      footer={link?.error ? <p className="mt-2 text-sm text-danger-text" role="alert">{link.error}</p> : undefined}
+      pills={(
+        <>
+          <LiveLinkPill detail={api.text} name="" testId="propresenter-api-pill" text={apiWords(pillApi.word)} tone={pillApi.tone} />
+          {link && <LiveLinkPill detail={line.text} name="" testId="propresenter-link-pill" text={linkWords(pillLink.word)} tone={pillLink.tone} />}
+        </>
       )}
-      {link?.error && <p className="mt-2 text-sm text-danger-text" role="alert">{link.error}</p>}
-    </LiveLinkShell>
+      status={[
+        { text: apiWords(`${api.text}.`), testId: "propresenter-banner", tone: api.tone },
+        ...(link ? [{ text: linkWords(`${line.text}.`), testId: "propresenter-link-status", tone: line.tone }] : []),
+      ]}
+      testId="propresenter-live-link"
+      testIdPrefix="propresenter-live-link"
+      title={TITLE}
+    />
   );
 }

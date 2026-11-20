@@ -1,7 +1,7 @@
 // StagePilot design tokens (Tailwind theme). Edit here and in src/design-tokens.css together.
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}", "!./src/**/*.test.*", "!./src/components/ui/gallery/**"],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}", "!./src/**/*.test.*", "!./src/components/ui/gallery/**", "!./src/gallery/**"],
   theme: { extend: {
   "colors": {
     "background": "#090d12",

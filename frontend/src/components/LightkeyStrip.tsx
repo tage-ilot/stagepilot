@@ -13,7 +13,7 @@ import {
 import { describeError } from "../errorText";
 import type { LightkeyActionResponse, LightkeyReadFixtures, LightkeySaving, LightkeyStatus } from "../types";
 import { LightkeyDiscoveryNotice } from "./LightkeyDiscoveryNotice";
-import { LIGHTKEY_INSTALL_ID, LightkeyInstallBox } from "./LightkeyInstallBox";
+import { lightkeyBoxProps } from "./helperBoxProps";
 import { helperIsOutdated, projectLine, UPDATE_HELPER_TIP } from "./lightkeyProject";
 import { captureLabelText, formatCount, simplifiedNote, startLookNote, type CaptureLabel } from "./lightingLooks";
 import { RecentAddresses } from "./RecentAddresses";
@@ -25,7 +25,9 @@ import { Input } from "./ui/Input";
 import { CONTROL_34 } from "./compactControl";
 import { apiHostMismatch, apiPortError, composeApiUrl, splitApiUrl } from "./lightkeyConnection";
 import { oscHostError, oscPortError } from "./lightingOsc";
-import { LiveLinkField, LiveLinkPill, LiveLinkShell, LiveLinkTools, OscConnectionFields } from "./LightingOscParts";
+import { OscConnectionFields } from "./LightingOscParts";
+import { useLiveLinkTools } from "./useLiveLinkTools";
+import { ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, LiveLinkShell } from "./sections";
 import { CONTROL_40, liveLinkPillState, lightkeyFixtureWord } from "./liveLink";
 
 const POLL_MS = 1500;
@@ -151,7 +153,7 @@ const smallBox = "!w-[5.25rem] text-center tabular-nums";
  * Captures the fixtures' colour and levels from the lightkey-api agent and holds them with overrides on replay.
  * `connection` is the panel's shared host/port draft; on its own (tests, other screens) the strip keeps a host of its own.
  */
-export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, testCue, footer, onStatus }: {
+export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, testCue, footer, onStatus, readStatus }: {
   lightingEnabled: boolean;
   /** Told every time the status is read (the panel shows the project notice on the song's timeline). */
   onStatus?: (status: LightkeyStatus) => void;
@@ -163,21 +165,25 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   testCue?: ReactNode;
   /** Notes under the block's strip (last sent, what is kept while the method is held). */
   footer?: ReactNode;
+  /** Where the status comes from: the backend. Only the section gallery gives another (made-up data, no backend). */
+  readStatus?: () => Promise<LightkeyStatus>;
 }) {
   const [status, setStatus] = useState<LightkeyStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ownHost, setOwnHost] = useState<string | null>(null); // only without `connection`
   const [apiPort, setApiPort] = useState<string | null>(null); // null = untouched, show the saved one
-  const [setupOpen, setSetupOpen] = useState(false);
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
   const [readResult, setReadResult] = useState<LightkeyReadFixtures | null>(null);
   const alive = useRef(true);
+  const reader = useRef(readStatus);
+  reader.current = readStatus;
+  const tools = useLiveLinkTools(testCue);
 
   const load = useCallback(async () => {
     try {
-      const next = await getLightkeyStatus();
+      const next = await (reader.current ?? getLightkeyStatus)();
       if (alive.current) { setStatus(next); setError(null); }
     } catch (cause) {
       if (alive.current) setError(describeError(cause, "Lightkey status is unavailable."));
@@ -308,8 +314,8 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   const outdated = helperIsOutdated(status);
   const readBlocked = outdated ? UPDATE_HELPER_TIP : !connected ? "Connect to Lightkey first." : undefined;
   const releasable = Math.max(status.holding_fixtures ?? 0, status.known_fixtures ?? 0) > 0;
-  const stateText = (
-    <p aria-live="polite" className="min-w-0 flex-[1_1_16rem] text-[0.78125rem] text-ink-muted" data-testid="lightkey-headline">
+  const statusText = (
+    <>
       {segments.length > 0 && joinStateLine(segments)}
       {holding && (
         <>
@@ -317,153 +323,164 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           <span data-testid="lightkey-holding">{holding}</span>
         </>
       )}
-    </p>
+    </>
   );
+  // Details open by themselves while the helper needs the person: not set up, or behind and not updating itself.
+  const needsHelper = status.link !== "off" && !(connected && !outdated);
   return (
-    <LiveLinkShell pill={<LiveLinkPill detail={pillState.detail} text={pillState.text} tone={pillState.tone} />} testId="lightkey-strip">
-      <div className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="live-link-line">
-        <LiveLinkField caption="Host or IP (OSC output + Live Link)" className="live-link-host">
-          <Input
-            aria-label="Host or IP address"
-            autoCapitalize="none"
-            autoCorrect="off"
-            className={`w-full font-mono ${CONTROL_40} ${connection?.held.host ? "!border-warning" : ""}`}
-            error={Boolean(hostError)}
-            onChange={(event) => setHost(event.target.value)}
-            onKeyDown={enterToConnect}
-            placeholder="192.0.2.10"
-            spellCheck={false}
-            value={host}
-          />
-        </LiveLinkField>
-        {connection && (
-          <LiveLinkField caption="OSC UDP">
-            <Input aria-label="OSC UDP port" className={`${smallBox} font-mono ${CONTROL_40} ${connection.held.port ? "!border-warning" : ""}`} error={Boolean(udpError)} inputMode="numeric" onChange={(event) => connection.onPort(event.target.value)} value={connection.oscPort} />
-          </LiveLinkField>
-        )}
-        <LiveLinkField caption="API">
-          <Input aria-label="API port" className={`${smallBox} font-mono ${CONTROL_40}`} error={Boolean(apiError)} inputMode="numeric" onChange={(event) => setApiPort(event.target.value)} onKeyDown={enterToConnect} value={shownApiPort} />
-        </LiveLinkField>
-        {/* The Lighting primary, never dimmed unless the panel itself is off; while a request is in flight it shows a busy state. */}
-        <Button
-          className={`live-link-connect ${CONTROL_40} !border-integration-lighting-soft !bg-surface-950 !text-ink can-hover:!bg-surface-900`}
-          disabled={!lightingEnabled}
-          loading={busy}
-          loadingLabel={"Checking\u2026"}
-          onClick={() => void connect()}
-          variant="tinted"
-          tone="lighting"
-        >
-          {connected && !changed ? "Check again" : "Connect"}
-        </Button>
-        <div className="live-link-modes flex flex-wrap items-end gap-x-2.5 gap-y-2">
-          <ConnectionMethod
-            disabled={busy}
-            field
-            label="Mode"
-            onChange={(mode) => {
-              if (mode !== "record") { void run(toMode(mode)); return; }
-              if (looks?.edited && !confirmRerecordLooks()) return;
-              void run(() => setLightkeyRecording(true));
-            }}
-            options={[
-              { value: "auto", label: "Auto" },
-              { value: "replay", label: "Replay" },
-              { value: "record", label: "Record", disabled: !status.recording && !connected },
-            ]}
-            value={shownMode}
-          />
-        </div>
-      </div>
-      <RecentAddresses className="mt-2" onPick={setHost} scope="lighting" value={host} working={connected ? saved.host : null} />
-      {status.link !== "off" && (
-        <p className="mt-1.5 text-[0.78125rem] text-ink-muted" data-testid="lightkey-project">{projectLine(status)}</p>
-      )}
-      {(hostError || udpError || apiError) && (
-        <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, udpError, apiError].filter(Boolean).join(" ")}</p>
-      )}
-      {otherHost !== null && (
-        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-host-notice" role="status">
-          <p className="text-type-body-sm text-warning-text">
-            {`The live-link API is set to ${otherHost}, not the OSC host ${savedOscHost}. It keeps using ${otherHost} until you change it.`}
-          </p>
-          <Button className={CONTROL_34} disabled={busy} onClick={() => void acceptOscHost()} variant="secondary" tone="lighting">Use the OSC host</Button>
-        </div>
-      )}
-
-      {status.project_mismatch && (
-        <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-project-mismatch" role="status">
-          {status.project_mismatch.message}
-        </p>
-      )}
-      {outdated && (
-        <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-helper-update" role="status">
-          Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
-        </p>
-      )}
-
-      <LightkeyDiscoveryNotice
-        busy={busy}
-        discovery={status.discovery}
-        onKeepWaiting={(address) => void run(() => keepWaitingForLightkey(address))}
-        onSearchAgain={() => void run(() => searchLightkeyAgain())}
-        onUse={(address) => void run(() => switchToLightkeyComputer(address))}
-      />
-
-      <LightkeyInstallBox autoStart={setupOpen} status={status} />
-
-      {!status.recording && status.replay === false && (
-        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-replay-off" role="status">
-          <p className="text-type-body-sm text-warning-text">
-            Replay is off, so saved lights will not play. The toggle above does not show this.
-          </p>
-          <Button disabled={busy} onClick={() => void run(() => saveLightkeySettings({ replay: true }))} variant="secondary" tone="lighting">
-            Turn Replay on
+    <ConnectionSection
+      actions={(
+        <>
+          <Button
+            className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
+            disabled={busy || !releasable}
+            onClick={() => void run(() => releaseLightkeyLights())}
+            variant="secondary"
+          >
+            Release lights
           </Button>
-        </div>
-      )}
-
-      <LiveLinkTools
-        setup={status.link === "off" ? undefined : { label: "Lighting computer setup", open: setupOpen, controls: LIGHTKEY_INSTALL_ID, onToggle: () => setSetupOpen(!setupOpen) }}
-        footer={footer}
-        release={(
-          <>
+          {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper. */}
+          <span data-testid="lightkey-read-fixtures-wrap" title={readBlocked}>
             <Button
               className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
-              disabled={busy || !releasable}
-              onClick={() => void run(() => releaseLightkeyLights())}
+              disabled={busy || reading || Boolean(readBlocked)}
+              loading={reading}
+              loadingLabel={"Reading\u2026"}
+              onClick={() => void readFixtures()}
               variant="secondary"
             >
-              Release lights
+              Read fixtures
             </Button>
-            {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper. */}
-            <span data-testid="lightkey-read-fixtures-wrap" title={readBlocked}>
-              <Button
-                className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
-                disabled={busy || reading || Boolean(readBlocked)}
-                loading={reading}
-                loadingLabel={"Reading\u2026"}
-                onClick={() => void readFixtures()}
-                variant="secondary"
-              >
-                Read fixtures
+          </span>
+          {tools.actions}
+        </>
+      )}
+      attention={needsHelper}
+      connection={(
+        <>
+          <div className="mt-2 flex flex-wrap items-end gap-x-2.5 gap-y-2" data-testid="live-link-line">
+            <LiveLinkField caption="Host or IP (OSC output + Live Link)" className="live-link-host">
+              <Input
+                aria-label="Host or IP address"
+                autoCapitalize="none"
+                autoCorrect="off"
+                className={`w-full font-mono ${CONTROL_40} ${connection?.held.host ? "!border-warning" : ""}`}
+                error={Boolean(hostError)}
+                onChange={(event) => setHost(event.target.value)}
+                onKeyDown={enterToConnect}
+                placeholder="192.0.2.10"
+                spellCheck={false}
+                value={host}
+              />
+            </LiveLinkField>
+            {connection && (
+              <LiveLinkField caption="OSC UDP">
+                <Input aria-label="OSC UDP port" className={`${smallBox} font-mono ${CONTROL_40} ${connection.held.port ? "!border-warning" : ""}`} error={Boolean(udpError)} inputMode="numeric" onChange={(event) => connection.onPort(event.target.value)} value={connection.oscPort} />
+              </LiveLinkField>
+            )}
+            <LiveLinkField caption="API">
+              <Input aria-label="API port" className={`${smallBox} font-mono ${CONTROL_40}`} error={Boolean(apiError)} inputMode="numeric" onChange={(event) => setApiPort(event.target.value)} onKeyDown={enterToConnect} value={shownApiPort} />
+            </LiveLinkField>
+            {/* The Lighting primary, never dimmed unless the panel itself is off; while a request is in flight it shows a busy state. */}
+            <Button
+              className={`live-link-connect ${CONTROL_40} !border-integration-lighting-soft !bg-surface-950 !text-ink can-hover:!bg-surface-900`}
+              disabled={!lightingEnabled}
+              loading={busy}
+              loadingLabel={"Checking\u2026"}
+              onClick={() => void connect()}
+              variant="tinted"
+              tone="lighting"
+            >
+              {connected && !changed ? "Check again" : "Connect"}
+            </Button>
+            <div className="live-link-modes flex flex-wrap items-end gap-x-2.5 gap-y-2">
+              <ConnectionMethod
+                disabled={busy}
+                field
+                label="Mode"
+                onChange={(mode) => {
+                  if (mode !== "record") { void run(toMode(mode)); return; }
+                  if (looks?.edited && !confirmRerecordLooks()) return;
+                  void run(() => setLightkeyRecording(true));
+                }}
+                options={[
+                  { value: "auto", label: "Auto" },
+                  { value: "replay", label: "Replay" },
+                  { value: "record", label: "Record", disabled: !status.recording && !connected },
+                ]}
+                value={shownMode}
+              />
+            </div>
+          </div>
+          <RecentAddresses className="mt-2" onPick={setHost} scope="lighting" value={host} working={connected ? saved.host : null} />
+          {status.link !== "off" && (
+            <p className="mt-1.5 text-[0.78125rem] text-ink-muted" data-testid="lightkey-project">{projectLine(status)}</p>
+          )}
+          {(hostError || udpError || apiError) && (
+            <p className="mt-1 text-type-body-sm text-danger-text" role="alert">{[hostError, udpError, apiError].filter(Boolean).join(" ")}</p>
+          )}
+          {otherHost !== null && (
+            <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-host-notice" role="status">
+              <p className="text-type-body-sm text-warning-text">
+                {`The live-link API is set to ${otherHost}, not the OSC host ${savedOscHost}. It keeps using ${otherHost} until you change it.`}
+              </p>
+              <Button className={CONTROL_34} disabled={busy} onClick={() => void acceptOscHost()} variant="secondary" tone="lighting">Use the OSC host</Button>
+            </div>
+          )}
+
+          {status.project_mismatch && (
+            <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-project-mismatch" role="status">
+              {status.project_mismatch.message}
+            </p>
+          )}
+          {outdated && (
+            <p className="mt-2 text-type-body-sm text-warning-text" data-testid="lightkey-helper-update" role="status">
+              Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
+            </p>
+          )}
+
+          <LightkeyDiscoveryNotice
+            busy={busy}
+            discovery={status.discovery}
+            onKeepWaiting={(address) => void run(() => keepWaitingForLightkey(address))}
+            onSearchAgain={() => void run(() => searchLightkeyAgain())}
+            onUse={(address) => void run(() => switchToLightkeyComputer(address))}
+          />
+
+          {!status.recording && status.replay === false && (
+            <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="lightkey-replay-off" role="status">
+              <p className="text-type-body-sm text-warning-text">
+                Replay is off, so saved lights will not play. The toggle above does not show this.
+              </p>
+              <Button disabled={busy} onClick={() => void run(() => saveLightkeySettings({ replay: true }))} variant="secondary" tone="lighting">
+                Turn Replay on
               </Button>
-            </span>
-          </>
-        )}
-        stateText={stateText}
-        testCue={testCue}
-      />
-
-      {status.saving && <LightkeySavingLine saving={status.saving} />}
-
-      {readResult && (
-        <p className={`mt-2 text-type-body-sm ${readResult.ok ? "text-ink-muted" : "text-danger-text"}`} data-testid="lightkey-read-result" role="status">{readResult.message}</p>
+            </div>
+          )}
+        </>
       )}
+      details={({ byChoice }) => <HelperSetupBox {...lightkeyBoxProps(status)} autoStart={byChoice} />}
+      detailsLabel={status.link === "off" ? null : "Lighting computer setup"}
+      footer={(
+        <>
+          {footer}
+          {status.saving && <LightkeySavingLine saving={status.saving} />}
 
-      {status.recording && (
-        <LoudnessPicker disabled={loudness?.disabled} hasLoudness={Boolean(loudness?.present)} onClear={loudness?.onClear} />
+          {readResult && (
+            <p className={`mt-2 text-type-body-sm ${readResult.ok ? "text-ink-muted" : "text-danger-text"}`} data-testid="lightkey-read-result" role="status">{readResult.message}</p>
+          )}
+
+          {status.recording && (
+            <LoudnessPicker disabled={loudness?.disabled} hasLoudness={Boolean(loudness?.present)} onClear={loudness?.onClear} />
+          )}
+        </>
       )}
-    </LiveLinkShell>
+      panels={tools.panels}
+      pills={<LiveLinkPill detail={pillState.detail} text={pillState.text} tone={pillState.tone} />}
+      status={[{ text: statusText }]}
+      statusTestId="lightkey-headline"
+      testId="lightkey-strip"
+      title="sACN DMX Live Link"
+    />
   );
 }
