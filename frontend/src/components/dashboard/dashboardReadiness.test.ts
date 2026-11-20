@@ -395,9 +395,9 @@ describe("dashboard integration truthfulness", () => {
 
     it.each([
       ["playback_api", "connected", "Playback API connected"],
-      ["playback_api", "disconnected", "Playback API disconnected"],
+      ["playback_api", "disconnected", "Playback API not connected"],
       ["real", "connected", "Playback MIDI connected"],
-      ["real", "disconnected", "Playback MIDI disconnected"],
+      ["real", "disconnected", "Playback MIDI not connected"],
     ] as const)("Playback saved as %s and %s reads %s", (midiSource, midiStatus, label) => {
       expect(entry("midi", { midiSource, midiStatus, lightsMethod: "midi", lightsStatus: "disconnected" }).label).toBe(label);
     });

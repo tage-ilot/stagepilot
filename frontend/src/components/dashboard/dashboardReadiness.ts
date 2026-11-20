@@ -112,7 +112,7 @@ const statusDetail = (status: ConnectionStatus, detail: string | null | undefine
   if (status === "error") return "Connection failed";
   if (status === "connected") return "Connected";
   if (status === "ready") return "Ready, capture not connected yet";
-  return "Disconnected";
+  return "Not connected";
 };
 
 export function buildConnectionCardViews({
@@ -321,7 +321,7 @@ export function buildReadinessChecks({
         status: view.status === "connecting" ? "disconnected" as const : view.status === "ready" ? "connected" as const : view.status,
         detail: "Live status reported by StagePilot. Configuration is not available in this view.",
       })),
-      { id: "backend", label: live ? "StagePilot connected" : "StagePilot disconnected",
+      { id: "backend", label: live ? "StagePilot connected" : "StagePilot not connected",
         passed: live, required: true, severity: "info", status: live ? "connected" : "disconnected" },
     ];
   }
@@ -345,7 +345,7 @@ export function buildReadinessChecks({
       id: "planning-center",
       label: views.planningCenter.status === "connected"
         ? "Services connected"
-        : "Services disconnected",
+        : "Services not connected",
       passed: views.planningCenter.status === "connected",
       required: true,
       severity: "blocking",
@@ -375,7 +375,7 @@ export function buildReadinessChecks({
     },
     {
       id: "midi",
-      label: `${playbackLabel} ${views.midi.status === "connected" ? "connected" : "disconnected"}`,
+      label: `${playbackLabel} ${views.midi.status === "connected" ? "connected" : "not connected"}`,
       passed: views.midi.status === "connected",
       required: true,
       severity: "blocking",
@@ -386,7 +386,7 @@ export function buildReadinessChecks({
       id: "propresenter",
       label: views.propresenter.status === "connected"
         ? "Presentation connected"
-        : "Presentation disconnected",
+        : "Presentation not connected",
       passed: views.propresenter.status === "connected",
       required: true,
       severity: "blocking",
@@ -415,7 +415,7 @@ export function buildReadinessChecks({
   });
   checks.push({
     id: "backend",
-    label: live ? "StagePilot connected" : "StagePilot disconnected",
+    label: live ? "StagePilot connected" : "StagePilot not connected",
     passed: live,
     required: true,
     severity: "blocking",

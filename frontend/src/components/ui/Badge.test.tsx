@@ -52,7 +52,7 @@ describe("StatusBadge", () => {
   const expected: Record<StatusWord, string> = {
     Connected: "success",
     Connecting: "warning",
-    "Disconnected": "idle",
+    "Not connected": "idle",
     Error: "danger",
     Ready: "info",
   };

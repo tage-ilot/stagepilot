@@ -77,7 +77,7 @@ describe("the section gallery: configuration pages", () => {
   it("shows the summary cards with ok and danger words, and every notice tone", () => {
     render(<Frame />);
     expect(sample("page-backend-clean").querySelector("[data-section=summary] [data-tone=ok]")).toHaveTextContent("Connected");
-    expect(sample("page-backend-disconnected").querySelector("[data-section=summary] [data-tone=danger]")).toHaveTextContent("Disconnected");
+    expect(sample("page-backend-disconnected").querySelector("[data-section=summary] [data-tone=danger]")).toHaveTextContent("Not connected");
     const tones = Array.from(sample("template-notices-boxes").querySelectorAll("[data-tone]")).map((node) => node.getAttribute("data-tone"));
     expect(tones).toEqual(["info", "success", "warning", "danger"]);
     expect(sample("template-notices-group").querySelector("[role=group][aria-label='Confirm disable Remote access']")).toBeInTheDocument();

@@ -409,14 +409,14 @@ Marks the **live item** (Now playing rail, current song row) and the **one solid
 | connected / ready / running | `success` `#31551d` | `success-soft` `#417227` | `success-text` `#69b63e` |
 | connecting / delayed / attention | `warning` `#ff0000` | same | `warning-text` |
 | error / destructive | `danger-solid` `#ff0000` | `danger` | `danger-text` `#ff4d4d` |
-| disconnected / idle | | `idle` `#64748b` | near-white word "Disconnected" |
+| not connected / idle | | `idle` `#64748b` | near-white word "Not connected" |
 | information, "what comes next" | `info` teal `#1dc1c7` (dark text `on-info`) | `info` | `info-text` |
 
 - **Warnings and errors are the same pure red** and are told apart by their words (`Connecting`, `Delayed`, `Not saved yet` vs `Error`, `Couldn't save`).
 - `success` is too dark for a dot: it is a **fill**. Status cards and the header pill carry state by *word and outline*, not a dot. Dots appear only where a word sits beside them (Check system list, badges).
 - **Teal (`info`) is never a state and never the primary action.** Uses: "Up next", info banners, links, the Reload service plan control, the Update available button.
 - **The header pill** uses the darkest reds that still pass contrast on its dark surface: words `danger-pill` `#f00000` (4.5:1), outline `danger-edge` `#bc0000` (3:1). Do not reuse these for anything else.
-- **One word, one colour, one table (decided 2026-11-04).** A connection state has exactly one colour, taken from `statusTone` in `components/ui/statusWord.ts`, wherever it is drawn: **Connected** green, **Ready** teal (`info`: output open, delivery not proven, which is *not* an error and not a warning), **Connecting** and **Lightkey is closed** amber (the warning family), **Not connected** and **Error** red, **Off** and **Disconnected** grey. The panel header's pill and the Lighting Live Link pill both read this table, so teal never means a fault and red never means "fine". They may show different *words* only because they describe different things (the header: the OSC output, `READY`; the Live Link pill: the live-link API, `Not connected`), and the Live Link pill's tooltip names the subject. Never colour alone: every pill and dot has words.
+- **One word, one colour, one table (decided 2026-11-04).** A connection state has exactly one colour, taken from `statusTone` in `components/ui/statusWord.ts`, wherever it is drawn: **Connected** green, **Ready** teal (`info`: output open, delivery not proven, which is *not* an error and not a warning), **Connecting** and **Lightkey is closed** amber (the warning family), **Not connected** and **Error** red where something that was set up cannot be reached (a Live Link pill), **Not connected** and **Off** grey where nothing is expected yet (a card or header pill for a connection that is not set up). **"Not connected" is the one word for that state everywhere (decided 2026-11-18); "Disconnected" is not shown to operators** (it is the enum name in code, and the backend's own sentences are mapped to it by `playbackWords`). The panel header's pill and the Lighting Live Link pill both read this table, so teal never means a fault and red never means "fine". They may show different *words* only because they describe different things (the header: the OSC output, `READY`; the Live Link pill: the live-link API, `Not connected`), and the Live Link pill's tooltip names the subject. Never colour alone: every pill and dot has words.
 
 ### 3.4 Connection colours (identity)
 Each connection owns one hue. It tints that connection's status-card icon, its panel, its secondary buttons and badges, and is the **only accent inside its own panel**.
@@ -645,7 +645,7 @@ What no template fits (the song list, the MIDI monitor, a cue table) goes in the
 
 ### 7.3 Status cards (five, in this order: Services, Playback, Presentation, Lighting, Backend)
 The fifth card is titled **Backend** while collapsed (Hunter's decision, 2026-11-18); its screen-reader name and the open panel say StagePilot. This is the one place the word is allowed in operator text (see section 10).
-Icon tile + title + **status word** (Connected / Connecting / Disconnected / Error) + one detail line. No status dot. The word is bold-pixel, uppercase, and **grows with the card** (about 12px up to a 22px maximum) so DISCONNECTED always fits on one line; the title is 13px. Card hover/open tints the title and description whenever the *card* is hovered or open (not only the text). At **≤1000px** viewport width the cards switch to **compact** (icon tile, word on one line beneath it; never wraps, ellipsizes or overlaps). The open card wears its connection colour (§3.4).
+Icon tile + title + **status word** (Connected / Connecting / Not connected / Error) + one detail line. No status dot. The word is bold-pixel, uppercase, and **grows with the card** (about 12px up to a 22px maximum) so NOT CONNECTED always fits on one line; the title is 13px. Card hover/open tints the title and description whenever the *card* is hovered or open (not only the text). At **≤1000px** viewport width the cards switch to **compact** (icon tile, word on one line beneath it; never wraps, ellipsizes or overlaps). The open card wears its connection colour (§3.4).
 
 ### 7.4 Widgets (GridStack, 12 columns desktop / 6 tablet, 5px gutters)
 Four widgets: **Service plan**, **Now playing**, **Manual controls**, **Recent event stream** (`dashboardWidgetRegistry.ts`).
@@ -731,7 +731,7 @@ Rules:
 | **Cue** (a message sent to Lighting), **Note** (MIDI note and its length) | pulse | |
 | **Cue board / pad / Timeline** | | Lighting's saved reusable cues, their buttons, and the visual song line |
 | **Remote access / People** | remote users | the Internet section and who may sign in |
-| **Connected · Connecting · Disconnected · Error** | not connected | the four status words (sentence case in text, uppercase pixel in badges and cards) |
+| **Connected · Connecting · Not connected · Error** | Disconnected (lower case inside a sentence is fine: `Services not connected`) | the four status words (sentence case in text, uppercase pixel in badges and cards) |
 | **Current · live / Up next** | | the song actually started / the song Start next will play |
 - Sentence case everywhere except badges and kickers. Plain verb-and-object labels. Short: delete a sentence if the control already says it ("Required to open the dashboard from another device." was removed; so was "Sends cues by MIDI").
 - Copy states what **will happen**, never how the UI works. Do not add text that explains a toggle the toggle already shows.

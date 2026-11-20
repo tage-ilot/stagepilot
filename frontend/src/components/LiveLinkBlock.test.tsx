@@ -88,10 +88,10 @@ describe("Live Link block: two pills (sACN, DMX) are the one statement of the co
     ["connected, 1 fixture", status({ fixtures: live(1) }), ["sACN: Connected", statusTone.Connected], ["DMX: 1 fixture identified", statusTone.Connected]],
     ["connected, waiting for fixtures", status({ fixtures: waiting }), ["sACN: Connected", statusTone.Connected], ["DMX: Connecting\u2026", statusTone.Connecting]],
     ["connected, fixture stream lost", status({ fixtures: lost }), ["sACN: Connected", statusTone.Connected], ["DMX: Not receiving", statusTone.Connecting]],
-    ["connected, API without fixtures", status(), ["sACN: Connected", statusTone.Connected], ["DMX: \u2014", statusTone.Disconnected]],
-    ["not connected", down, ["sACN: Not connected", statusTone.Error], ["DMX: \u2014", statusTone.Disconnected]],
-    ["Lightkey is closed", status({ link: "lightkey_closed", detail: "Lightkey is not running." }), ["sACN: Lightkey is closed", statusTone.Connecting], ["DMX: \u2014", statusTone.Disconnected]],
-    ["off", status({ link: "off", detail: "Lighting is off." }), ["sACN: Off", statusTone.Disconnected], ["DMX: \u2014", statusTone.Disconnected]],
+    ["connected, API without fixtures", status(), ["sACN: Connected", statusTone.Connected], ["DMX: \u2014", statusTone["Not connected"]]],
+    ["not connected", down, ["sACN: Not connected", statusTone.Error], ["DMX: \u2014", statusTone["Not connected"]]],
+    ["Lightkey is closed", status({ link: "lightkey_closed", detail: "Lightkey is not running." }), ["sACN: Lightkey is closed", statusTone.Connecting], ["DMX: \u2014", statusTone["Not connected"]]],
+    ["off", status({ link: "off", detail: "Lighting is off." }), ["sACN: Off", statusTone["Not connected"]], ["DMX: \u2014", statusTone["Not connected"]]],
   ];
   it.each(table)("%s: the two pills' words and tones", (_name, state, [sacnText, sacnTone], [dmxText, dmxTone]) => {
     const pills = liveLinkPills(state);

@@ -580,6 +580,8 @@ const scenarios = [
 describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI settings never contradict", () => {
   it.each(scenarios)("$name", async ({ api, midi, active, reason, scanning }) => {
     const connected = api || midi;
+    // The backend says Disconnected.; the page says Not connected. (one word for that state).
+    const shown = reason.replace(/^Disconnected\./, "Not connected.");
     const status = playbackStatus({
       connected, active_source: active, reason, scan: scanOf(scanning ? "scanning" : "idle"),
       sources: { playback_api: { connected: api, reason: api ? "Playback is connected." : "Playback is disconnected." }, midi: { connected: midi, reason: midi ? "MIDI is connected." : "MIDI is disconnected." } },
@@ -587,8 +589,8 @@ describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI set
     panel(controller({ status }));
     // One banner, one sentence: exactly the backend text.
     // The Playback API's line is prefixed like the other blocks'; MIDI's own sentence is not the API's to say, so it is shown as it is.
-    expect(screen.getByTestId("playback-banner").textContent).toBe(active === "midi" ? reason : `Playback API: ${reason}`);
-    expect(screen.getAllByText((_text, node) => node?.textContent === (active === "midi" ? reason : `Playback API: ${reason}`) && node.children.length === 0)).toHaveLength(1);
+    expect(screen.getByTestId("playback-banner").textContent).toBe(active === "midi" ? shown : `Playback API: ${shown}`);
+    expect(screen.getAllByText((_text, node) => node?.textContent === (active === "midi" ? shown : `Playback API: ${shown}`) && node.children.length === 0)).toHaveLength(1);
     await userEvent.setup().click(screen.getByRole("radio", { name: /^MIDI/ }));
     // MIDI detail in the alternate connection section never says the opposite of the banner.
     const advanced = document.getElementById("playback-midi-method") as HTMLElement;
@@ -597,12 +599,12 @@ describe("Banner, panel, dashboard, checklist and Alternate connection: MIDI set
     expect(advanced).not.toHaveTextContent(/disconnected for this session/);
     const views = buildConnectionCardViews({ state: playbackState, settings: playbackSettings, playback: status, midi: null, propresenter: null, lights: null });
     expect(views.midi.status).toBe(connected ? "connected" : "disconnected");
-    expect(views.midi.detail).toBe(reason);
+    expect(views.midi.detail).toBe(shown);
     const checks = buildReadinessChecks({ state: playbackState, settings: playbackSettings, propresenter: null, live: true, views });
-    expect(checks.find((check) => check.id === "midi")).toMatchObject({ passed: connected, detail: reason });
+    expect(checks.find((check) => check.id === "midi")).toMatchObject({ passed: connected, detail: shown });
     render(<SetupChecklist state={playbackState} settings={playbackSettings} playback={status} midi={null} propresenter={null} live onOpen={vi.fn()} />);
     // The banner belongs to the Playback API view, which the MIDI method swapped out; the checklist still says the same sentence.
-    expect(screen.getAllByText(reason).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(shown).length).toBeGreaterThanOrEqual(1);
   });
 
   it.each([{ stale: true, song_order: [101, 202] }, { stale: false, song_order: [] }])("keeps connection green and action readiness separate for invalid order %o", (mapping) => {

@@ -104,7 +104,7 @@ export const backendPages: SampleState[] = [
   { id: "clean", label: "StagePilot: clean", look: "The four status cards open the page (the summary at the top), then Advanced (closed, with its one-line summary), Connection Access, the Save bar, the log buttons under a divider.", render: () => page([], backend()) },
   { id: "advanced-open", label: "StagePilot: Advanced open, held port", look: "Three fields 1/2/4 across (inset columns), 'Not saved yet' and the restart hint on the port, the note under the group.", render: () => page([{ press: "Advanced" }, { type: ["Server port", "9000"] }], backend()) },
   { id: "error", label: "StagePilot: invalid port after Save", look: "Advanced opens by itself with the error sentence; the Save bar's blocked reason.", render: () => page([{ press: "Advanced" }, { type: ["Server port", "0"] }, { press: "Save configuration" }], backend()) },
-  { id: "disconnected", label: "StagePilot: not live", look: "The WebSocket card says Disconnected in danger words.", render: () => page([], backend({ live: false })) },
+  { id: "disconnected", label: "StagePilot: not live", look: "The WebSocket card says Not connected in danger words.", render: () => page([], backend({ live: false })) },
   { id: "failure", label: "StagePilot: a failure", look: "The danger notice above the Save bar.", render: () => page([], backend({ error: "The settings could not be saved. Your changes are still here." })) },
 ];
 

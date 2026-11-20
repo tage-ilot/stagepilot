@@ -41,7 +41,7 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     expect(line("playback-banner").textContent).toBe("Playback API: Connected to Playback at 10.30.0.141.");
     // Not connected: the line is the API's too.
     rerender(<PlaybackLiveLink library={libraryController("ready")} playback={disconnected("10.30.0.141")} />);
-    expect(line("playback-banner").textContent).toBe("Playback API: Disconnected. Choose Search to find Playback.");
+    expect(line("playback-banner").textContent).toBe("Playback API: Not connected. Choose Search to find Playback.");
     // MIDI standing in: the sentence describes MIDI, so it is not labelled Playback API.
     rerender(<PlaybackLiveLink library={libraryController("ready")} playback={controller({ status: playbackStatus({ connected: true, active_source: "midi", reason: "Connected through MIDI.", sources: { playback_api: { connected: false, reason: "Playback is disconnected." }, midi: { connected: true, reason: "MIDI is connected." } } }) })} />);
     expect(line("playback-banner").textContent).toBe("Connected through MIDI.");

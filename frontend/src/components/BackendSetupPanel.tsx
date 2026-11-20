@@ -351,7 +351,7 @@ export function BackendSetupPanel({
             { label: "Version", value: health ? health.version : "Loading" },
             { label: "State revision", value: state.revision, tabular: true },
             { label: "API endpoint", value: apiOrigin, mono: true },
-            { label: "WebSocket", value: live ? "Connected" : "Disconnected", tone: live ? "ok" : "danger", detail: websocketUrl },
+            { label: "WebSocket", value: live ? "Connected" : "Not connected", tone: live ? "ok" : "danger", detail: websocketUrl },
           ]}
           label="Status"
           variant="cards"

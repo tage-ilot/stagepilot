@@ -985,12 +985,12 @@ describe("Dashboard Planning Center plan states", () => {
       state: unavailableState,
     });
 
-    expect(screen.getByText("Services disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Services not connected")).toBeInTheDocument();
     expect(screen.getByText("Service plan not loaded")).toBeInTheDocument();
     expect(screen.getByText("Song durations invalid")).toBeInTheDocument();
     // No saved settings here, so Playback reads as the MIDI method; the entry names whichever method is saved.
-    expect(screen.getByText("Playback MIDI disconnected")).toBeInTheDocument();
-    expect(screen.getByText("Presentation disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Playback MIDI not connected")).toBeInTheDocument();
+    expect(screen.getByText("Presentation not connected")).toBeInTheDocument();
   });
 
   it("draws the header check list with a red × on every row that blocks", () => {
@@ -1005,7 +1005,7 @@ describe("Dashboard Planning Center plan states", () => {
     const row = (label: string) => screen.getByText(label).closest("li") as HTMLElement;
     const mark = (label: string) => row(label).querySelector<HTMLElement>("[data-row-tone]")!;
     // The rows that make it Check system are red with a ×, not grey dashes.
-    for (const label of ["Services disconnected", "Service plan not loaded", "Song durations invalid"]) {
+    for (const label of ["Services not connected", "Service plan not loaded", "Song durations invalid"]) {
       expect(mark(label)).toHaveAttribute("data-row-tone", "blocking");
       expect(mark(label)).toHaveTextContent("\u00D7");
       expect(mark(label)).toHaveClass("text-danger-text");
@@ -1960,7 +1960,7 @@ describe("Dashboard connection configuration panels", () => {
         heading: "Presentation",
       },
       {
-        card: /^Lighting Disconnected/,
+        card: /^Lighting Not connected/,
         close: "Close Lighting configuration",
         heading: "Lighting",
       },

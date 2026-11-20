@@ -340,7 +340,7 @@ The same rule applies throughout the dashboard: **Connected** means StagePilot
 has verified the real external integration during the current backend runtime.
 Demo plans, simulated MIDI actions, and simulated countdowns remain useful for
 testing, but their Planning Center, MIDI, and ProPresenter cards stay
-**Disconnected**. Missing or disabled configuration is also disconnected rather
+**Not connected**. Missing or disabled configuration is also not connected rather
 than an error. A demo plan is labeled separately and does not satisfy production
 service-plan readiness; ProPresenter API connectivity and discovery of the
 configured timer are separate readiness checks.

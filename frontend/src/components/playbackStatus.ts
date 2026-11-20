@@ -19,7 +19,11 @@ export function validPlaybackHost(host: string): boolean {
  * The backend's sentences, in the buttons' words. Playback says "Choose Scan Network to find Playback" (that sentence is part of the
  * contract the backend is held to), but the button is now Search: the page says the button's name.
  */
-export const playbackWords = (text: string): string => text.replace("Choose Scan Network to", "Choose Search to");
+export const playbackWords = (text: string): string => text
+  .replace("Choose Scan Network to", "Choose Search to")
+  // One word for that state (DESIGN.md section 10): the backend's sentences say Disconnected, the page says Not connected.
+  .replace(/^Disconnected\./, "Not connected.")
+  .replace(/\b(Playback|MIDI) is disconnected\./, "$1 is not connected.");
 
 // Shared wording: connection health is not song-order/action readiness.
 export const playbackConnectionDetail = (status: PlaybackConnection) => playbackWords(status.reason);
@@ -76,7 +80,7 @@ export const playbackBannerTone = (status: PlaybackConnection & { scan?: { state
 export const playbackMidiNote = (status: PlaybackConnection) =>
   status.sources.midi.connected
     ? status.active_source === "playback_api" ? "MIDI is connected and standing by." : "MIDI is connected."
-    : status.sources.midi.reason;
+    : playbackWords(status.sources.midi.reason);
 
 const EVENT_TEXT: Record<string, string> = {
   "song.started": "started", "song.resumed": "resumed", "song.paused": "Paused", "song.stopped": "Stopped",
