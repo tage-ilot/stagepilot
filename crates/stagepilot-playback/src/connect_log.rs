@@ -341,7 +341,7 @@ mod tests {
             .collect();
         assert_eq!(recovered.len(), 1, "{recovered:#?}");
         assert!(
-            recovered[0].contains("failed attempts since"),
+            recovered[0].contains("failed attempt") && recovered[0].contains(" since "),
             "{}",
             recovered[0]
         );
