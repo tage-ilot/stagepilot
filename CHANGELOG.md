@@ -2,10 +2,37 @@
 
 ## [Unreleased]
 
+## [2.44.0] - 2026-11-20
+
+StagePilot 2.44.0 is the Link release. StagePilot can now put the songs of the service plan into a ProPresenter playlist with Playback's arrangement and key, and every connection (Lighting, Playback, Presentation) looks and works the same. The candidates rc.1 to rc.3 below hold the step-by-step history.
+
+### Added
+
+- **Presenter Link: songs from the plan into a ProPresenter playlist.** In the Presentation panel, pick a playlist and a section, tick the songs and press **Import songs to ProPresenter**. Each song gets a copy in the Playback library that follows the order Playback plays, with the key saved in it. A song ProPresenter does not have yet is imported through ProPresenter's own Search. A song with more than one file lets you pick the right file on its card. Nothing changes in ProPresenter until you press the button; the playlist is saved first and read back after, and the screen steps stop while ProPresenter is showing something.
+- **The Library Link and the Playback Live Link block.** The Playback panel starts with its own connection block with two status pills, and a one-line command to set up the Library Link on the Playback computer. The Library Link and the Lighting Link update themselves when StagePilot starts. StagePilot connects to the Library Link by itself, takes the song order and lengths from it first, and the **Scan Playback Library** or **Scan Playback API** button names the best scan there is.
+- **Playback library: key, BPM, length and arrangement of each plan song,** shown as cards with the cover and a colour bar of the arrangement. A key shows "(was X)" for one day after it changes in Playback.
+- **One address box in every Live Link block.** Type any address, or open the arrow for recent and found ones. **Search** finds computers on the network and **Connect** connects.
+- **Pick another service than the upcoming one** with arrows or a calendar, and a **Current Upcoming** button.
+- **Lighting status:** two pills, **sACN** and **DMX** (for example "DMX: 66 fixtures identified").
+
+### Changed
+
+- **Every configuration page is built from the same section templates,** so Lighting, Playback and Presentation look alike: the connection first, then settings, actions, notices.
+- **Song facts are small square chips** (key, length, BPM, mtID) in every panel; song cards look the same everywhere.
+- **Presentation: Timer and Look on one line,** each showing what is current. The Timeout box is gone (the saved value is kept).
+- **Plainer words everywhere:** "Lighting Link" instead of "helper", "Not connected" for every unconnected state, short statuses, every switched-off button says why, a reason is shown as a small pill, and the event stream uses plain names.
+- **The app and the web page are about 7 MB smaller and load faster on phones.**
+
 ### Fixed
 
-- **Presenter Link: no more endless "Checking…" while macOS asks for permission.** When ProPresenter is on the same computer, the first look at its folder (and later the System Events check) can make macOS ask *"StagePilot would like to access files in your Documents folder"*, and the panel waited for the answer for minutes. StagePilot now waits at most 8 seconds, then says **Presenter Link: Waiting for macOS** and *macOS may be asking for permission on this computer. Answer the prompt, then press Connect again.* The next look tries again by itself. Nothing changes for another computer's helper.
-- **The log no longer fills up when Playback is off the network.** StagePilot still tries to reach a saved Playback address every second, but `stagepilot-backend.log` used to get one warning line for each try (489 lines in a few minutes, the same line again and again). Now the first failure and every change of reason (no route, no answer, refused...) is one line; the same reason again is one line a minute with the number of tries (*still failing, 61 attempts since 12:01:04, same reason*); and one line says when Playback answered again.
+- **Presenter Link no longer says "Checking…" for ever while macOS asks for permission.** It says "Waiting for macOS", and the next try works once you answer.
+- **The log no longer fills up when Playback is off the network.** A failing connection is logged once, then once a minute.
+- **A Lighting computer command asked for while the Lighting Link already works no longer stops working within seconds.**
+- **Switching to another service no longer keeps the highlighted song of the old one,** and "Match the Playback lengths to Planning Center" reads the service you picked.
+
+### Removed
+
+- "Forget the Library Link" is gone.
 
 ## [2.44.0-rc.3] - 2026-11-19
 
