@@ -100,7 +100,7 @@ export function PlaybackArrangement({ status, draft, library }: { status: Playba
           {libraryPlan?.stale && libraryPlan.message && mode === "library" && <p className="text-sm text-ink-muted">{libraryPlan.message}</p>}
           <div className="arr-cols font-type-kicker text-type-kicker uppercase text-ink-muted" aria-hidden="true"><span>Service plan</span><span /><span>Playback</span></div>
           <ol className="arr-list m-0 grid list-none gap-0 p-0" aria-label="Song pairs">
-            {rows.map((row) => <MatchupRow key={row.id} row={row} draft={draft} skips={skips} />)}
+            {rows.map((row) => <MatchupRow key={row.id} row={row} draft={draft} skips={skips} hideKeyAndBpm />)}
           </ol>
         </>
       )}

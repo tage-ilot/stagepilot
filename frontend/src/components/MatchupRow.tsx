@@ -52,9 +52,10 @@ function Join({ row }: { row: MatchRow }) {
 /**
  * One line of the matchup ledger: plan song on the left, Playback song on the right, a join mark between, and above them the stamp with the
  * differences, in plain words, beside it. The line is one list item and reads aloud as ONE sentence (`row.sentence`); the drawn parts are
- * hidden from a screen reader so nothing is said twice, but the two Skip switches stay real controls.
+ * hidden from a screen reader so nothing is said twice, but the two Skip switches stay real controls. `hideKeyAndBpm` leaves out the key and
+ * BPM chips under the songs (Playback's Song order section); the length beside each song stays, and so does every other use of the row.
  */
-export function MatchupRow({ row, draft, skips }: { row: MatchRow; draft?: PlaybackDraft; skips: boolean }) {
+export function MatchupRow({ row, draft, skips, hideKeyAndBpm = false }: { row: MatchRow; draft?: PlaybackDraft; skips: boolean; hideKeyAndBpm?: boolean }) {
   const { plan, playback } = row;
   const spacer = (words: string) => <div aria-hidden="true" className="arr-spacer grid place-items-center border-2 border-dashed border-edge-medium p-3 text-center font-pixel !text-type-badge uppercase tracking-wider text-ink-muted">{words}</div>;
   const planBox = plan && (
@@ -65,7 +66,7 @@ export function MatchupRow({ row, draft, skips }: { row: MatchRow; draft?: Playb
         {plan.skipped && <span className={tag}>No track</span>}
       </div>
       <div className="mt-auto flex items-end justify-between gap-2">
-        {plan.key ? <FactChips facts={[keyFact(plan.key)]} /> : <span aria-hidden="true" />}
+        {plan.key && !hideKeyAndBpm ? <FactChips facts={[keyFact(plan.key)]} /> : <span aria-hidden="true" />}
         {skips && <Switch className="self-end" label="Skip" aria-label={`Skip ${plan.title}`} checked={plan.skipped} disabled={!draft} onChange={(event) => draft?.setPlanSongSkipped(plan.id, event.target.checked)} />}
       </div>
     </div>
@@ -88,7 +89,7 @@ export function MatchupRow({ row, draft, skips }: { row: MatchRow; draft?: Playb
         {playback.skipped && <span className={tag}>Not in this service</span>}
       </div>
       <div className="mt-auto flex items-end justify-between gap-2">
-        {facts.length ? <FactChips facts={facts} /> : <span aria-hidden="true" />}
+        {facts.length && !hideKeyAndBpm ? <FactChips facts={facts} /> : <span aria-hidden="true" />}
         {skips && playback.skipId !== null && <Switch className="self-end" label="Skip" aria-label={playback.title ? `Skip Playback song ${playback.number}, ${playback.title}` : `Skip Playback song ${playback.number}`} checked={playback.skipped} disabled={!draft} onChange={(event) => draft?.setPlaybackSongSkipped(playback.skipId!, event.target.checked)} />}
       </div>
     </div>
