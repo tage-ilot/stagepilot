@@ -28,6 +28,9 @@ describe("timeline toolbar", () => {
     expect(within(bar).getByRole("button", { name: "Add cue" })).toBeInTheDocument();
     const zoom = within(bar).getByRole("group", { name: "Timeline zoom" });
     expect(within(zoom).getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
+    // At Fit it cannot zoom out any further, and says so.
+    expect(within(zoom).getByRole("button", { name: "Zoom out" })).toBeDisabled();
+    expect(within(zoom).getByRole("button", { name: "Zoom out" })).toHaveAccessibleDescription("The whole song is already in view.");
     expect(within(zoom).getByRole("button", { name: "Fit" })).toBeInTheDocument();
     expect(within(zoom).getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
     expect(within(bar).getByRole("radiogroup", { name: "Timeline height" })).toBeInTheDocument();
@@ -117,5 +120,11 @@ describe("selected cue", () => {
     expect(strip.className).toContain("flex-nowrap");
     const scroll = screen.getByTestId("lighting-timeline-scroll");
     expect(scroll.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("has one empty line, and it says nothing about how the timeline works (design audit, small text trims)", () => {
+    render(<LightingTimeline {...base} markers={[]} />);
+    expect(screen.getByText("No cues yet. Press a pad while the song plays.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/while the song runs|Cue times are elapsed|Cues must fall within/);
   });
 });

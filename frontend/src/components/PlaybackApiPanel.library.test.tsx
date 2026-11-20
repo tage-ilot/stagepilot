@@ -26,9 +26,10 @@ describe("Scan Playback Library with the Library Link working", () => {
     expect(screen.queryByRole("button", { name: "Scan with Playback instead" })).not.toBeInTheDocument();
   });
 
-  it("says in the help text that the order comes from the Library Link, and not that Playback is stepped through", () => {
+  it("has no help text under the Library button (the header says where the order is from), and never says Playback is stepped through", () => {
     render(<PlaybackApiPanel library={libraryController("ready")} playback={controller()} />);
-    expect(screen.getByTestId("order-help")).toHaveTextContent("The song order comes from the Library Link");
+    expect(screen.queryByTestId("order-help")).toBeNull();
+    expect(screen.queryByText(/The song order comes from the Library Link|The button reads the song order/)).not.toBeInTheDocument();
     expect(screen.queryByText(/steps through your Playback songs/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Playback must be stopped/)).not.toBeInTheDocument();
   });
@@ -105,7 +106,7 @@ describe("Scan Playback Library with the Library Link working", () => {
   it.each(["not_installed", "needs_key", "unreachable"] as const)("Library Link %s: Scan Playback API, exactly as before (confirm, then step through Playback)", (state) => {
     const playback = controller({ status: playbackStatus({ song_order: [], stale: true }) });
     render(<PlaybackApiPanel library={libraryController(state)} playback={playback} />);
-    expect(screen.getByText(/steps through your Playback songs once/)).toBeVisible();
+    expect(screen.queryByText(/steps through your Playback songs once/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Scan Playback API" }));
     expect(playback.refreshFromLibrary).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeVisible();

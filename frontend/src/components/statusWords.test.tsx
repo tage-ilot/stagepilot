@@ -9,10 +9,10 @@ import type { ConnectionStatus } from "../types";
 const words: Array<[ConnectionStatus | "loading", string]> = [
   ["connected", "Connected"],
   ["connecting", "Connecting"],
-  ["disconnected", "Disconnected"],
+  ["disconnected", "Not connected"],
   ["error", "Error"],
   ["ready", "Ready"],
-  ["loading", "Disconnected"],
+  ["loading", "Not connected"],
 ];
 
 describe("status words", () => {
@@ -64,7 +64,7 @@ describe("status words", () => {
       const label = card.querySelector(".status-card-status-word")!;
       expect(label).toHaveTextContent(new RegExp(`^${word}$`));
       expect(label.className).not.toContain("uppercase");
-      expect(card).not.toHaveTextContent(/disconnected/);
+      expect(card).not.toHaveTextContent(/disconnected/i);
     },
   );
 });

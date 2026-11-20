@@ -37,7 +37,7 @@ export function PlaybackSetlistLine({ library }: { library: PlaybackLibraryContr
           <span className="font-type-badge text-[0.6875rem] uppercase tracking-[0.1em] text-integration-playback-text">Playback setlist</span>{" "}
           {none
             ? <span className="text-warning-text">{plan.message ?? `Playback has no setlist for ${plan.plan_date}.`}</span>
-            : <><b className="break-words text-ink">{current!.title}</b>{current!.date && !current!.title.includes(current!.date) ? <>, <span className="tabular-nums">{current!.date}</span></> : null}, <span className="tabular-nums">{songWord(current!.songs)}</span>. {plan.chosen ? `Chosen by you for this plan (the plan's date is ${plan.plan_date}).` : "It is the one on the plan's date."}</>}
+            : <><b className="break-words text-ink">{current!.title}</b>{current!.date && !current!.title.includes(current!.date) ? <>, <span className="tabular-nums">{current!.date}</span></> : null}, <span className="tabular-nums">{songWord(current!.songs)}</span>.{plan.chosen ? ` Chosen by you for this plan (the plan's date is ${plan.plan_date}).` : null}</>}
         </p>
         {plan.chosen && (
           <button className="min-h-ds-touch-target touch-manipulation text-sm text-integration-playback-text underline disabled:opacity-60" disabled={busy} onClick={() => void pick(null)} type="button">Use the setlist for {plan.plan_date}</button>

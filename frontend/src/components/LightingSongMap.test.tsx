@@ -63,7 +63,7 @@ describe("the song map: the Playback library's arrangement bar and waveform on t
     const loudnessProps = { loudness, markers: [marker(1), marker(2), marker(3)] };
     const plain = render(<LightingTimeline {...base} {...loudnessProps} />);
     // React numbers the ids of the radio group per render; everything else must match to the byte.
-    const html = (root: HTMLElement) => root.innerHTML.replace(/_r_\d+_/g, "_r_");
+    const html = (root: HTMLElement) => root.innerHTML.replace(/_r_[a-z0-9]+_/g, "_r_");
     const before = html(plain.container);
     plain.unmount();
     for (const props of [{ arrangement: null, waveform: null }, { arrangement: [], waveform }, { waveform }]) {

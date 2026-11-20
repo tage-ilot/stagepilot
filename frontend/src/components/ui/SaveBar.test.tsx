@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { AccentContext, accentClasses } from "./accent";
 import { changeCountText } from "./changeCount";
 import { SaveBar, type SaveBarState } from "./SaveBar";
 
@@ -124,5 +125,26 @@ describe("SaveBar", () => {
   it("changeCountText", () => {
     expect(changeCountText(1)).toBe("1\u00a0change");
     expect(changeCountText(0)).toBe("0\u00a0changes");
+  });
+
+  describe("opaque below lg (D4: the sticky bar must not let the cards scroll through it on a phone)", () => {
+    const inPanel = (state: SaveBarState, props: { stickyOnPhone?: boolean } = {}) =>
+      render(<AccentContext.Provider value="presentation"><SaveBar state={state} {...props} /></AccentContext.Provider>);
+    it.each([{ kind: "clean" }, { kind: "auto", at: "9:41 AM" }, { kind: "saving" }] as SaveBarState[])("tinted state %j sits on the panel colour with a heavier top border below lg and keeps the tint from lg up", (state) => {
+      const { container } = inPanel(state);
+      const el = bar(container);
+      expect(has(el, "max-lg:bg-surface-panel")).toBe(true);
+      expect(has(el, "max-lg:border-t-2")).toBe(true);
+      // Today's tint is still there for lg and up (the bar is static there).
+      for (const token of accentClasses.presentation.bar.split(/\s+/)) expect(has(el, token)).toBe(true);
+      expect(has(el, "sticky")).toBe(true);
+      expect(has(el, "lg:static")).toBe(true);
+    });
+
+    it("is not changed when the bar is not sticky, or when it is already opaque (held, error)", () => {
+      expect(has(bar(inPanel({ kind: "clean" }, { stickyOnPhone: false }).container), "max-lg:bg-surface-panel")).toBe(false);
+      expect(has(bar(inPanel({ kind: "held", count: 1 }).container), "max-lg:bg-surface-panel")).toBe(false);
+      expect(has(bar(inPanel({ kind: "error", message: "No." }).container), "bg-surface-900")).toBe(true);
+    });
   });
 });

@@ -101,9 +101,9 @@ describe("Status section", () => {
     expect(document.querySelector("[data-panel-body]")!.firstElementChild).toHaveAttribute("data-section", "summary");
   });
 
-  it("says Backend configuration above the title and drops the runtime-identity sentence", () => {
+  it("says StagePilot configuration above the title and drops the runtime-identity sentence", () => {
     renderPanel();
-    expect(screen.getByText("Backend configuration")).toBeInTheDocument();
+    expect(screen.getByText("StagePilot configuration")).toBeInTheDocument();
     expect(screen.queryByText("Connection configuration")).not.toBeInTheDocument();
     expect(screen.queryByText(/runtime identity/i)).not.toBeInTheDocument();
   });
@@ -674,7 +674,7 @@ describe("Backend panel primitives", () => {
     expect(close.className).toContain("min-h-ds-touch-target");
     const badge = document.querySelector("[data-status-badge]");
     expect(badge).toHaveAttribute("data-tone", "idle");
-    expect(badge).toHaveTextContent("Disconnected");
+    expect(badge).toHaveTextContent("Not connected");
     expect(document.querySelector("[data-setup-panel-header]")!.className).toContain("min-[480px]:grid-cols-");
   });
 

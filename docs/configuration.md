@@ -202,7 +202,7 @@ must use OAuth instead of collecting PAT credentials. See Planning Center's
 
 The dashboard presents a six-step first-launch checklist:
 
-1. Review and save timezone, log level, and server port under **StagePilot backend**.
+1. Review and save timezone, log level, and server port under **StagePilot**.
 2. Enter the Planning Center PAT application ID and secret, test the connection,
    choose a discovered service type, and save. Saving enables the real Planning
    Center source automatically.
@@ -340,7 +340,7 @@ The same rule applies throughout the dashboard: **Connected** means StagePilot
 has verified the real external integration during the current backend runtime.
 Demo plans, simulated MIDI actions, and simulated countdowns remain useful for
 testing, but their Planning Center, MIDI, and ProPresenter cards stay
-**Disconnected**. Missing or disabled configuration is also disconnected rather
+**Not connected**. Missing or disabled configuration is also not connected rather
 than an error. A demo plan is labeled separately and does not satisfy production
 service-plan readiness; ProPresenter API connectivity and discovery of the
 configured timer are separate readiness checks.
@@ -357,7 +357,7 @@ mapping value.
 
 ## Network configuration
 
-The packaged backend serves the browser dashboard at `http://127.0.0.1:8765`
+StagePilot serves the browser dashboard at `http://127.0.0.1:8765`
 and its WebSocket endpoint at `ws://127.0.0.1:8765/ws`. When the server port is
 saved in the general settings panel, the dashboard remembers it for its next
 launch. Browser-hosted copies use the same host and port from which the page was
@@ -369,11 +369,11 @@ For a different development API origin, copy `frontend/.env.example` to
 credential or other secret.
 
 The **Allow dashboard access from this local network** setting binds the
-packaged backend to all network interfaces after StagePilot restarts. Other
+StagePilot to all network interfaces after StagePilot restarts. Other
 devices can then open `http://<stagepilot-computer-ip>:<server-port>`.
 
 Browser dashboard PIN protection is enabled by default with the initial PIN
-`1234`. Replace that PIN in **StagePilot backend** before enabling LAN access.
+`1234`. Replace that PIN in **StagePilot** before enabling LAN access.
 The PIN gate appears before the browser loading screen and protects both API
 and WebSocket access. The desktop application bypasses this browser-only gate.
 The saved PIN is stored as a salted password hash, not as readable text.

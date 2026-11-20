@@ -230,8 +230,8 @@ export function useUpdater({
           restarted = false;
         }
         recovery = restarted
-          ? " The local backend was restarted — you are still on the old version."
-          : " The local backend could not be restarted — restart StagePilot manually.";
+          ? " The engine was restarted — you are still on the old version."
+          : " The engine could not be restarted — restart StagePilot manually.";
       }
       setState((current) => ({
         ...current,

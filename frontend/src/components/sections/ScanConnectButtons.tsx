@@ -1,4 +1,4 @@
-import { Button } from "../ui/Button";
+import { ReasonButton } from "./ReasonButton";
 import type { Tone } from "../ui/types";
 import { CONTROL_40 } from "../liveLink";
 
@@ -37,40 +37,38 @@ export function ScanConnectButtons({
 }: ScanConnectProps) {
   const scanOff = !scanning && (scanDisabled || connecting || !onScan);
   const connectOff = connectDisabled || !onConnect;
-  const scanTitle = scanOff ? scanHint : undefined;
-  const connectTitle = connectOff ? connectHint : undefined;
   return (
     <>
-      {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper. */}
-      <span className="inline-flex" data-part="scan-wrap" title={scanTitle}>
-        <Button
-          className={SIZE}
-          data-part="scan"
-          disabled={scanOff}
-          onClick={scanning ? onCancelScan : onScan}
-          tone={tone}
-          type="button"
-          variant="tinted"
-        >
-          {scanning ? SCAN_WORDS.scanning : SCAN_WORDS.scan}
-        </Button>
-      </span>
-      <span className="inline-flex" data-part="connect-wrap" title={connectTitle}>
-        {/* While it connects the button is busy (the sweep, aria-busy, no second press), not dimmed: nothing else in the row says it is working. */}
-        <Button
-          className={`live-link-connect ${SIZE}`}
-          data-part="connect"
-          disabled={connectOff}
-          loading={connecting}
-          loadingLabel={SCAN_WORDS.connecting}
-          onClick={submit ? undefined : onConnect}
-          tone={tone}
-          type={submit ? "submit" : "button"}
-          variant="tinted"
-        >
-          {SCAN_WORDS.connect}
-        </Button>
-      </span>
+      {/* The reason (the block's hint) goes on the shared wrapper; a button that is off with no hint is still just off. */}
+      <ReasonButton
+        className={SIZE}
+        data-part="scan"
+        disabled={scanOff}
+        onClick={scanning ? onCancelScan : onScan}
+        reason={scanOff ? scanHint : undefined}
+        tone={tone}
+        type="button"
+        variant="tinted"
+        wrapProps={{ "data-part": "scan-wrap" }}
+      >
+        {scanning ? SCAN_WORDS.scanning : SCAN_WORDS.scan}
+      </ReasonButton>
+      {/* While it connects the button is busy (the sweep, aria-busy, no second press), not dimmed: nothing else in the row says it is working. */}
+      <ReasonButton
+        className={`live-link-connect ${SIZE}`}
+        data-part="connect"
+        disabled={connectOff}
+        loading={connecting}
+        loadingLabel={SCAN_WORDS.connecting}
+        onClick={submit ? undefined : onConnect}
+        reason={connectOff ? connectHint : undefined}
+        tone={tone}
+        type={submit ? "submit" : "button"}
+        variant="tinted"
+        wrapProps={{ "data-part": "connect-wrap" }}
+      >
+        {SCAN_WORDS.connect}
+      </ReasonButton>
     </>
   );
 }

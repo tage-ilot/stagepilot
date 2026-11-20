@@ -23,7 +23,7 @@ export interface LiveLinkPillState { text: string; tone: Tone; /** Why, for the 
 export interface LiveLinkPills { sacn: LiveLinkPillState; dmx: LiveLinkPillState }
 
 /** DMX has nothing to say while sACN is down (and for a Lightkey API that does not report fixtures): a dash in the neutral tone, never hidden. */
-const DMX_NONE: LiveLinkPillState = { text: "DMX: \u2014", tone: statusTone.Disconnected, detail: null };
+const DMX_NONE: LiveLinkPillState = { text: "DMX: \u2014", tone: statusTone["Not connected"], detail: null };
 
 export function liveLinkPills(status: LightkeyStatus): LiveLinkPills {
   const fixtures = status.fixtures;
@@ -35,7 +35,7 @@ export function liveLinkPills(status: LightkeyStatus): LiveLinkPills {
       if (fixtures?.link === "lost") return { sacn: sacn("Connected", statusTone.Connected, null), dmx: dmx("Not receiving", statusTone.Connecting, lightkeyFixtureWord(fixtures)) };
       if (fixtures?.link === "live") return { sacn: sacn("Connected", statusTone.Connected, null), dmx: dmx(`${fixtures.fixtures} fixture${fixtures.fixtures === 1 ? "" : "s"} identified`, statusTone.Connected, null) };
       return { sacn: sacn("Connected", statusTone.Connected, null), dmx: DMX_NONE };
-    case "off": return { sacn: sacn("Off", statusTone.Disconnected, status.detail), dmx: DMX_NONE };
+    case "off": return { sacn: sacn("Off", statusTone["Not connected"], status.detail), dmx: DMX_NONE };
     case "lightkey_closed": return { sacn: sacn("Lightkey is closed", statusTone.Connecting, status.detail), dmx: DMX_NONE };
     default: return { sacn: sacn("Not connected", statusTone.Error, status.detail), dmx: DMX_NONE };
   }

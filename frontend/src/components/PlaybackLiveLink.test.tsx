@@ -36,6 +36,18 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     expect(screen.getByTestId("library-link-pill")).toHaveTextContent("Library Link: Connected");
   });
 
+  it("prefixes the Playback API's status line like the other blocks, but never puts the prefix on MIDI's own sentence (D5)", () => {
+    const { rerender } = render(<PlaybackLiveLink library={libraryController("ready")} playback={controller()} />);
+    expect(line("playback-banner").textContent).toBe("Playback API: Connected to Playback at 10.30.0.141.");
+    // Not connected: the line is the API's too.
+    rerender(<PlaybackLiveLink library={libraryController("ready")} playback={disconnected("10.30.0.141")} />);
+    expect(line("playback-banner").textContent).toBe("Playback API: Not connected. Choose Search to find Playback.");
+    // MIDI standing in: the sentence describes MIDI, so it is not labelled Playback API.
+    rerender(<PlaybackLiveLink library={libraryController("ready")} playback={controller({ status: playbackStatus({ connected: true, active_source: "midi", reason: "Connected through MIDI.", sources: { playback_api: { connected: false, reason: "Playback is disconnected." }, midi: { connected: true, reason: "MIDI is connected." } } }) })} />);
+    expect(line("playback-banner").textContent).toBe("Connected through MIDI.");
+    expect(screen.getByTestId("playback-api-pill")).toHaveTextContent("Playback API: MIDI only");
+  });
+
   it("is the first thing in the Playback API panel, ahead of the song order", () => {
     const { container } = render(<PlaybackApiPanel library={libraryController("ready")} playback={controller()} />);
     expect(container.firstElementChild!.firstElementChild).toBe(block());
@@ -53,7 +65,7 @@ describe("Playback Live Link: the first block of the Playback API panel", () => 
     expect(apiPill.querySelector("[data-tone]")).not.toBeNull();
     expect(scriptPill.querySelector("[data-tone]")).not.toBeNull();
     expect(apiPill).not.toContainElement(scriptPill);
-    expect(line("playback-banner")).toHaveTextContent("Connected to Playback at 10.30.0.141.");
+    expect(line("playback-banner")).toHaveTextContent("Playback API: Connected to Playback at 10.30.0.141.");
     expect(line("library-link-status")).toHaveTextContent("Library Link: Ready, version 0.3.0");
     expect(within(block()).getByTestId("live-link-sub")).toContainElement(line("playback-banner"));
   });

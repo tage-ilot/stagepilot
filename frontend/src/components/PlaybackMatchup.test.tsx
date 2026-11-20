@@ -125,7 +125,9 @@ describe("the matchup with the library", () => {
       librarySongOf("Easy To Worship", 3, { library: pb("Easy To Worship", 4) }),
     ], { playback_only: [pb("Background Music", 2)] });
     render(<Host initial={{ song_order: [2000001, 2000002, 2000003, 2000004], plan_songs: PLAN.slice(0, 3), plan_song_count: 3, song_count: 4, song_lengths: [389, 120, 389, 389] }} library={withLibrary(lib)} />);
-    expect(screen.getByTestId("matchup-order-note")).toHaveTextContent("Songs never change places.");
+    // The long "Songs never change places..." sentence is in docs/playback-api.md; the row's own note and the Check order stamp say what is wrong.
+    expect(screen.queryByTestId("matchup-order-note")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Songs never change places/)).not.toBeInTheDocument();
     expect(rows()[2]).toHaveTextContent("With the skips as they are, Playback song 2, Background Music, will start this plan song's timer, not So Much.");
     expect(screen.getByTestId("arrangement-badge")).toHaveTextContent("2 to check");
     await user.click(skip("Skip Playback song 2, Background Music"));
@@ -165,24 +167,25 @@ describe("the matchup with the library", () => {
     render(<Host library={withLibrary(sampleLibrary())} />);
     const line = screen.getByTestId("playback-setlist");
     expect(line).toHaveTextContent("Playback setlist");
-    expect(line).toHaveTextContent("Set, 2026-11-22, 4 songs. It is the one on the plan's date.");
+    expect(line).toHaveTextContent("Set, 2026-11-22, 4 songs.");
+    expect(line).not.toHaveTextContent("It is the one on the plan's date");
     expect(within(line).getByRole("status")).toBeInTheDocument();
     expect(screen.getByTestId("arrangement-summary")).toHaveTextContent("3 of 4 service songs go with a Playback song.");
     expect(screen.getByTestId("arrangement-summary")).toHaveTextContent("1 is only in Playback.");
     expect(screen.getByTestId("arrangement-summary")).toHaveTextContent("1 is only alike by title.");
   });
 
-  it("with no scan it is a comparison only: no switches, and one sentence says how to turn them on", () => {
+  it("with no scan it is a comparison only: no switches, and and no sentence about it", () => {
     render(<Host initial={{ song_order: [], song_count: 0 }} library={withLibrary(sampleLibrary())} />);
     expect(rows()).toHaveLength(5);
     expect(screen.queryAllByRole("switch").filter((s) => /^Skip /.test(s.getAttribute("aria-label") ?? ""))).toHaveLength(0);
-    expect(screen.getByTestId("matchup-readonly-note")).toHaveTextContent("Scan the Playback songs once to turn on Skip");
+    expect(screen.queryByTestId("matchup-readonly-note")).not.toBeInTheDocument();
     expect(rows()[0]!.querySelector("[data-stamp]")).toHaveTextContent("Matched");
   });
 
   it("with an out-of-date scan it is the same comparison, not the scan", () => {
     render(<Host initial={{ stale: true }} library={withLibrary(sampleLibrary())} />);
-    expect(screen.getByTestId("matchup-readonly-note")).toBeInTheDocument();
+    expect(screen.queryByTestId("matchup-readonly-note")).not.toBeInTheDocument();
     expect(rows()[0]).toHaveTextContent("One Thing Remains");
   });
 

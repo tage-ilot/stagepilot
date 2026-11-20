@@ -180,7 +180,7 @@ impl BackendSupervisor {
         Self {
             status: Arc::new(Mutex::new(BackendSupervisorStatus {
                 state: BackendState::Starting,
-                message: format!("Starting the StagePilot backend on port {port}."),
+                message: format!("Starting the engine on port {port}."),
                 port,
                 managed: true,
                 failure_kind: None,
@@ -289,12 +289,7 @@ impl BackendSupervisor {
     }
 
     fn stop(&self, app: &tauri::AppHandle) {
-        self.update(
-            app,
-            BackendState::Stopped,
-            "StagePilot backend stopped.",
-            true,
-        );
+        self.update(app, BackendState::Stopped, "The engine stopped.", true);
         let _ = self.terminate_child();
     }
 
@@ -626,7 +621,7 @@ fn wait_for_backend(
                     supervisor.update(
                         &app,
                         BackendState::Ready,
-                        format!("StagePilot backend is ready on port {port}."),
+                        format!("The engine is ready on port {port}."),
                         true,
                     );
                     return;
@@ -639,7 +634,7 @@ fn wait_for_backend(
         supervisor.fail_if_starting(
             &app,
             BackendFailureKind::Timeout,
-            format!("The StagePilot backend did not become ready on port {port}."),
+            format!("The engine did not become ready on port {port}."),
             log_path,
         );
     });
@@ -777,7 +772,7 @@ fn start_backend(app: &tauri::AppHandle, supervisor: BackendSupervisor) -> Resul
             supervisor.update(
                 app,
                 BackendState::External,
-                format!("Connected to an existing StagePilot backend on port {port}."),
+                format!("Connected to the engine already running on port {port}."),
                 false,
             );
             return Ok(());
@@ -823,7 +818,7 @@ fn backend_supervisor_status(
 /// Uses `resolve_diagnostic_log_path` (see `collect_diagnostic_bundle`) for
 /// the same reason: `supervisor.snapshot().log_path` is only ever populated
 /// on a failure transition, so a healthy running backend previously made
-/// this command always fail with "No backend log is available yet." --
+/// this command always fail with "No log is available yet." --
 /// which is why it only ever worked on the startup-crash screen and never
 /// as a normal Settings-panel action.
 #[tauri::command]
@@ -838,25 +833,25 @@ fn copy_backend_log(
             .into_owned()
     });
     let log_path = resolve_diagnostic_log_path(computed_log_path, supervisor.snapshot().log_path)
-        .ok_or_else(|| "No backend log is available yet.".to_string())?;
+        .ok_or_else(|| "No log is available yet.".to_string())?;
     read_backend_log_tail(std::path::Path::new(&log_path))
 }
 
 fn read_backend_log_tail(path: &std::path::Path) -> Result<String, String> {
     let mut file =
-        fs::File::open(path).map_err(|error| format!("Unable to open the backend log: {error}"))?;
+        fs::File::open(path).map_err(|error| format!("Unable to open the log: {error}"))?;
     let size = file
         .metadata()
-        .map_err(|error| format!("Unable to read the backend log metadata: {error}"))?
+        .map_err(|error| format!("Unable to read the log details: {error}"))?
         .len();
     if size > BACKEND_LOG_COPY_MAX_BYTES {
         use std::io::Seek;
         file.seek(std::io::SeekFrom::Start(size - BACKEND_LOG_COPY_MAX_BYTES))
-            .map_err(|error| format!("Unable to seek the backend log: {error}"))?;
+            .map_err(|error| format!("Unable to seek the log: {error}"))?;
     }
     let mut content = String::new();
     file.read_to_string(&mut content)
-        .map_err(|error| format!("Unable to read the backend log: {error}"))?;
+        .map_err(|error| format!("Unable to read the log: {error}"))?;
     Ok(tail_lines(&content, MAX_LOG_LINES).0)
 }
 
@@ -1101,16 +1096,11 @@ async fn restart_managed_backend(
 ) -> Result<BackendSupervisorStatus, String> {
     if !supervisor.snapshot().managed {
         return Err(
-            "StagePilot is connected to an older external backend. Fully quit StagePilot once, then reopen it."
+            "StagePilot is connected to an older external engine. Fully quit StagePilot once, then reopen it."
                 .to_string(),
         );
     }
-    supervisor.update(
-        &app,
-        BackendState::Stopped,
-        "Restarting the StagePilot backend.",
-        true,
-    );
+    supervisor.update(&app, BackendState::Stopped, "Restarting the engine.", true);
     supervisor.terminate_child()?;
 
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -1120,14 +1110,14 @@ async fn restart_managed_backend(
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     if probe_port(supervisor.snapshot().port) != PortProbe::Available {
-        return Err("The previous StagePilot backend did not stop in time.".to_string());
+        return Err("The previous engine did not stop in time.".to_string());
     }
 
     supervisor.update(
         &app,
         BackendState::Starting,
         format!(
-            "Starting the StagePilot backend on port {}.",
+            "Starting the engine on port {}.",
             supervisor.snapshot().port
         ),
         true,
@@ -1140,7 +1130,7 @@ async fn restart_managed_backend(
         }
         tokio::time::sleep(PROBE_INTERVAL).await;
     }
-    Err("The restarted StagePilot backend did not become ready.".to_string())
+    Err("The restarted engine did not become ready.".to_string())
 }
 
 #[tauri::command]
@@ -1161,7 +1151,7 @@ async fn prepare_for_update(
     supervisor.update(
         &app,
         BackendState::Stopped,
-        "Stopping the StagePilot backend before installing the update.",
+        "Stopping the engine before installing the update.",
         managed,
     );
     if !managed {
@@ -1182,10 +1172,7 @@ async fn prepare_for_update(
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        Err(
-            "The StagePilot backend did not release its port before update installation."
-                .to_string(),
-        )
+        Err("The engine did not release its port before update installation.".to_string())
     }
 
     #[cfg(not(target_os = "windows"))]

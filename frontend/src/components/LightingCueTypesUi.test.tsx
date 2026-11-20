@@ -210,7 +210,12 @@ describe("MIDI timeline", () => {
     const onSaveCues = mountMidi([midi("a", 10, 60), midi("b", 20, 64), midi("c", 30, 72)]);
     const user = userEvent.setup();
     expect(screen.getAllByTestId("cue-legend-chip").map((c) => c.getAttribute("data-type"))).toEqual(["note-C", "note-D", "note-E", "note-F", "note-G", "note-A", "note-B"]);
-    expect(chip("D notes")).toBeDisabled();
+    // A letter this song does not use is a label, not a switched-off button: nothing to press or tab to, and it says what it is.
+    expect(screen.queryByRole("button", { name: "D notes" })).toBeNull();
+    const unused = screen.getAllByTestId("cue-legend-chip").find((c) => c.getAttribute("data-type") === "note-D")!;
+    expect(unused.tagName).toBe("SPAN");
+    expect(unused).toHaveTextContent("D notes (not in this song)");
+    expect(unused).toHaveAttribute("data-unused", "true");
     expect(chip("C notes")).not.toBeDisabled();
     await user.click(chip("C notes"));
     expect(markerOf("note-C")).toHaveLength(0);

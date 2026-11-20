@@ -209,6 +209,8 @@ describe("LightingSetupPanel", () => {
       expect(within(body as HTMLElement).getByLabelText("Song")).toBeInTheDocument();
       expect(body.contains(screen.getByTestId("lighting-cue-list"))).toBe(true);
       expect(body.contains(screen.getByTestId("lighting-timeline"))).toBe(true);
+      // The section does not explain itself (design audit, small text trims): no help paragraph, one empty line, no repeated duration rule.
+      expect(body.textContent).not.toMatch(/Cue times are elapsed|Changes save automatically|Cues must fall within|No (OSC|lighting) cues saved for this song/);
     });
 
     it("moves the MIDI test cue out of the timeline into a collapsed 'Send a test cue' disclosure under the connection", () => {
@@ -399,7 +401,7 @@ describe("LightingSetupPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Not connected")).toBeInTheDocument();
     expect(screen.queryByText("loading")).not.toBeInTheDocument();
   });
 

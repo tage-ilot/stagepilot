@@ -26,6 +26,7 @@ import { arrangementLabel } from "./playbackLibrary";
 import { EffectDetail } from "./LightingEffectDetail";
 import { assignEffectLanes, clampRampStart, effectLabel, formatFade, rampGeometry } from "./lightingSmooth";
 import { Button } from "./ui/Button";
+import { ReasonButton } from "./sections";
 import { Input } from "./ui/Input";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { CONTROL_34 } from "./compactControl";
@@ -329,9 +330,9 @@ export function LightingTimeline({
         {toolbar}
         <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2" data-part="timeline-tools-end">
           <div aria-label="Timeline zoom" className="flex items-center gap-1" role="group">
-            <Button aria-label="Zoom out" className={CONTROL_34} disabled={zoomIndex === 0} onClick={() => setZoomIndex((index) => Math.max(0, index - 1))} variant="tinted">−</Button>
+            <ReasonButton aria-label="Zoom out" className={CONTROL_34} onClick={() => setZoomIndex((index) => Math.max(0, index - 1))} reason={zoomIndex === 0 ? "The whole song is already in view." : undefined} variant="tinted">−</ReasonButton>
             <Button aria-pressed={zoomIndex === 0} className={CONTROL_34} onClick={() => setZoomIndex(0)} variant={zoomIndex === 0 ? "secondary" : "tinted"}>Fit</Button>
-            <Button aria-label="Zoom in" className={CONTROL_34} disabled={zoomIndex === ZOOMS.length - 1} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} variant="tinted">+</Button>
+            <ReasonButton aria-label="Zoom in" className={CONTROL_34} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} reason={zoomIndex === ZOOMS.length - 1 ? "This is the closest zoom." : undefined} variant="tinted">+</ReasonButton>
             <span aria-live="polite" className="min-w-[3.25rem] text-type-body-sm tabular-nums text-ink-muted">{zoom === 0 ? "" : `${zoom} px/s`}</span>
           </div>
           {hasSongMap && (
@@ -548,7 +549,7 @@ export function LightingTimeline({
           Drawing {formatCount(drawnMarkers.length)} of {formatCount(visibleMarkers.length)} cues so the timeline stays quick. Every cue is still saved and listed below; zoom in to see more of them.
         </p>
       )}
-      {!markers.length && !effects.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song runs to place one.</p>}
+      {!markers.length && !effects.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song plays.</p>}
       {selected && (
         <div aria-label="Selected cue" className="mt-2 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto rounded-ds-lg border border-edge-medium bg-surface-panel px-2 py-1" data-testid="lighting-marker-popover" role="group">
           <span className="shrink-0 text-type-body-sm text-ink-body">

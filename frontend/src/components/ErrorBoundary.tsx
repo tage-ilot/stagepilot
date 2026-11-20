@@ -58,7 +58,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
     try {
       const content = await copyDiagnosticsLog();
       await navigator.clipboard.writeText(content);
-      this.setState({ sending: false, sendMessage: `${result.message} Backend log copied instead.` });
+      this.setState({ sending: false, sendMessage: `${result.message} Log copied instead.` });
     } catch {
       this.setState({ sending: false, sendMessage: result.message });
     }

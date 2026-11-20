@@ -117,6 +117,7 @@ describe("cue board and live capture", () => {
     const { onUndoCapture } = mount({ state: runningState(10) });
     const undo = screen.getByRole("button", { name: "Undo last capture" });
     expect(undo).toBeDisabled();
+    expect(undo).toHaveAccessibleDescription("Nothing to undo.");
     await userEvent.click(screen.getByRole("button", { name: /Chorus/ }));
     await waitFor(() => expect(undo).toBeEnabled());
     await userEvent.click(undo);

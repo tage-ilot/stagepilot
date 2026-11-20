@@ -34,11 +34,14 @@ const calendar = () => screen.getByRole("button", { name: "Calendar" });
 describe("ServicePlanPicker", () => {
   it("shows the loaded service's date and title with the Upcoming service tag, and the left arrow rests", async () => {
     await show(stateFor(PLANS[0]!, false));
-    expect(screen.getByTestId("picker-selected")).toHaveTextContent("Sun, Nov 22, 2026");
+    expect(screen.getByTestId("picker-selected")).toHaveTextContent("Sun 22 Nov");
     expect(screen.getByTestId("picker-selected")).toHaveTextContent("Sunday Service");
     expect(screen.getByText("Upcoming service")).toBeInTheDocument();
     expect(previous()).toBeDisabled();
+    expect(previous()).toHaveAccessibleDescription("This is the first service.");
+    expect(previous().parentElement).toHaveAttribute("title", "This is the first service.");
     expect(next()).toBeEnabled();
+    expect(next()).not.toHaveAttribute("aria-describedby");
     expect(screen.queryByTestId("not-upcoming")).not.toBeInTheDocument();
   });
 

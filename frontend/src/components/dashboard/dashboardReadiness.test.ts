@@ -14,6 +14,7 @@ import {
   buildReadinessChecks,
   readinessErrorCauses,
   readinessPassed,
+  readinessRowTone,
   readinessWarnings,
 } from "./dashboardReadiness";
 
@@ -394,9 +395,9 @@ describe("dashboard integration truthfulness", () => {
 
     it.each([
       ["playback_api", "connected", "Playback API connected"],
-      ["playback_api", "disconnected", "Playback API disconnected"],
+      ["playback_api", "disconnected", "Playback API not connected"],
       ["real", "connected", "Playback MIDI connected"],
-      ["real", "disconnected", "Playback MIDI disconnected"],
+      ["real", "disconnected", "Playback MIDI not connected"],
     ] as const)("Playback saved as %s and %s reads %s", (midiSource, midiStatus, label) => {
       expect(entry("midi", { midiSource, midiStatus, lightsMethod: "midi", lightsStatus: "disconnected" }).label).toBe(label);
     });
@@ -599,4 +600,32 @@ describe("dashboard integration truthfulness", () => {
     });
   });
 
+});
+
+describe("header check list row tones (D3)", () => {
+  const freshSettings = settings({ service_source: "demo", midi_source: "simulated", timer_output: "simulated" });
+  const views = buildConnectionCardViews({ state: state(), settings: freshSettings, midi: emptyMidi, propresenter: null, lights: null });
+  const checks = buildReadinessChecks({
+    state: state(),
+    settings: freshSettings,
+    propresenter: null,
+    live: true,
+    views,
+    libraryLine: { label: "Playback library: 2 things to check", detail: "Two songs differ." },
+  });
+  const tone = (id: string) => readinessRowTone(checks.find((check) => check.id === id)!);
+
+  it("makes the rows that block a service red and the optional library row grey", () => {
+    expect(tone("planning-center")).toBe("blocking");
+    expect(tone("service-plan")).toBe("blocking");
+    expect(tone("durations")).toBe("blocking");
+    expect(tone("midi")).toBe("blocking");
+    expect(tone("propresenter")).toBe("blocking");
+    expect(tone("playback-library")).toBe("optional");
+  });
+
+  it("leaves the pill's verdict where it was (still not ready)", () => {
+    expect(readinessPassed(checks)).toBe(false);
+    expect(checks.find((check) => check.id === "playback-library")).toMatchObject({ required: false, severity: "warning", status: "error" });
+  });
 });

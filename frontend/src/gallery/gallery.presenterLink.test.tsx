@@ -61,7 +61,7 @@ describe("the Presenter Link states", () => {
     const rows = within(sample("playback")).getAllByTestId("add-songs-row");
     expect(rows).toHaveLength(4);
     expect(rows.map((row) => within(row).getByTestId("add-songs-mtid").textContent)).toEqual(["43302", "23126", "31877", "8412"]);
-    expect(rows[0]).toHaveTextContent("G (was F) mtID 43302");
+    expect(rows[0]).toHaveTextContent("G (was F) mtID-43302");
     expect(rows[0]).toHaveTextContent("Count Off \u00B7 Intro \u00B7 Verse 1 \u00B7 Chorus");
     expect(rows[0]).not.toHaveTextContent("Radio");
     expect(rows[0]?.textContent).not.toMatch(/3038971\d/);
@@ -106,7 +106,7 @@ describe("the Presenter Link states", () => {
     expect(within(sample("statuses")).queryByTestId("add-songs-version")).toBeNull();
     // The cards are all ten songs, and the one with no number says so.
     expect(within(sample("statuses")).getAllByTestId("add-songs-row")).toHaveLength(10);
-    expect(within(sample("statuses")).getByRole("checkbox", { name: "Goodness of God" }).closest("li")).toHaveTextContent("Bb mtID \u2014");
+    expect(within(sample("statuses")).getByRole("checkbox", { name: "Goodness of God" }).closest("li")).toHaveTextContent("Bb mtID\u2014");
   });
 
   it("a song is playing: one short line at the top", async () => {

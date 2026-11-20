@@ -147,7 +147,7 @@ describe("startup phase model", () => {
         totalElapsedMs: 10_000,
         retrying: true,
       }),
-    ).toMatchObject({ headline: "Retrying the local backend" });
+    ).toMatchObject({ headline: "Retrying the engine" });
     expect(
       startupPresentation({ phase: "failed", totalElapsedMs: 10_000, retrying: false }),
     ).toMatchObject({ tone: "failed", moving: false });

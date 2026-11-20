@@ -159,6 +159,8 @@ describe("MidiSetupPanel", () => {
     expect(screen.getByText(/Receives song and action cues from Playback to control StagePilot/i)).toBeInTheDocument();
     expect(screen.getByText("Startup default: Startup Controller")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toHaveAccessibleDescription("Choose an input first.");
+    expect(screen.getByRole("button", { name: "Disconnect" })).toHaveAccessibleDescription("No input is connected.");
 
     await user.selectOptions(screen.getByLabelText("Available input"), "a".repeat(64));
     await user.click(screen.getByRole("button", { name: "Connect" }));
@@ -262,6 +264,14 @@ describe("MidiSetupPanel", () => {
       "title",
       "Ignored: StagePilot listens on channel 1.",
     );
+  });
+
+  it("says the velocity rule once, as a column header, and the empty monitor in two words (design audit, small text trims)", () => {
+    renderPanel();
+    expect(screen.getByTestId("velocity-map-header")).toHaveTextContent("Velocity 1-99: songs in order; 100-127: actions");
+    expect(screen.getByText("No notes yet.")).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/Set each song-start cue|Shows note-on and note-off|No MIDI notes received yet|an empty monitor points to/);
   });
 });
 

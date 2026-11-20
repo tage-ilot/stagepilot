@@ -8,7 +8,7 @@ function Frame({ children }: { children: React.ReactNode }) {
   return <div className="relative h-[28rem] overflow-hidden rounded-ds-lg border border-edge-subtle bg-surface-900 [transform:translateZ(0)]">{children}</div>;
 }
 
-const longTitle = "StagePilot's backend keeps crashing and could not restart after the last three attempts";
+const longTitle = "StagePilot keeps crashing and could not restart after the last three attempts";
 
 function Cell({ state, side, tone, title = "StagePilot ran into a problem", description = "This didn't stop the app, but you can send logs to the developer to help track it down." }: { state: GalleryState; side: ToastSide; tone?: ToastTone; title?: string; description?: string }) {
   if (state === "error") {
@@ -39,7 +39,7 @@ export function ToastSection() {
   return (
     <Section name="toast" title="Toast">
       <StateRow label="left, danger (global error)" render={(s) => <Cell state={s} side="left" />} />
-      <StateRow label="right, danger (crash loop)" render={(s) => <Cell state={s} side="right" title="StagePilot's backend keeps crashing" description="Backend exited three times in a minute." />} />
+      <StateRow label="right, danger (crash loop)" render={(s) => <Cell state={s} side="right" title="StagePilot keeps crashing" description="The engine stopped three times in a minute." />} />
       <StateRow label="left, warning" render={(s) => <Cell state={s} side="left" tone="warning" />} />
       <StateRow label="long title" render={(s) => <Cell state={s} side="right" title={longTitle} />} />
     </Section>

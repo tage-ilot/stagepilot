@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { clocksWords, dateWords, whenWords } from "../lib/dateWords";
 
 import { useDelayedHover } from "../hooks/useDelayedHover";
 import { openExternalUrl } from "../desktop";
@@ -17,7 +18,7 @@ import { Button } from "./ui/Button";
 import { Field, HeldMarker } from "./ui/Field";
 import { PanelAlert } from "./PanelAlert";
 import { Input } from "./ui/Input";
-import { ActionButton, ActionRow, OptionalSection, PanelLayout, SectionNotice, SettingsSection, StatusSummary } from "./sections";
+import { ActionButton, ActionRow, OptionalSection, PanelLayout, ReasonWrap, SectionNotice, SettingsSection, StatusSummary } from "./sections";
 import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
@@ -124,8 +125,7 @@ const systemTimezone = () => {
   }
 };
 
-const formatTimestamp = (value: string | null) =>
-  value ? new Date(value).toLocaleString() : "Not yet";
+const formatTimestamp = (value: string | null) => whenWords(value, new Date(), "Not yet");
 
 export function PlanningCenterSetupPanel({
   state,
@@ -389,7 +389,7 @@ export function PlanningCenterSetupPanel({
                 <SectionNotice
                   actions={(
                     <Button disabled={busy || !onSignInOAuth} onClick={onSignInOAuth} variant="primary">
-                      {pendingOperation === "oauth-sign-in" ? "Signing in…" : "Planning Center OAuth"}
+                      {pendingOperation === "oauth-sign-in" ? "Signing in…" : "Planning Center"}
                     </Button>
                   )}
                   title="Sign in with Planning Center"
@@ -431,7 +431,7 @@ export function PlanningCenterSetupPanel({
 
                 {!signedIn && (
                   <ActionRow className="mt-5">
-                    <ActionButton busy={pendingOperation === "test"} busyLabel="Testing…" disabled={busy || (!secret && !status?.planning_center_secret_saved)} label="Test connection" onClick={() => onTest(testInput())} tone="services" />
+                    <ActionButton busy={pendingOperation === "test"} busyLabel="Testing…" disabled={busy} label="Test connection" onClick={() => onTest(testInput())} reason={!secret && !status?.planning_center_secret_saved ? "Enter the Planning Center secret first." : undefined} tone="services" />
                   </ActionRow>
                 )}
               </OptionalSection>
@@ -442,7 +442,9 @@ export function PlanningCenterSetupPanel({
       settings={(
         <SettingsSection busy={busy} divided>
           <Field error={errServiceType} heldChange={held.serviceType} label="Service type">
-            <Select disabled={serviceTypes.length === 0} onChange={(event) => setServiceTypeId(event.target.value)} value={serviceTypeId}>
+            <ReasonWrap reason={serviceTypes.length === 0 ? "Load service types first." : undefined} wrapProps={{ className: "!flex w-full min-w-0" }}>
+              {(describedBy) => (
+            <Select aria-describedby={describedBy} disabled={serviceTypes.length === 0} onChange={(event) => setServiceTypeId(event.target.value)} value={serviceTypeId}>
               <option value="">Load and choose a service type</option>
               <option value={ALL_SERVICE_TYPES_ID}>All service types (nearest upcoming service plan)</option>
               {serviceTypeId && !selectedServiceTypeKnown && (
@@ -452,6 +454,8 @@ export function PlanningCenterSetupPanel({
                 <option key={serviceType.id} value={serviceType.id}>{serviceType.name}</option>
               ))}
             </Select>
+              )}
+            </ReasonWrap>
           </Field>
           <Field error={errTimezone} heldChange={held.timezone} label="Timezone">
             <Select onChange={(event) => setTimezone(event.target.value)} value={timezone}>
@@ -475,8 +479,8 @@ export function PlanningCenterSetupPanel({
       )}
       actions={(
         <ActionRow>
-          <ActionButton busy={pendingOperation === "load-types"} busyLabel="Loading…" disabled={busy || !(status?.oauth_connected || status?.planning_center_secret_saved)} label="Load service types" onClick={onLoadServiceTypes} tone="services" />
-          <ActionButton busy={pendingAction === "reload_plan"} busyLabel="Loading…" disabled={pendingAction !== null || !state.plugins.planning_center} label="Load today’s service plan" onClick={onReload} tone="services" />
+          <ActionButton busy={pendingOperation === "load-types"} busyLabel="Loading…" disabled={busy} label="Load service types" onClick={onLoadServiceTypes} reason={status?.oauth_connected || status?.planning_center_secret_saved ? undefined : "Sign in to Planning Center first."} tone="services" />
+          <ActionButton busy={pendingAction === "reload_plan"} busyLabel="Loading…" disabled={pendingAction !== null} label="Load today’s service plan" onClick={onReload} reason={state.plugins.planning_center ? undefined : "Sign in to Planning Center first."} tone="services" />
         </ActionRow>
       )}
       content={servicePlanChoice && (state.plugins.planning_center || state.plugins.demo) ? (
@@ -495,9 +499,9 @@ export function PlanningCenterSetupPanel({
         <StatusSummary
           items={[
             { label: "Connection", value: connectionWord[status?.connection_status ?? state.planning_center_status] },
-            { label: "Credential", value: status?.planning_center_secret_saved ? "Saved securely" : "Not saved" },
-            { label: "Target date", value: serviceLoad.target_date ?? "Not selected", tabular: true },
-            { label: "Last successful sync", value: formatTimestamp(state.last_successful_plan_reload_at), tabular: true },
+            { label: "Account", value: status?.planning_center_secret_saved || status?.oauth_connected ? "Signed in" : "Not signed in" },
+            { label: "Plan date", value: serviceLoad.target_date ? dateWords(serviceLoad.target_date) : "Not selected", tabular: true },
+            { label: "Last loaded", value: formatTimestamp(state.last_successful_plan_reload_at), tabular: true },
           ]}
         />
       )}
@@ -510,7 +514,7 @@ export function PlanningCenterSetupPanel({
               <div className="flex items-center justify-between gap-3 rounded-ds-lg bg-surface-900/60 px-3 py-2" key={candidate.id}>
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink">{candidate.title}</p>
-                  <p className="text-xs text-ink-muted">{candidate.service_type_name} · {candidate.service_times.join(", ")}</p>
+                  <p className="text-xs text-ink-muted">{candidate.service_type_name} · {clocksWords(candidate.service_times)}</p>
                 </div>
                 <Button
                   className="shrink-0"

@@ -71,8 +71,8 @@ const made = (kind: string, version: string) => (minutes = 30): LightkeyHelperIn
 
 const harnesses: [Harness, Harness, Harness] = [
   {
-    name: "Lightkey helper", id: "lightkey-install", setup: "Set up the Lighting computer", update: "Update the helper", command: "Lighting computer command",
-    done: "The Lighting computer is connected.", waitingFor: "the helper", label: "Capture Script for Lighting Computer (beta, only for Lightkey):",
+    name: "Lightkey helper", id: "lightkey-install", setup: "Set up the Lighting computer", update: "Update the Lighting Link", command: "Lighting Link command",
+    done: "The Lighting computer is connected.", waitingFor: "the Lighting Link", label: "Capture script:",
     start: vi.mocked(api.startLightkeyHelperInstall), end: vi.mocked(api.endLightkeyHelperInstall), made: made("lightkey", "0.5.0"), needsComputer: false, endsOnClose: true,
     box: (situation, opts = {}) => ({ ui: <HelperSetupBox {...lightkeyBoxProps(lightkeyFor(situation))} autoStart={opts.autoStart ?? false} /> }),
   },
@@ -103,12 +103,12 @@ beforeEach(() => {
 afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); });
 
 describe.each(harnesses)("HelperSetupBox: $name", (h) => {
-  it("offers the setup button while it is not ready, and says it runs on the other computer without internet", () => {
+  it("offers the setup button while it is not ready, and says what it is in a sentence or two", () => {
     render(h.box("not_installed").ui);
     expect(screen.getByRole("region", { name: h.setup })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: h.setup })).toBeEnabled();
-    expect(screen.getByTestId(h.id)).toHaveTextContent(/no internet/);
-    expect(screen.getByTestId(h.id)).toHaveTextContent(/Terminal on the (Lighting|Playback|ProPresenter) computer/);
+    // Only the first sentence is said here; the rest (that it runs there, that no internet is needed) is in the docs and in the command's own steps.
+    expect(screen.getByTestId(`${h.id}-why`).textContent!.split(/(?<=[.:?])\s/).length).toBeLessThanOrEqual(3);
     expect(h.start).not.toHaveBeenCalled();
   });
 
@@ -362,7 +362,7 @@ describe("HelperSetupBox: Lightkey helper only", () => {
   it("stays until the helper is current: still connected and old, or briefly lost, does not end the session", async () => {
     h.start.mockResolvedValue(h.made());
     const { rerender } = render(<HelperSetupBox {...lightkeyBoxProps(connected({ helper: oldHelper }))} />);
-    await userEvent.click(screen.getByRole("button", { name: "Update the helper" }));
+    await userEvent.click(screen.getByRole("button", { name: "Update the Lighting Link" }));
     await screen.findByTestId("lightkey-install-ready");
     rerender(<HelperSetupBox {...lightkeyBoxProps(connected({ helper: oldHelper }))} />);
     rerender(<HelperSetupBox {...lightkeyBoxProps(lightkeyStatus())} />);

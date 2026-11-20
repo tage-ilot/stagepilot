@@ -26,7 +26,7 @@ export function cardLibrary(song: LibraryPlanSong | undefined, now: number): Car
  * two lists read as the same thing: a small cover when Playback has a picture, the title, one line of facts, and under both a thin
  * bar of the arranged song. The caller draws the border and any buttons around it.
  */
-export function SongCardBody({ title, cover, sections, lead, facts, chips, detail, children }: {
+export function SongCardBody({ title, cover, sections, lead, facts, chips, below, children }: {
   title: string;
   cover: string | null;
   sections: LibrarySection[];
@@ -36,8 +36,8 @@ export function SongCardBody({ title, cover, sections, lead, facts, chips, detai
   facts?: ReactNode;
   /** Small chips under the line of facts (a key, where the song comes from, why it cannot be used). Left out: nothing is drawn. */
   chips?: ReactNode;
-  /** More plain text under the line of facts, never cut short (the Presenter Link's arrangement). Left out: nothing is drawn. */
-  detail?: ReactNode;
+  /** More plain text UNDER the bar, never cut short (the Presenter Link's arrangement): title, facts, the bar, then this. Left out: nothing is drawn. */
+  below?: ReactNode;
   /** Words under the title when a card has no facts to chip (`not in Playback's setlist`). */
   children?: ReactNode;
 }) {
@@ -63,11 +63,11 @@ export function SongCardBody({ title, cover, sections, lead, facts, chips, detai
           </span>
           {facts && <span className="mt-0.5 block text-xs" data-part="facts-row">{facts}</span>}
           {children && <span className="block line-clamp-2 text-xs tabular-nums text-ink-muted">{children}</span>}
-          {detail}
           {chips && <span className="mt-1 flex flex-wrap items-center gap-1" data-part="chips">{chips}</span>}
         </span>
       </span>
       <ArrangementBar sections={sections} />
+      {below}
     </>
   );
 }
@@ -91,6 +91,10 @@ export const SONG_CARD_LOOK = {
   empty: "border-dashed border-edge-medium bg-surface-900/40 text-ink-muted",
   /** A plain song (a list that picks songs). */
   plain: "border-edge-medium bg-surface-panel text-ink",
+  /** A ticked song in a list that picks songs: Lighting's selected look, a solid border in the connection's colour over a tinted fill. */
+  picked: "border-integration-presentation-soft bg-integration-presentation-soft/20 text-ink",
+  /** A song that is not ticked: a dashed, dimmed border and fill (a difference of shape, not only of colour). */
+  unpicked: "border-dashed border-edge-medium bg-surface-900/40 text-ink-body",
 } as const;
 
 /** The outline round a selected card (Lighting's selected song; a ticked card in a list that picks songs). */
@@ -103,10 +107,12 @@ export interface SongCardShellProps {
   /** The card's fill (`SONG_CARD_LOOK`). */
   look: string;
   /** `press`: one button that picks this song (`aria-pressed`, Lighting's strip). `check`: a checkbox that is ticked on and off
-   * (`role="checkbox"`, `aria-checked`, Space and Enter toggle, a visible check mark), for a list that picks several songs. `static`:
+   * (`role="checkbox"`, `aria-checked`, Space and Enter toggle), for a list that picks several songs: the card's own look says which are ticked
+   * (`SONG_CARD_LOOK.picked` / `.unpicked`: solid border and tint against a dashed, dimmed one), with no mark in a corner, so the colored bar
+   * under the title runs the whole width like Lighting's. `static`:
    * a card with nothing to press (a song that cannot be used). */
   mode?: "press" | "check" | "static";
-  /** Pressed (press) or ticked (check): the outline, and in check mode the check mark. */
+  /** Pressed (press) or ticked (check): the outline (and, in check mode, the look the caller picks for it). */
   selected?: boolean;
   disabled?: boolean;
   /** The button's name. */
@@ -120,15 +126,6 @@ export interface SongCardShellProps {
   after?: ReactNode;
   /** The list item's own attributes (`data-*`, `title`). */
   item?: Omit<ComponentPropsWithoutRef<"li">, "className" | "children"> & DataAttributes;
-}
-
-/** A visible check mark for a check-mode card: a box with a tick, never colour alone. */
-function CheckMark({ checked }: { checked: boolean }) {
-  return (
-    <span aria-hidden="true" className={`pointer-events-none absolute right-2 top-2 inline-flex size-4 items-center justify-center rounded-ds-sm border text-[0.6875rem] font-bold leading-none ${checked ? "border-ink bg-ink text-surface-950" : "border-ink-muted bg-surface-950 text-transparent"}`} data-part="check">
-      {"\u2713"}
-    </span>
-  );
 }
 
 /**
@@ -145,7 +142,7 @@ export function SongCardShell({ look, mode = "press", selected = false, disabled
           aria-describedby={describedBy}
           aria-label={label}
           aria-pressed={check ? undefined : selected}
-          className={check ? `${PRESSABLE} pr-8 disabled:cursor-not-allowed` : PRESSABLE}
+          className={check ? `${PRESSABLE} disabled:cursor-not-allowed` : PRESSABLE}
           disabled={disabled || undefined}
           onClick={onActivate}
           role={check ? "checkbox" : undefined}
@@ -154,8 +151,7 @@ export function SongCardShell({ look, mode = "press", selected = false, disabled
           {children}
         </button>
       )}
-      {check && <CheckMark checked={selected} />}
-      {after}
+            {after}
     </li>
   );
 }

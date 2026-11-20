@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 
+import { auditStates } from "./AuditStates";
 import { addressTemplates } from "./AddressStates";
 import { factTemplates } from "./FactStates";
 import { seedRecentAddresses } from "./seedRecent";
@@ -28,7 +29,7 @@ const TEMPLATES_NOTE = "The templates by themselves, in a connection's colour, s
 const GROUPS: { id: string; title: string; intro: string; states: SampleState[]; lead?: string }[] = [
   { id: "presentation", title: "Connection section: Presentation", intro: "ProPresenter Live Link (Configuration > Presentation): the ProPresenter API and the optional Presenter Link.", states: presentationStates },
   { id: "playback", title: "Connection section: Playback", intro: "Playback Live Link (Configuration > Playback): the Playback API and the optional Library Link.", states: playbackStates },
-  { id: "lighting", title: "Connection section: Lighting", intro: "sACN DMX Live Link (Configuration > Lighting): the Lightkey link and its helper on the Lighting computer.", states: lightingStates },
+  { id: "lighting", title: "Connection section: Lighting", intro: "sACN DMX Live Link (Configuration > Lighting): the Lightkey link and its Lighting Link on the Lighting computer.", states: lightingStates },
   { id: "page-presentation", title: "Page: Presentation", intro: "Settings, actions, summary and notices of the Presentation page: clean, held, error, busy, disabled, failed, loading.", states: presentationPages, lead: PAGES_NOTE },
   { id: "presenter-link", title: "Section: Presenter Link", intro: "The Presenter Link in the Presentation panel: playlist and section (the section names; End of Playlist only for a playlist with none), ONE list of plain song cards like the Lighting tab's (Planning Center names until Playback has given them), ONE button, Import songs to ProPresenter, and its short statuses: one chip and one short phrase per song. Every state is reached by pressing the real buttons; the answers are made up.", states: presenterLinkStates },
   { id: "page-services", title: "Page: Services", intro: "Services (Planning Center): the three sign-in notices, the optional Manual API Connection, the settings group, the action row.", states: servicesPages },
@@ -44,6 +45,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
   { id: "template-summary", title: "Template: Summary", intro: "StatusSummary: the list and the cards, with ok, warn and danger words.", states: summaryTemplates },
   { id: "template-notices", title: "Template: Notices", intro: "SectionNotice: the four tones as boxes, with a title and a button, as a question group, and as lines.", states: noticeTemplates },
   { id: "template-facts", title: "Template: Fact chips", intro: "FactChips: a song's small facts (key, length, tempo, mtID, capture status) as square chips, by themselves and in the cards that have them: Lighting's songs, Playback's config songs and the matchup ledger. The Presenter Link's cards are in Section: Presenter Link.", states: factTemplates },
+  { id: "template-audit", title: "Template: Design audit follow-ups", intro: "Switched-off buttons that say why, the Event stream in plain words, the header's check list with its marks, the Save bar on a phone, and the Song order header while the order is learned.", states: auditStates },
   { id: "template-optional", title: "Template: Optional sections", intro: "OptionalSection and the band: closed, open, remembered, opened by a question.", states: optionalTemplates },
   { id: "template-layout", title: "Template: Panel order, and a new connection page", intro: "PanelLayout with every slot, with the summary first, and the worked example of DESIGN.md: a new connection built from the templates in 35 lines.", states: layoutTemplates },
 ];

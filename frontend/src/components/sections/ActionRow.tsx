@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Button } from "../ui/Button";
+import { ReasonButton, type ReasonWrapAttributes } from "./ReasonButton";
 import { cx } from "../ui/cx";
 import type { Tone } from "../ui/types";
 
@@ -37,6 +37,11 @@ export interface ActionButtonProps {
   /** This button's own request is running: it shows `busyLabel`. */
   busy?: boolean;
   disabled?: boolean;
+  /** Why it is off (`Sign in to Planning Center first.`): the button is disabled and says so on a wrapper, as a tooltip and to a screen reader (`ReasonButton`). */
+  reason?: string | null;
+  /** `false`: no wrapper while there is no reason. Default: the wrapper stays, so focus survives a reason coming and going. */
+  alwaysWrap?: boolean;
+  wrapProps?: ReasonWrapAttributes;
   onClick: () => void;
   /** The connection's accent. */
   tone?: Tone;
@@ -48,10 +53,10 @@ export interface ActionButtonProps {
 }
 
 /** One button of an `ActionRow`: the label, then the busy words, with the row's one look. */
-export function ActionButton({ label, busyLabel, busy = false, disabled = false, onClick, tone, variant = "tinted", className, title, "aria-describedby": describedBy }: ActionButtonProps) {
+export function ActionButton({ label, busyLabel, busy = false, disabled = false, reason, alwaysWrap, wrapProps, onClick, tone, variant = "tinted", className, title, "aria-describedby": describedBy }: ActionButtonProps) {
   return (
-    <Button aria-describedby={describedBy} className={className} disabled={disabled} onClick={onClick} title={title} tone={variant === "tinted" ? tone : undefined} variant={variant}>
+    <ReasonButton alwaysWrap={alwaysWrap} aria-describedby={describedBy} className={className} disabled={disabled} onClick={onClick} reason={reason} title={title} tone={variant === "tinted" ? tone : undefined} variant={variant} wrapProps={{ ...wrapProps, className: cx(className?.match(/\bself-\S+/)?.[0], wrapProps?.className) || undefined }}>
       {busy && busyLabel ? busyLabel : label}
-    </Button>
+    </ReasonButton>
   );
 }

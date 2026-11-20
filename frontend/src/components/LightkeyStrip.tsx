@@ -26,7 +26,7 @@ import { apiHostMismatch, apiPortError, composeApiUrl, splitApiUrl } from "./lig
 import { oscHostError, oscPortError } from "./lightingOsc";
 import { OscConnectionFields } from "./LightingOscParts";
 import { useLiveLinkTools } from "./useLiveLinkTools";
-import { AddressBox, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, SectionNotice, scannedAddresses } from "./sections";
+import { AddressBox, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, ReasonButton, SectionNotice, scannedAddresses } from "./sections";
 import { useRecheckNote } from "./useRecheckNote";
 import { lightkeyScanState } from "./lightkeyScan";
 import { HOST_HELP, HOST_LABEL, HOST_TITLE } from "./lightingHost";
@@ -360,30 +360,28 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
     <ConnectionSection
       actions={(
         <>
-          {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper (as for Read fixtures). */}
-          <span data-testid="lightkey-release-wrap" title={releaseBlocked}>
-            <Button
-              className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
-              disabled={busy || !releasable}
-              onClick={() => void run(() => releaseLightkeyLights())}
-              variant="secondary"
-            >
-              Release lights
-            </Button>
-          </span>
-          {/* A disabled button shows no tooltip of its own, so the reason sits on the wrapper. */}
-          <span data-testid="lightkey-read-fixtures-wrap" title={readBlocked}>
-            <Button
-              className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
-              disabled={busy || reading || Boolean(readBlocked)}
-              loading={reading}
-              loadingLabel={"Reading\u2026"}
-              onClick={() => void readFixtures()}
-              variant="secondary"
-            >
-              Read fixtures
-            </Button>
-          </span>
+          <ReasonButton
+            className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
+            disabled={busy}
+            onClick={() => void run(() => releaseLightkeyLights())}
+            reason={releaseBlocked}
+            variant="secondary"
+            wrapProps={{ "data-testid": "lightkey-release-wrap" }}
+          >
+            Release lights
+          </ReasonButton>
+          <ReasonButton
+            className="!h-8 !min-h-8 !px-2.5 text-sm coarse:!h-11 coarse:!min-h-[44px]"
+            disabled={busy || reading}
+            loading={reading}
+            loadingLabel={"Reading\u2026"}
+            onClick={() => void readFixtures()}
+            reason={readBlocked}
+            variant="secondary"
+            wrapProps={{ "data-testid": "lightkey-read-fixtures-wrap" }}
+          >
+            Read fixtures
+          </ReasonButton>
           {tools.actions}
         </>
       )}
@@ -474,7 +472,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           )}
           {outdated && (
             <SectionNotice className="mt-2" role="status" size="xs" testId="lightkey-helper-update" tone="info" variant="line">
-              Helper update available. Capture and replay keep working; Read fixtures and the project check need helper 0.5.0.
+              Lighting Link update available. Capture and replay keep working; Read fixtures and the project check need Lighting Link 0.5.0.
             </SectionNotice>
           )}
 
@@ -509,7 +507,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
           <HelperSetupBox {...lightkeyBoxProps(status)} autoStart={byChoice} />
         </>
       )}
-      detailsLabel={status.link === "off" ? null : "Lighting computer setup"}
+      detailsLabel={status.link === "off" ? null : "Lighting Link setup"}
       footer={(
         <>
           {footer}

@@ -43,6 +43,7 @@ import type {
 } from "../types";
 import type { UpdaterController } from "../hooks/useUpdater";
 import { BackendSetupPanel } from "./BackendSetupPanel";
+import { ReasonButton } from "./sections";
 import { DashboardGrid } from "./dashboard/DashboardGrid";
 import { latestActiveError } from "./dashboard/dashboardActiveError";
 import {
@@ -54,6 +55,10 @@ import {
   readinessPassed,
 } from "./dashboard/dashboardReadiness";
 import { observePlanRun, type PlanRunMemory } from "./dashboard/planProgress";
+import { EventRow } from "./dashboard/EventRow";
+import { ReadinessRows } from "./dashboard/ReadinessRows";
+import { describeStream, isHiddenEvent, sourceName } from "../lib/eventWords";
+import { clocksWords, dateWords, timeWords, whenWords } from "../lib/dateWords";
 import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
@@ -105,18 +110,11 @@ const formatDuration = (seconds: number | null | undefined) => {
     : `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 };
 
-const formatTime = (value: string | null | undefined) =>
-  value
-    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date(value))
-    : "No activity yet";
+const formatTime = (value: string | null | undefined) => timeWords(value, { seconds: true, fallback: "No activity yet" });
 
 const formatPlanCurrent = (value: string | null | undefined) => {
-  if (!value) return "Load time unavailable";
-  const loadedAt = new Date(value);
-  if (Number.isNaN(loadedAt.getTime())) return "Load time unavailable";
-  const time = `${String(loadedAt.getHours()).padStart(2, "0")}:${String(loadedAt.getMinutes()).padStart(2, "0")}`;
-  const date = `${String(loadedAt.getMonth() + 1).padStart(2, "0")}-${String(loadedAt.getDate()).padStart(2, "0")}-${loadedAt.getFullYear()}`;
-  return `Current ${time} ${date}`;
+  const when = whenWords(value);
+  return when ? `Last loaded ${when}` : "Load time unavailable";
 };
 
 const connectionIcon = (source: string, name: string, compact = false) => (
@@ -135,24 +133,31 @@ function ActionButton({
   label,
   tone = "neutral",
   disabled,
+  reason,
   onAction,
 }: {
   action: ActionName;
   label: string;
   tone?: "green" | "orange" | "red" | "blue" | "neutral";
   disabled: boolean;
+  /** Why it is off (Restart current: nothing has played yet); see `ReasonButton`. */
+  reason?: string;
   onAction: (action: ActionName) => void;
 }) {
   const liveTone = { green: "go", orange: "back", red: "stop", blue: "reload", neutral: undefined }[tone] as LiveTone | undefined;
   return (
-    <Button
+    // A cell of the manual controls' grid: the wrapper fills it and the button fills the wrapper.
+    <ReasonButton
       disabled={disabled}
+      fullWidth
       liveTone={liveTone}
       onClick={() => onAction(action)}
+      reason={reason}
       variant={liveTone ? "live" : "secondary"}
+      wrapProps={{ className: "!flex" }}
     >
       {label}
-    </Button>
+    </ReasonButton>
   );
 }
 
@@ -819,7 +824,7 @@ export function Dashboard({
   const connectionRowsPerSource = new Map<string, number>();
   let realEventRows = 0;
   // Playback's own song events (started, paused, ended...) join the backend's events in one stream, newest first.
-  const streamEvents = [...state.recent_events, ...playbackStreamRows(playback?.events, playback?.status)].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+  const streamEvents = [...state.recent_events, ...playbackStreamRows(playback?.events, playback?.status)].filter((event) => !isHiddenEvent(event)).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
   const activity = [...streamEvents].reverse().filter((event) => {
     if (event.type === "connection.changed") {
       const seen = connectionRowsPerSource.get(event.source) ?? 0;
@@ -844,12 +849,20 @@ export function Dashboard({
   if (activeErrorEventMissing && pinnedError) {
     activity.unshift({
       id: pinnedError.event_id ?? `evicted-error-${pinnedError.timestamp}`,
-      type: `${pinnedError.component} error`,
+      type: `${sourceName(pinnedError.component)} error`,
       timestamp: pinnedError.timestamp,
       source: "Evicted from event stream — shown from the pinned error",
     });
     activity.splice(10);
   }
+  // The stream in plain words; the raw `type · source` is each row's hover text, for support.
+  const plainActivity = describeStream(activity, {
+    planning_center: state.planning_center_status === "connected",
+    propresenter: state.propresenter_status === "connected",
+    lights: state.lights_status === "connected",
+    midi_playback: state.midi_status === "connected",
+    playback_connection: state.midi_status === "connected",
+  });
   const midiDetail = connectionViews.midi.detail;
   const { elapsed: timerElapsed, remaining: timerRemaining } = songClock(state.timer, state.playing_song, clockNow);
   // The Now playing rail sweeps to the live colour from its top end while the countdown runs. A CSS animation cannot be removed
@@ -935,22 +948,7 @@ export function Dashboard({
             role="tooltip"
           >
             <div className="rounded-ds-xl border border-edge bg-surface-950/85 p-3 shadow-elevation-overlay backdrop-blur-xl">
-              <ul className="grid gap-1.5">
-                {checks.map((check) => (
-                  <li
-                    className="flex items-center gap-2 rounded-ds-lg bg-edge-subtle px-3 py-2 text-sm"
-                    key={check.id}
-                    title={check.detail}
-                  >
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-type-micro font-black ${check.status === "connected" ? "bg-success-soft/20 text-success-text" : check.status === "error" ? "bg-danger/15 text-danger-text" : "bg-edge text-ink-muted"}`}>
-                      {check.status === "connected" ? "✓" : check.status === "error" ? "!" : "—"}
-                    </span>
-                    <span className={check.status === "connected" ? "text-success-text" : check.status === "error" ? "text-danger-text" : "text-ink-muted"}>
-                      {check.label}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <ReadinessRows checks={checks} />
             </div>
           </div>
           )}
@@ -1001,7 +999,7 @@ export function Dashboard({
               <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-ds-lg border border-warning/15 bg-surface-950/30 px-3 py-3">
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink">{candidate.title}</p>
-                  <p className="mt-0.5 text-xs text-ink-muted">{candidate.service_type_name} · {candidate.service_times.join(", ")}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">{candidate.service_type_name} · {clocksWords(candidate.service_times)}</p>
                 </div>
                 {canOperate && <button
                   aria-label={pendingPlanId === candidate.id ? `Loading ${candidate.title}` : `Use ${candidate.title}`}
@@ -1079,7 +1077,7 @@ export function Dashboard({
           icon={connectionIcon(stagepilotIcon, "stagepilot", true)}
           onClick={() => toggleConnection("backend")}
           status={backendStatus}
-          title="StagePilot"
+          title="Backend"
           tone="backend"
         />
       </section>
@@ -1220,7 +1218,7 @@ export function Dashboard({
               <p className="text-type-kicker uppercase text-ink-muted">Service plan</p>
               <h2 className="font-pixel mt-1 break-words !text-[1.125rem] text-ink [overflow-wrap:anywhere]">{plan?.title ?? "No service loaded"}</h2>
               <p className="mt-1 break-words text-xs text-ink-muted [overflow-wrap:anywhere]">
-                {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
+                {plan ? `${plan.service_type} · ${dateWords(plan.date)} · ${clocksWords(plan.service_times)}` : "Waiting for a current or upcoming service plan."}
               </p>
               {plan && state.selection?.pinned && (
                 <NotUpcomingPill
@@ -1291,7 +1289,7 @@ export function Dashboard({
             )}
             <div className="manual-controls-grid mt-3 grid gap-2">
               <ActionButton action="start_next" label="Start next" tone="green" disabled={!live || pendingAction !== null} onAction={dispatch} />
-              <ActionButton action="restart_current" label="Restart current" tone="green" disabled={!live || pendingAction !== null || !state.current_song} onAction={dispatch} />
+              <ActionButton action="restart_current" label="Restart current" tone="green" disabled={!live || pendingAction !== null} onAction={dispatch} reason={live && !state.current_song ? "Nothing has played yet." : undefined} />
               <ActionButton action="previous" label="Previous" tone="orange" disabled={!live || pendingAction !== null} onAction={dispatch} />
               <ActionButton action="reload_plan" label="Reload service plan" tone="blue" disabled={!live || pendingAction !== null} onAction={dispatch} />
               <ActionButton action="stop_timer" label="Stop timer" tone="red" disabled={!live || pendingAction !== null} onAction={dispatch} />
@@ -1304,7 +1302,7 @@ export function Dashboard({
           <div className="flex items-center justify-between p-4"><p className="text-type-kicker uppercase text-ink-muted">Event stream</p><span className="text-xs tabular-nums text-idle">Latest {activity.length}</span></div>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-edge-subtle">
             {pinnedError && <div className="grid grid-cols-[4.5rem_1fr] gap-3 border-b border-danger/15 bg-danger/10 px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-danger-text/70">{formatTime(pinnedError.timestamp)}</time><p className="text-danger-text"><span className="font-bold uppercase text-danger-text">{pinnedError.component}</span> · {pinnedError.message}</p></div>}
-            {activity.map((event) => <div key={event.id} className="event-row grid grid-cols-[4.5rem_1fr] gap-3 border-b border-edge-subtle px-4 py-2.5 text-xs"><time className="font-mono tabular-nums text-idle">{formatTime(event.timestamp)}</time><p className="truncate text-ink-body"><span className="font-semibold text-ink-body">{event.type}</span> · {event.source}</p></div>)}
+            {activity.map((event, index) => <EventRow key={event.id} text={plainActivity[index]?.text ?? ""} time={formatTime(event.timestamp)} title={plainActivity[index]?.title} />)}
             {!activity.length && <p className="p-4 text-sm text-ink-muted">Waiting for demo events…</p>}
           </div>
         </Panel>

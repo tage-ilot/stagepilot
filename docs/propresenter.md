@@ -277,13 +277,13 @@ has no window; everything, including progress and the result, happens in place, 
    named "Worship". Pick another place.*) and the button stays off: StagePilot does not guess.
 2. **Songs**: the same song cards as the Lighting tab's songs (an auto-fill grid, the cover when the Library Link has one, the title, a
    small line of facts, the thin arrangement bar), with the count (`3 of 4 selected`, read out politely) and **Select all** / **Select
-   none** above them. Every card starts selected: a selected card has the outline and a check mark; Space or Enter turns it on or off.
-   With Playback data a card shows, as plain text and nothing to open: one line `C · mtID 23126` (the key as letters, `Ab (was G)` for a
-   key changed in Playback in the last day, then **mtID** and the number), and under it the **order Playback plays**, section by section
-   (`Intro · Verse 1 · Chorus · Verse 2 · Chorus · Bridge · Chorus`, wrapping onto as many lines as it needs), above the thin bar. The
+   none** above them. Every card starts selected: a selected card has a solid border, a tinted fill and the outline, a card that is off a dashed, dimmed border (there is no mark in the corner, so the colored bar runs the whole width of the card, as in Lighting); Space or Enter turns it on or off.
+   With Playback data a card shows, as plain text and nothing to open: one line `C` and `mtID-23126` as two square chips (the key as letters, `Ab (was G)` for a
+   key changed in Playback in the last day, then **mtID-** and the number, no spaces), and under it the **order Playback plays**, section by section
+   (`Intro · Verse 1 · Chorus · Verse 2 · Chorus · Bridge · Chorus`, wrapping onto as many lines as it needs), **under** the thin bar (title, facts, bar, then the order). The
    **mtID** is the MultiTracks **Song Master ID** (the same number ProPresenter shows as MTID and the one to type in Playback's search and
    in ProPresenter's Search; the helper's `content_id`), never Playback's own song number (the long `setlist_song_id`). A song with no id
-   shows `mtID —`; a song Playback gave no number at all is a grey card that says `Can't import`. Without Playback data a card is the
+   shows `mtID—` (nothing follows); a song Playback gave no number at all is a grey card that says `Can't import`. Without Playback data a card is the
    Planning Center name and a **Planning Center** chip. After a preview, the cards it stopped for carry its chip (`Can't import`,
    `Pick one`...) and a song with a guessed section a **Check** chip.
 3. Above the button, only when it is off or the preview stopped: why, in a few words.

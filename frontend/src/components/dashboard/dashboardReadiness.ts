@@ -12,6 +12,7 @@ import type {
 import { connectionWord } from "../ui/statusWord";
 import { playbackConnectionDetail, playbackOrderMode, playbackOrderModeText, playbackOrderNotice } from "../playbackStatus";
 import { songClock } from "../../lib/songClock";
+import { timeWords } from "../../lib/dateWords";
 import { scanReminderCheck } from "./scanReminder";
 import type { PlanRunMemory } from "./planProgress";
 
@@ -32,6 +33,23 @@ export type ReadinessCheck = {
   status: "connected" | "disconnected" | "error";
   detail?: string;
 };
+
+/**
+ * How a row of the header's check list looks (decided 2026-11-18, D3 of the design audit). The colour follows what the row does to the
+ * service, not how it failed: a row that BLOCKS a service and is not ready is red with an ×, an optional row that is not ready is grey with
+ * a !, and a row that is fine is green with a ✓. The mark always carries it, never the colour alone. The pill's own verdict
+ * (Ready / Check system / Error) is not read from this; it has its own logic.
+ */
+export type ReadinessRowTone = "ok" | "blocking" | "optional";
+export const readinessRowTone = (check: Pick<ReadinessCheck, "passed" | "required">): ReadinessRowTone =>
+  check.passed ? "ok" : check.required ? "blocking" : "optional";
+export const READINESS_ROW_MARK: Record<ReadinessRowTone, string> = { ok: "\u2713", blocking: "\u00D7", optional: "!" };
+export const READINESS_ROW_MARK_CLASS: Record<ReadinessRowTone, string> = {
+  ok: "bg-success-soft/20 text-success-text",
+  blocking: "bg-danger/15 text-danger-text",
+  optional: "bg-edge text-ink-muted",
+};
+export const READINESS_ROW_TEXT_CLASS: Record<ReadinessRowTone, string> = { ok: "text-success-text", blocking: "text-danger-text", optional: "text-ink-muted" };
 
 type DashboardIntegrationViews = {
   planningCenter: ConnectionCardView;
@@ -95,7 +113,7 @@ const statusDetail = (status: ConnectionStatus, detail: string | null | undefine
   if (status === "error") return "Connection failed";
   if (status === "connected") return "Connected";
   if (status === "ready") return "Ready, capture not connected yet";
-  return "Disconnected";
+  return "Not connected";
 };
 
 export function buildConnectionCardViews({
@@ -165,11 +183,7 @@ export function buildConnectionCardViews({
                 state.planning_center_status,
                 state.planning_center_status === "connected"
                   ? state.last_successful_plan_reload_at
-                    ? `Last plan sync ${new Intl.DateTimeFormat(undefined, {
-                        hour: "numeric",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      }).format(new Date(state.last_successful_plan_reload_at))}`
+                    ? `Last plan sync ${timeWords(state.last_successful_plan_reload_at)}`
                     : "Services API connected"
                   : undefined,
               )
@@ -304,7 +318,7 @@ export function buildReadinessChecks({
         status: view.status === "connecting" ? "disconnected" as const : view.status === "ready" ? "connected" as const : view.status,
         detail: "Live status reported by StagePilot. Configuration is not available in this view.",
       })),
-      { id: "backend", label: live ? "StagePilot connected" : "StagePilot disconnected",
+      { id: "backend", label: live ? "StagePilot connected" : "StagePilot not connected",
         passed: live, required: true, severity: "info", status: live ? "connected" : "disconnected" },
     ];
   }
@@ -328,7 +342,7 @@ export function buildReadinessChecks({
       id: "planning-center",
       label: views.planningCenter.status === "connected"
         ? "Services connected"
-        : "Services disconnected",
+        : "Services not connected",
       passed: views.planningCenter.status === "connected",
       required: true,
       severity: "blocking",
@@ -358,7 +372,7 @@ export function buildReadinessChecks({
     },
     {
       id: "midi",
-      label: `${playbackLabel} ${views.midi.status === "connected" ? "connected" : "disconnected"}`,
+      label: `${playbackLabel} ${views.midi.status === "connected" ? "connected" : "not connected"}`,
       passed: views.midi.status === "connected",
       required: true,
       severity: "blocking",
@@ -369,7 +383,7 @@ export function buildReadinessChecks({
       id: "propresenter",
       label: views.propresenter.status === "connected"
         ? "Presentation connected"
-        : "Presentation disconnected",
+        : "Presentation not connected",
       passed: views.propresenter.status === "connected",
       required: true,
       severity: "blocking",
@@ -398,7 +412,7 @@ export function buildReadinessChecks({
   });
   checks.push({
     id: "backend",
-    label: live ? "StagePilot connected" : "StagePilot disconnected",
+    label: live ? "StagePilot connected" : "StagePilot not connected",
     passed: live,
     required: true,
     severity: "blocking",

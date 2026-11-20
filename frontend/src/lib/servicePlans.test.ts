@@ -18,9 +18,9 @@ import {
 
 describe("service plan dates", () => {
   it("formats a calendar date as the same calendar date, whatever zone this computer is in", () => {
-    expect(formatLongDate("2026-11-22")).toBe("Sun, Nov 22, 2026");
-    expect(formatShortDate("2026-11-29")).toBe("Sun, Nov 29");
-    expect(formatMonthDay("2026-11-29")).toBe("Nov 29");
+    expect(formatLongDate("2026-11-22")).toBe("Sun 22 Nov");
+    expect(formatShortDate("2026-11-29")).toBe("Sun 29 Nov");
+    expect(formatMonthDay("2026-11-29")).toBe("29 Nov");
     expect(formatSpokenDay("2026-11-29")).toBe("Sunday Nov 29");
     expect(formatMonthTitle("2026-11-01")).toBe("November 2026");
   });

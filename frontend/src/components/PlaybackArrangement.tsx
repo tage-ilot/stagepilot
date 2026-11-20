@@ -96,24 +96,12 @@ export function PlaybackArrangement({ status, draft, library }: { status: Playba
             </InlineAlert>
           )}
           {notScanOfThisSetlist && <p className="text-sm text-ink-body" data-testid="matchup-scan-note">The saved scan does not match the Playback setlist above, so this is the scan alone. Scan the Playback songs again to compare the two.</p>}
-          {mode === "library" && !scan && <p className="text-sm text-ink-body" data-testid="matchup-readonly-note">Scan the Playback songs once to turn on Skip and to see which Playback song will start each timer. Until then this is only a comparison.</p>}
           {join === "position" && <p className="text-sm text-ink-body" data-testid="matchup-join-note">The saved scan could not be checked against the Library Link's song numbers, so its songs are lined up with Playback's setlist by place.</p>}
           {libraryPlan?.stale && libraryPlan.message && mode === "library" && <p className="text-sm text-ink-muted">{libraryPlan.message}</p>}
-          {counts["check-order"] > 0 && (
-            <InlineAlert tone="info" className="p-3 text-ink-body" data-testid="matchup-order-note">
-              Songs never change places. {live ? "Playback's Nth song starts the plan's Nth song once the skipped songs are set aside." : "The plan and Playback list some songs in a different order."} Turn on Skip for a song that is only on one side, or change the order in Playback or Planning Center. StagePilot does not reorder anything for you.
-            </InlineAlert>
-          )}
           <div className="arr-cols font-type-kicker text-type-kicker uppercase text-ink-muted" aria-hidden="true"><span>Service plan</span><span /><span>Playback</span></div>
           <ol className="arr-list m-0 grid list-none gap-0 p-0" aria-label="Song pairs">
             {rows.map((row) => <MatchupRow key={row.id} row={row} draft={draft} skips={skips} />)}
           </ol>
-          <p className="text-xs text-ink-muted">
-            {mode === "classic"
-              ? "Songs always stay in order. Turn on Skip to leave a song out; the songs after it move up to stay lined up. A skipped Playback song does nothing to the timer when it plays. Playback lengths are read from where each song ends (the start of its last measure)."
-              : "Songs always stay in order. Titles are compared by their words; a pair that is only alike is marked for you to check. Lengths are where Playback's countdown ends."}
-            {live && " Turn on Skip to leave a song out; the songs after it move up to stay lined up."}
-          </p>
         </>
       )}
     </div>

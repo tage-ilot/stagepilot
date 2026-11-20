@@ -12,6 +12,7 @@ import { validPlaybackHost } from "./playbackStatus";
 
 const SCAN_CANCEL_GUARD_MS = 600;
 const TITLE = "Playback Live Link";
+const PLAYBACK_API_NAME = "Playback API";
 
 /**
  * The first block of the Playback API panel, built like the Lighting "sACN DMX Live Link" block: a bordered card with a title, a state pill
@@ -137,12 +138,14 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
       footer={library?.error ? <SectionNotice className="mt-2" role="alert" tone="danger" variant="line">{library.error}</SectionNotice> : undefined}
       pills={(
         <>
-          <LiveLinkPill detail={api.text} name="" testId="playback-api-pill" text={`Playback API: ${parts.api.word}`} tone={parts.api.tone} />
+          <LiveLinkPill detail={api.text} name="" testId="playback-api-pill" text={`${PLAYBACK_API_NAME}: ${parts.api.word}`} tone={parts.api.tone} />
           {library && <LiveLinkPill detail={script?.text} name="" testId="library-link-pill" text={`Library Link: ${parts.script.word}`} tone={parts.script.tone} />}
         </>
       )}
       status={[
-        { text: api.text, testId: "playback-banner" },
+        // Prefixed like the other blocks' lines. Playback's sentence is MIDI's own while MIDI stands in (`Connected through MIDI.`), and that one is
+        // not the API's to say, so it keeps no prefix.
+        { text: api.tone === "midi" ? api.text : `${PLAYBACK_API_NAME}: ${api.text}`, testId: "playback-banner" },
         ...(recheck.note ? [{ text: recheck.note, testId: "playback-recheck" }] : []),
         ...(script ? [{ text: `Library Link: ${script.text}.`, testId: "library-link-status", tone: script.tone }] : []),
       ]}

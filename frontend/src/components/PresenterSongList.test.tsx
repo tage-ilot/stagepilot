@@ -62,17 +62,33 @@ describe("the song cards", () => {
     expect(screen.getByTestId("add-songs-count")).toHaveTextContent("4 of 4 selected");
   });
 
-  it("shows the selection by the outline AND a visible check mark, never colour alone", async () => {
+  it("shows the selection by the card's look, not by a mark in the corner and not by colour alone: solid border, tinted fill and outline against a dashed, dimmed card", async () => {
     draw();
     const user = await ready();
-    const mark = () => card("Battle Belongs").querySelector("[data-part=check]") as HTMLElement;
-    expect(mark()).toHaveTextContent("\u2713");
-    expect(mark()).not.toHaveClass("text-transparent");
+    const picked = card("Battle Belongs");
+    // No check mark is drawn (it used to shorten the colored bar).
+    expect(picked.querySelector("[data-part=check]")).toBeNull();
+    expect(picked).toHaveClass("border-integration-presentation-soft", "bg-integration-presentation-soft/20", "outline", "outline-2", "outline-ink");
+    expect(picked).not.toHaveClass("border-dashed");
     await user.click(screen.getByRole("checkbox", { name: "Battle Belongs" }));
     expect(screen.getByRole("checkbox", { name: "Battle Belongs" })).toHaveAttribute("aria-checked", "false");
-    expect(card("Battle Belongs")).not.toHaveClass("outline");
-    expect(mark()).toHaveClass("text-transparent", "border-ink-muted");
-    expect(mark()).toHaveAttribute("aria-hidden", "true");
+    const unpicked = card("Battle Belongs");
+    expect(unpicked).toHaveClass("border-dashed", "bg-surface-900/40");
+    expect(unpicked).not.toHaveClass("outline");
+    expect(unpicked).not.toHaveClass("bg-integration-presentation-soft/20");
+    expect(unpicked.querySelector("[data-part=check]")).toBeNull();
+  });
+
+  it("the colored bar runs the whole width of the card, as in Lighting: nothing is reserved at the right for a mark", async () => {
+    draw();
+    await ready();
+    const button = screen.getByRole("checkbox", { name: "Holy Forever" });
+    expect(button.className).not.toMatch(/\bpr-\d/);
+    expect(button.className).toMatch(/\bpx-2\.5\b/);
+    expect(within(button).getByTestId("library-bar").parentElement).toBe(button);
+    // Lighting's press-mode card has the same padding, so both bars end at the same edges.
+    const strip = render(<SongsStrip chips={[{ key: "a", title: "A", order: 0, looks: 1, handmade: 0, hasLoudness: false }]} liveKey="" noun="looks" onClear={vi.fn()} onSelect={vi.fn()} selectedKey="a" />);
+    expect(strip.container.querySelector("button[aria-pressed]")!.className).toMatch(/\bpx-2\.5\b/);
   });
 
   it("Space and Enter toggle a card; the count is a polite live region", async () => {
@@ -104,7 +120,7 @@ describe("the song cards", () => {
     expect(screen.getAllByRole("checkbox").every((box) => box.getAttribute("aria-checked") === "true")).toBe(true);
   });
 
-  it("each Playback card has the cover (when Playback has one), then the key and `mtID number` as one square chip each, the arrangement, and its bar", async () => {
+  it("each Playback card has the cover (when Playback has one), then the key and `mtID-number` as one square chip each, the arrangement, and its bar", async () => {
     draw();
     await ready();
     const holy = card("Holy Forever");
@@ -113,9 +129,9 @@ describe("the song cards", () => {
     expect(within(holy).getByTestId("library-bar")).toHaveAttribute("role", "img");
     // Under the title: the key letters, then mtID and the number, each in its own square chip with no dot between; no \"Key\" word on screen.
     const facts = holy.querySelector("[id$='-facts']") as HTMLElement;
-    expect(facts).toHaveTextContent(/^G \(was F\) mtID 43302$/);
+    expect(facts).toHaveTextContent(/^G \(was F\) mtID-43302$/);
     expect(facts.textContent).not.toMatch(/[\u00B7\u2022]/);
-    expect(within(facts).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["G (was F)", "mtID 43302"]);
+    expect(within(facts).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["G (was F)", "mtID-43302"]);
     expect(within(holy).getByTestId("add-songs-key")).toHaveTextContent(/^G \(was F\)$/);
     expect(within(holy).queryByText(/\bKey\b/)).toBeNull();
     expect(holy.textContent).not.toMatch(/MultiTracks|Default|Sections/);
@@ -123,6 +139,23 @@ describe("the song cards", () => {
     // The key is the same square chip as every other song fact.
     expect(within(holy).getByTestId("add-songs-key").className).toMatch(/\bborder\b.*\bbg-surface-950\b/);
     // The full order on hover (the card's title).
+    expect(holy).toHaveAttribute("title", "Holy Forever: Count Off, Verse 1, Vamp on 1");
+  });
+
+  it("lays the card out top to bottom: the title, the fact chips, the colored section bar, THEN the arrangement text", async () => {
+    draw();
+    await ready();
+    const holy = card("Holy Forever");
+    const title = holy.querySelector("[title='Holy Forever']") as HTMLElement;
+    const facts = holy.querySelector("[id$='-facts']") as HTMLElement;
+    const bar = within(holy).getByTestId("library-bar");
+    const order = within(holy).getByTestId("add-songs-order");
+    const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(title, facts)).toBe(true);
+    expect(follows(facts, bar)).toBe(true);
+    expect(follows(bar, order)).toBe(true);
+    // The text keeps its words and its hover text.
+    expect(order).toHaveTextContent("Count Off · Verse 1 · Vamp on 1");
     expect(holy).toHaveAttribute("title", "Holy Forever: Count Off, Verse 1, Vamp on 1");
   });
 
@@ -137,10 +170,10 @@ describe("the song cards", () => {
     for (const name of ["Holy Forever", "Battle Belongs", "Gratitude", "Firm Foundation"]) expect(card(name).textContent).not.toMatch(/3038971\d/);
   });
 
-  it("a song with no number shows `mtID \u2014`", async () => {
+  it("a song with no number shows `mtID\u2014`", async () => {
     draw();
     await ready();
-    expect(card("Firm Foundation").querySelector("[id$='-facts']")).toHaveTextContent(/^C mtID \u2014$/);
+    expect(card("Firm Foundation").querySelector("[id$='-facts']")).toHaveTextContent(/^C mtID\u2014$/);
     expect(within(card("Firm Foundation")).getByTestId("add-songs-mtid")).toHaveTextContent(/^\u2014$/);
   });
 
@@ -159,7 +192,7 @@ describe("the song cards", () => {
     expect(within(holy).getByTestId("library-bar")).toBeInTheDocument();
     // A screen reader hears it with the key and the number.
     const box = screen.getByRole("checkbox", { name: "Holy Forever" });
-    expect(box).toHaveAccessibleDescription(/G \(was F\) mtID 43302/);
+    expect(box).toHaveAccessibleDescription(/G \(was F\) mtID-43302/);
     expect(box).toHaveAccessibleDescription(/Count Off \u00B7 Verse 1 \u00B7 Vamp on 1/);
   });
 

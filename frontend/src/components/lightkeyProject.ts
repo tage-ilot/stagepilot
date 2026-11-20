@@ -1,7 +1,7 @@
 import type { HelperUpdateStatus, LightkeyStatus } from "../types";
 
-/** Shown on the disabled Read fixtures button when the helper is older than 0.5.0. */
-export const UPDATE_HELPER_TIP = "Update the helper to use this.";
+/** Shown on the disabled Read fixtures button when the Lighting Link is older than 0.5.0. */
+export const UPDATE_HELPER_TIP = "Update the Lighting Link to use this.";
 
 /** The line under the connection pill: `Project: Show.lightkeyproj · 66 fixtures`, or plain words while nothing is known. */
 export function projectLine(status: LightkeyStatus): string {

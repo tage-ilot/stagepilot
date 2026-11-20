@@ -17,19 +17,19 @@ export type BackendSupervisorStatus = {
 };
 
 export const backendStartupTitle = (status: BackendSupervisorStatus | null): string => {
-  if (!status) return "Connecting to the local backend";
-  if (status.state === "ready" || status.state === "external") return "Backend connected";
-  if (status.state === "starting") return "Starting the local backend";
-  if (status.state === "stopped") return "Backend stopped";
+  if (!status) return "Connecting to StagePilot";
+  if (status.state === "ready" || status.state === "external") return "StagePilot connected";
+  if (status.state === "starting") return "StagePilot is starting";
+  if (status.state === "stopped") return "StagePilot stopped";
   switch (status.failure_kind) {
     case "port_occupied":
-      return "Backend port is occupied";
+      return "The engine's port is in use";
     case "server_exited":
-      return "The StagePilot server stopped";
+      return "The engine stopped";
     case "timeout":
-      return "Backend startup timed out";
+      return "StagePilot did not start in time";
     default:
-      return "Backend startup failed";
+      return "StagePilot could not start";
   }
 };
 
@@ -74,7 +74,7 @@ export const listenForDesktopBackendCrashLoop = async (
 };
 
 export const copyBackendLog = async (): Promise<string> => {
-  if (!isTauri()) throw new Error("Backend log copy is only available in the desktop app.");
+  if (!isTauri()) throw new Error("Copying the log is only available in the desktop app.");
   return invoke<string>("copy_backend_log");
 };
 

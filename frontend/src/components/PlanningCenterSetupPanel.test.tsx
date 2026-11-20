@@ -134,6 +134,7 @@ function panelElement({
   error = null as string | null,
   panelPlugins = {} as Record<string, unknown>,
   servicePlanChoice = undefined as import("../hooks/useServicePlanChoice").ServicePlanChoice | undefined,
+  serviceTypes = [{ id: "sunday", name: "Sunday Morning" }, { id: "wednesday", name: "Wednesday Service" }],
 } = {}) {
   return (
     <PlanningCenterSetupPanel
@@ -151,10 +152,7 @@ function panelElement({
       pendingAction={null}
       pendingOperation={pendingOperation}
       pendingPlanId={null}
-      serviceTypes={[
-        { id: "sunday", name: "Sunday Morning" },
-        { id: "wednesday", name: "Wednesday Service" },
-      ]}
+      serviceTypes={serviceTypes}
       settings={panelSettings}
       state={{ ...panelState, plugins: { ...panelState.plugins, ...panelPlugins } } as ApplicationState}
       status={status}
@@ -177,6 +175,28 @@ describe("PlanningCenterSetupPanel", () => {
     const load = screen.getByRole("button", { name: "Load service types" });
     expect(load).toHaveAttribute("data-variant", "tinted");
     expect(load).toHaveAttribute("data-tone", "services");
+  });
+
+  it("says the summary in plain words: Signed in, Plan date, Last loaded (D4 of the audit)", () => {
+    renderPanel({ panelState: { ...state, last_successful_plan_reload_at: "2026-06-15T18:28:00" } as ApplicationState });
+    const summary = document.querySelector("[data-section=summary]")!;
+    const text = summary.textContent ?? "";
+    expect(text).toContain("Signed in");
+    expect(text).toContain("Plan date");
+    expect(text).toContain("Last loaded");
+    expect(text).toContain("Mon 15 Jun, 6:28 PM");
+    expect(text).not.toMatch(/credential|target date|last successful sync|saved securely/i);
+    expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}|\d+\/\d+\/\d{4}/);
+  });
+
+  it("says why Load service types, Load today's service plan and the Service type select are off", () => {
+    renderPanel({ status: { connection_status: "disconnected", configured: false, app_id: "", service_type_id: "", planning_center_secret_saved: false, connection_method: "manual", oauth_connected: false, oauth_needs_reconnect: false, detail: null } as PlanningCenterStatusResponse, panelPlugins: { planning_center: false }, serviceTypes: [] });
+    expect(screen.getByLabelText("Service type")).toBeDisabled();
+    expect(screen.getByLabelText("Service type")).toHaveAccessibleDescription("Load service types first.");
+    expect(screen.getByRole("button", { name: "Load service types" })).toHaveAccessibleDescription("Sign in to Planning Center first.");
+    expect(screen.getByRole("button", { name: "Load service types" }).parentElement).toHaveAttribute("title", "Sign in to Planning Center first.");
+    expect(screen.getByRole("button", { name: "Load today’s service plan" })).toHaveAccessibleDescription("Sign in to Planning Center first.");
+    expect(screen.getByRole("button", { name: "Test connection" })).toHaveAccessibleDescription("Enter the Planning Center secret first.");
   });
 
   it.each([
@@ -486,8 +506,8 @@ describe("PlanningCenterSetupPanel", () => {
       },
     });
 
-    expect(screen.getByText("Sunday Services · 09:00")).toBeInTheDocument();
-    expect(screen.getByText("Student Ministry · 18:00")).toBeInTheDocument();
+    expect(screen.getByText("Sunday Services · 9:00 AM")).toBeInTheDocument();
+    expect(screen.getByText("Student Ministry · 6:00 PM")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Use service plan" })).toHaveLength(2);
   });
 
@@ -527,7 +547,7 @@ describe("PlanningCenterSetupPanel", () => {
     const user = userEvent.setup();
     renderPanel({ onSignInOAuth });
 
-    const button = screen.getByRole("button", { name: "Planning Center OAuth" });
+    const button = screen.getByRole("button", { name: "Planning Center" });
     await user.click(button);
 
     expect(onSignInOAuth).toHaveBeenCalledTimes(1);
@@ -551,7 +571,7 @@ describe("PlanningCenterSetupPanel", () => {
 
     expect(screen.getByText("Connected to Planning Center")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Planning Center OAuth" }),
+      screen.queryByRole("button", { name: "Planning Center" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
   });
@@ -749,7 +769,7 @@ describe("PlanningCenterSetupPanel SaveBar", () => {
     renderPanel();
     const reload = screen.getByRole("button", { name: "Load today’s service plan" });
     expect(bar().contains(reload)).toBe(false);
-    expect(bar().contains(screen.getByRole("button", { name: "Planning Center OAuth" }))).toBe(false);
+    expect(bar().contains(screen.getByRole("button", { name: "Planning Center" }))).toBe(false);
   });
 });
 
@@ -851,7 +871,7 @@ describe("the service date picker in the Services panel", () => {
     picker.getUpcomingServicePlans.mockResolvedValue(answer);
     renderPanel({ servicePlanChoice: choice, panelPlugins: { planning_center: {} }, panelState: loaded("p1", "Sunday Service", "2026-11-22") });
     const section = await screen.findByRole("region", { name: "Service date" });
-    expect(within(section).getByTestId("picker-selected")).toHaveTextContent("Sun, Nov 22, 2026");
+    expect(within(section).getByTestId("picker-selected")).toHaveTextContent("Sun 22 Nov");
     expect(within(section).getByText("Upcoming service")).toBeInTheDocument();
     await act(async () => { await Promise.resolve(); });
     await userEvent.click(within(section).getByRole("button", { name: "Next service" }));

@@ -22,7 +22,7 @@ describe("backend startup labels", () => {
         failure_kind: "server_exited",
         log_path: "/tmp/backend.log",
       }),
-    ).toBe("The StagePilot server stopped");
+    ).toBe("The engine stopped");
     expect(
       backendStartupTitle({
         state: "failed",
@@ -31,7 +31,7 @@ describe("backend startup labels", () => {
         managed: false,
         failure_kind: "port_occupied",
       }),
-    ).toBe("Backend port is occupied");
+    ).toBe("The engine's port is in use");
   });
 });
 

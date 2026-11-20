@@ -101,13 +101,13 @@ describe("the Live Link blocks are all a ConnectionSection", () => {
     const order = [screen.getByTestId("live-link-sub"), screen.getByTestId("cue-address-help"), screen.getByTestId("test-cue-box"), screen.getByTestId("live-link-details")];
     expect(order.every((node, index) => index === 0 || follows(order[index - 1] as Element, node))).toBe(true);
     const actions = screen.getByTestId("live-link-actions");
-    expect(within(actions).getAllByRole("button").map((button) => button.textContent?.replace(/[\u25B8\u25BE]/g, ""))).toEqual(["Release lights", "Read fixtures", "Send a test cue", "How to find a cue's address", "Lighting computer setup"]);
-    expect(screen.getByRole("button", { name: /Lighting computer setup/ })).toHaveAttribute("aria-expanded", "false");
+    expect(within(actions).getAllByRole("button").map((button) => button.textContent?.replace(/[\u25B8\u25BE]/g, ""))).toEqual(["Release lights", "Read fixtures", "Send a test cue", "How to find a cue's address", "Lighting Link setup"]);
+    expect(screen.getByRole("button", { name: /Lighting Link setup/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByTestId("test-cue-box")).not.toBeVisible();
     await userEvent.setup().click(screen.getByRole("button", { name: /Send a test cue/ }));
     await waitFor(() => expect(screen.getByTestId("test-cue-box")).toBeVisible());
     // Opening the test cue does not touch the Details.
-    expect(screen.getByRole("button", { name: /Lighting computer setup/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Lighting Link setup/ })).toHaveAttribute("aria-expanded", "false");
   });
 
   it("Lighting: the details open by themselves while the helper is not set up", async () => {
@@ -116,7 +116,7 @@ describe("the Live Link blocks are all a ConnectionSection", () => {
     } as LightkeyStatus);
     render(<LightkeyStrip connection={connection} lightingEnabled />);
     await screen.findByText("sACN: Not connected");
-    expect(screen.getByRole("button", { name: /Lighting computer setup/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Lighting Link setup/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: "Set up the Lighting computer" })).toBeVisible();
   });
 });

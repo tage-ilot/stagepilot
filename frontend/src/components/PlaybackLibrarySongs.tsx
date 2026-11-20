@@ -35,7 +35,7 @@ function SongChip({ song, now }: { song: LibraryPlanSong; now: number }) {
 
 /**
  * What the Playback library (the Library Link) knows about the plan's songs, in the Playback API panel: one chip per plan song (a 28 px
- * cover, key, BPM, countdown length and a thin arrangement bar) and the notices (a song missing from Playback, a different order, a rental
+ * cover, key, BPM, countdown length and a thin arrangement bar) and the notices (a song missing from Playback, a rental
  * that ends, another date). StagePilot only READS it: nothing here changes Playback, the plan, the saved scan, a timer or a light.
  *
  * It draws NOTHING unless the Library Link is ready (or outdated, which still works): a computer without the script looks exactly like
@@ -43,7 +43,9 @@ function SongChip({ song, now }: { song: LibraryPlanSong; now: number }) {
  */
 export function PlaybackLibrarySongs({ library, plan, timeZone }: { library: PlaybackLibraryController; plan: ServicePlan | null; timeZone: string }) {
   // The backend answers `ready` only while the Library Link is ready or outdated, so this one gate is the whole rule.
-  const notices = libraryNotices(library.plan, plan, timeZone);
+  // The order sentence ("X is song 1 in the plan but song 2 in Playback.") is not drawn under the songs: the ledger's Check order stamp says it, and
+  // it still counts in the header pill, which uses the same notices.
+  const notices = libraryNotices(library.plan, plan, timeZone).filter((notice) => notice.kind !== "order");
   // "(was X)" on a key lasts a day: while one shows, the cards look again every minute so it goes away by itself.
   const now = useKeyChangeClock((at) => anyKeyWas(library.plan, at));
   const songs = library.plan?.enabled && library.plan.state === "ready" ? library.plan.songs : [];

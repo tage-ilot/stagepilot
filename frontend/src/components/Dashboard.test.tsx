@@ -305,7 +305,7 @@ describe("Recent event stream 5-minute expiry", () => {
     renderDashboard(loadedServiceState, { state });
 
     expect(document.querySelectorAll(".event-row")).toHaveLength(1);
-    expect(screen.getByText("song_started")).toBeInTheDocument();
+    expect(screen.getByText("Song started")).toBeInTheDocument();
   });
 
   it("shows Playback's song events in the Event stream with the backend's, newest first, and not its reconnect snapshots", () => {
@@ -327,10 +327,14 @@ describe("Recent event stream 5-minute expiry", () => {
 
     const rows = [...document.querySelectorAll(".event-row")].map((row) => row.textContent ?? "");
     expect(rows).toHaveLength(3);
-    expect(rows[0]).toContain("playback.song.paused");
+    // Plain words; the raw name is the hover text, for support.
     expect(rows[0]).toContain("Paused (while scanning Playback songs)");
-    expect(rows[1]).toContain("playback.song.started");
-    expect(rows[2]).toContain("song_started");
+    expect(rows[0]).not.toContain("playback.song.paused");
+    expect(rows[1]).toContain("Song 1 started");
+    expect(rows[2]).toContain("Song started");
+    expect([...document.querySelectorAll(".event-row")].map((row) => row.getAttribute("title"))).toEqual([
+      expect.stringContaining("playback.song.paused"), expect.stringContaining("playback.song.started"), "song_started · propresenter",
+    ]);
     expect(rows.join(" ")).not.toContain("snapshot");
     expect(screen.getByText("Latest 3")).toBeInTheDocument();
   });
@@ -350,8 +354,10 @@ describe("Recent event stream 5-minute expiry", () => {
 
     const rows = [...document.querySelectorAll(".event-row")].map((row) => row.textContent);
     expect(rows).toHaveLength(3);
-    expect(rows.filter((row) => row?.includes("connection.changed"))).toHaveLength(2);
-    expect(screen.getByText("song_started")).toBeInTheDocument();
+    expect(rows.filter((row) => row?.includes("connection.changed"))).toHaveLength(0);
+    expect(rows.join("|")).toMatch(/Presentation (connected|not connected)/);
+    expect(rows.join("|")).toMatch(/Lighting (connected|not connected)/);
+    expect(screen.getByText("Song started")).toBeInTheDocument();
   });
 
   it("never lets connection entries push real events out of the Latest 10", () => {
@@ -369,8 +375,8 @@ describe("Recent event stream 5-minute expiry", () => {
     });
     renderDashboard(loadedServiceState, { state });
 
-    expect(screen.getAllByText("song_started")).toHaveLength(10);
-    expect(screen.getAllByText("connection.changed")).toHaveLength(2);
+    expect(screen.getAllByText("Song started")).toHaveLength(10);
+    expect(document.querySelectorAll('.event-row[title^="connection.changed"]')).toHaveLength(2);
   });
 
   it("re-evaluates live: an event disappears on its own once it crosses 5 minutes", async () => {
@@ -383,14 +389,14 @@ describe("Recent event stream 5-minute expiry", () => {
     });
     renderDashboard(loadedServiceState, { state });
 
-    expect(screen.getByText("song_started")).toBeInTheDocument();
+    expect(screen.getByText("Song started")).toBeInTheDocument();
 
     await act(async () => {
       vi.setSystemTime(new Date("2026-07-13T16:05:05Z"));
       await vi.advanceTimersByTimeAsync(6_000);
     });
 
-    expect(screen.queryByText("song_started")).toBeNull();
+    expect(screen.queryByText("Song started")).toBeNull();
   });
 
   it("leaves the pinned active-error mechanism unaffected by event age", async () => {
@@ -411,7 +417,7 @@ describe("Recent event stream 5-minute expiry", () => {
     expect(errorMessage).toBeInTheDocument();
     expect(errorMessage.closest("p")?.textContent).toMatch(/propresenter/i);
     expect(document.querySelectorAll(".border-danger\\/15")).toHaveLength(1);
-    expect(screen.getByText("connection.changed")).toBeInTheDocument();
+    expect(document.querySelector('.event-row[title^="connection.changed"]')).not.toBeNull();
     expect(document.querySelectorAll(".event-row")).toHaveLength(1);
 
     await act(async () => {
@@ -421,7 +427,7 @@ describe("Recent event stream 5-minute expiry", () => {
 
     // The pinned error and its matching raw event stay visible regardless of age.
     expect(screen.getByText(/Could not connect\./)).toBeInTheDocument();
-    expect(screen.getByText("connection.changed")).toBeInTheDocument();
+    expect(document.querySelector('.event-row[title^="connection.changed"]')).not.toBeNull();
     expect(document.querySelectorAll(".event-row")).toHaveLength(1);
     expect(document.querySelectorAll(".border-danger\\/15")).toHaveLength(1);
   });
@@ -445,8 +451,8 @@ describe("Recent event stream 5-minute expiry", () => {
     expect(screen.getByText(/Could not connect\./)).toBeInTheDocument();
     // A synthesized row keeps the pinned error's original failure inspectable
     // in the event stream even though its raw event was evicted.
-    expect(screen.getByText("propresenter error")).toBeInTheDocument();
-    expect(screen.getByText("song_started")).toBeInTheDocument();
+    expect(screen.getByText("Presentation error")).toBeInTheDocument();
+    expect(screen.getByText("Song started")).toBeInTheDocument();
   });
 });
 
@@ -597,10 +603,19 @@ describe("Dashboard Planning Center plan states", () => {
     }
   });
 
-  it("shows errors in the same header slot with error styling", () => {
-    renderDashboard(loadedServiceState, { error: "Backend unavailable." });
+  it("titles the collapsed fifth card Backend (Hunter's decision) while its open panel and its screen-reader name say StagePilot", () => {
+    renderDashboard(loadedServiceState);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Backend unavailable.");
+    const card = document.querySelector<HTMLElement>('[aria-controls="backend-configuration"]');
+    expect(card).not.toBeNull();
+    expect(card).toHaveTextContent("Backend");
+    expect(card).toHaveAccessibleName(/StagePilot/);
+  });
+
+  it("shows errors in the same header slot with error styling", () => {
+    renderDashboard(loadedServiceState, { error: "StagePilot is unavailable." });
+
+    expect(screen.getByRole("status")).toHaveTextContent("StagePilot is unavailable.");
     expect(screen.getByTestId("header-message")).toHaveAttribute("data-tone", "error");
     const chip = screen.getByTestId("header-chip");
     expect(chip).toHaveAttribute("data-state", "message");
@@ -735,8 +750,8 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Sunday Morning")).toBeInTheDocument();
     expect(screen.getByText("Sunday Evening")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Multiple plans match 2026-07-19" })).toBeInTheDocument();
-    expect(screen.getByText("Weekend Services \u00B7 09:00")).toBeInTheDocument();
-    expect(screen.getByText("Weekend Services \u00B7 18:00")).toBeInTheDocument();
+    expect(screen.getByText("Weekend Services \u00B7 9:00 AM")).toBeInTheDocument();
+    expect(screen.getByText("Weekend Services \u00B7 6:00 PM")).toBeInTheDocument();
 
     expect(screen.getByText(ambiguousServiceState.message!)).toBeInTheDocument();
 
@@ -976,12 +991,34 @@ describe("Dashboard Planning Center plan states", () => {
       state: unavailableState,
     });
 
-    expect(screen.getByText("Services disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Services not connected")).toBeInTheDocument();
     expect(screen.getByText("Service plan not loaded")).toBeInTheDocument();
     expect(screen.getByText("Song durations invalid")).toBeInTheDocument();
     // No saved settings here, so Playback reads as the MIDI method; the entry names whichever method is saved.
-    expect(screen.getByText("Playback MIDI disconnected")).toBeInTheDocument();
-    expect(screen.getByText("Presentation disconnected")).toBeInTheDocument();
+    expect(screen.getByText("Playback MIDI not connected")).toBeInTheDocument();
+    expect(screen.getByText("Presentation not connected")).toBeInTheDocument();
+  });
+
+  it("draws the header check list with a red × on every row that blocks", () => {
+    const unavailableState = applicationState(
+      { ...loadedServiceState, status: "not_found" },
+      { plan: null, planning_center_status: "disconnected", midi_status: "disconnected", propresenter_status: "disconnected", lights_status: "disconnected" },
+    );
+    renderDashboard({ ...loadedServiceState, status: "not_found" }, {
+      state: unavailableState,
+    });
+
+    const row = (label: string) => screen.getByText(label).closest("li") as HTMLElement;
+    const mark = (label: string) => row(label).querySelector<HTMLElement>("[data-row-tone]")!;
+    // The rows that make it Check system are red with a ×, not grey dashes.
+    for (const label of ["Services not connected", "Service plan not loaded", "Song durations invalid"]) {
+      expect(mark(label)).toHaveAttribute("data-row-tone", "blocking");
+      expect(mark(label)).toHaveTextContent("\u00D7");
+      expect(mark(label)).toHaveClass("text-danger-text");
+      expect(screen.getByText(label)).toHaveClass("text-danger-text");
+    }
+    // The pill says what it said before.
+    expect(screen.getByRole("button", { name: /Check system/ })).toBeInTheDocument();
   });
 
   it("shows when the service plan was last successfully loaded", () => {
@@ -991,7 +1028,7 @@ describe("Dashboard Planning Center plan states", () => {
       }),
     });
 
-    expect(screen.getByText("Current 18:28 06-15-2026")).toBeInTheDocument();
+    expect(screen.getByText("Last loaded Mon 15 Jun, 6:28 PM")).toBeInTheDocument();
     expect(screen.queryByText("Planning Center scheduled item length")).not.toBeInTheDocument();
   });
 
@@ -1016,7 +1053,7 @@ describe("Dashboard Planning Center plan states", () => {
     });
 
     expect(screen.getByText("Upcoming Sunday Service")).toBeInTheDocument();
-    expect(screen.getByText("Weekend Services \u00B7 2026-07-19 \u00B7 09:00")).toBeInTheDocument();
+    expect(screen.getByText("Weekend Services \u00B7 Sun 19 Jul \u00B7 9:00 AM")).toBeInTheDocument();
     expect(screen.getByText("Service plan loaded")).toBeInTheDocument();
     expect(screen.getByText("Service plan")).toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
@@ -1619,7 +1656,7 @@ describe("Dashboard widget layout", () => {
       expect(screen.queryByTestId("settings-notices-main")).not.toBeInTheDocument();
     });
 
-    it("unreadable settings: the pill is the error, the list row has the ! mark and the sentence", () => {
+    it("unreadable settings: the pill is the error, the list row has the red × mark and the sentence", () => {
       renderDashboard(loadedServiceState, readyBase({ ...productionSettings, settings_degraded: true, settings_degraded_reason: "not valid JSON" }));
       const pill = screen.getByTestId("header-chip");
       expect(screen.getByRole("button", { name: /^Error: Saved settings could not be read$/ })).toBe(pill);
@@ -1627,7 +1664,7 @@ describe("Dashboard widget layout", () => {
       expect(pill).toHaveAttribute("title", expect.stringContaining("It started with the default settings, so Planning Center, Lighting and the other saved settings are not loaded."));
       const row = rowFor("Saved settings could not be read");
       expect(row).toBeDefined();
-      expect(row).toHaveTextContent("!");
+      expect(row).toHaveTextContent("\u00D7");
       expect(row).not.toHaveTextContent("Optional");
       expect(row).toHaveAttribute("title", expect.stringContaining("default settings"));
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
@@ -1929,7 +1966,7 @@ describe("Dashboard connection configuration panels", () => {
         heading: "Presentation",
       },
       {
-        card: /^Lighting Disconnected/,
+        card: /^Lighting Not connected/,
         close: "Close Lighting configuration",
         heading: "Lighting",
       },
@@ -2031,6 +2068,15 @@ describe("Dashboard connection configuration panels", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("says why Restart current is off while nothing has played yet, and keeps the other controls plain (D5 audit)", () => {
+    renderDashboard(loadedServiceState, { live: true, state: applicationState(loadedServiceState, { current_song: null }) });
+    const restart = screen.getByRole("button", { name: "Restart current" });
+    expect(restart).toBeDisabled();
+    expect(restart).toHaveAccessibleDescription("Nothing has played yet.");
+    expect(restart.parentElement).toHaveAttribute("title", "Nothing has played yet.");
+    expect(screen.getByRole("button", { name: "Start next" })).not.toHaveAttribute("aria-describedby");
   });
 
   it("turns the live controls off with the reason when StagePilot is unreachable, and back on when it returns", () => {

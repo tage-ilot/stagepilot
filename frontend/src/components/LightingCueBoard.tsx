@@ -14,6 +14,7 @@ import {
   padIsDimmed,
 } from "./lightingTimelineMath";
 import { Button } from "./ui/Button";
+import { ReasonButton } from "./sections";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
@@ -158,7 +159,7 @@ export function LightingCueBoard({
             />
             Preview only
           </label>
-          <Button disabled={!canUndo || busy} onClick={onUndo} variant="tinted">Undo last capture</Button>
+          <ReasonButton disabled={busy} onClick={onUndo} reason={canUndo ? undefined : "Nothing to undo."} variant="tinted">Undo last capture</ReasonButton>
           <Button aria-pressed={editing} onClick={() => { setEditing((value) => !value); setDraft(null); }} variant="tinted">{editing ? "Done" : "Edit pads"}</Button>
         </div>
       </div>

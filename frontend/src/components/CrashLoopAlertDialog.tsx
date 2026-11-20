@@ -7,11 +7,11 @@ import { Button, Toast } from "./ui";
 const failureKindLabel = (kind: BackendCrashLoopDetected["failure_kind"]): string | null => {
   switch (kind) {
     case "port_occupied":
-      return "The backend port is occupied.";
+      return "The engine's port is in use.";
     case "server_exited":
-      return "The StagePilot server keeps stopping.";
+      return "The engine keeps stopping.";
     case "timeout":
-      return "The backend keeps timing out on startup.";
+      return "The engine keeps timing out on startup.";
     default:
       return null;
   }
@@ -57,9 +57,9 @@ export function CrashLoopAlertDialog({
     try {
       const content = await copyDiagnosticsLog();
       await navigator.clipboard.writeText(content);
-      setCopyMessage("Backend log copied.");
+      setCopyMessage("Log copied.");
     } catch (error) {
-      setCopyMessage(error instanceof Error ? error.message : "Unable to copy the backend log.");
+      setCopyMessage(error instanceof Error ? error.message : "Unable to copy the log.");
     }
   };
 
@@ -75,8 +75,8 @@ export function CrashLoopAlertDialog({
     <Toast
       ref={dialog}
       side="right"
-      kicker="Repeated backend crash"
-      title="StagePilot&rsquo;s backend keeps crashing"
+      kicker="Repeated crash"
+      title="StagePilot keeps crashing"
       description={detail ?? undefined}
       onDismiss={onDismiss}
       actions={

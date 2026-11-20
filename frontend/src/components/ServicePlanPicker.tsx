@@ -8,6 +8,7 @@ import { NotUpcomingPill } from "./NotUpcomingPill";
 import { ServicePlanCalendar } from "./ServicePlanCalendar";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
+import { ReasonButton } from "./sections";
 import { InlineAlert } from "./ui/InlineAlert";
 
 /**
@@ -81,15 +82,16 @@ export function ServicePlanPicker({
       <h3 className="sr-only" id={headingId}>Service date</h3>
       <div className="relative flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 max-w-full items-center gap-1 rounded-ds-lg border border-edge-medium bg-surface-900/60 p-1">
-          <Button
+          <ReasonButton
             aria-label="Previous service"
             className="text-xl leading-none"
-            disabled={busy || !previous}
+            disabled={busy}
             onClick={() => previous && choice.pick(previous.id)}
+            reason={previous ? undefined : "This is the first service."}
             size="touch"
           >
             ‹
-          </Button>
+          </ReasonButton>
           <p className="min-w-0 break-words px-2 text-ink [overflow-wrap:anywhere]" data-testid="picker-selected">
             {plan ? (
               <>
@@ -103,29 +105,31 @@ export function ServicePlanPicker({
             )}
             {isUpcoming && <Badge className="ml-2 align-middle" tone="info">Upcoming service</Badge>}
           </p>
-          <Button
+          <ReasonButton
             aria-label="Next service"
             className="text-xl leading-none"
-            disabled={busy || !next}
+            disabled={busy}
             onClick={() => next && choice.pick(next.id)}
+            reason={next ? undefined : "This is the last service."}
             size="touch"
           >
             ›
-          </Button>
+          </ReasonButton>
         </div>
         <div className="relative">
-          <Button
+          <ReasonButton
             aria-controls={calendarId}
             aria-expanded={open}
             aria-haspopup="dialog"
             data-service-calendar-button=""
-            disabled={busy || plans.length === 0}
+            disabled={busy}
             onClick={() => setOpen((was) => !was)}
+            reason={plans.length === 0 ? "There are no services to show." : undefined}
             ref={calendarButton}
             size="touch"
           >
             Calendar
-          </Button>
+          </ReasonButton>
           {open && (
             <div id={calendarId}>
               <ServicePlanCalendar

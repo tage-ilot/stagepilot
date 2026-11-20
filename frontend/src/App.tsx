@@ -126,14 +126,14 @@ function StagePilotApp() {
     const retryBackend = async () => {
       setStartupAttempt((current) => current + 1);
       setRetryingBackend(true);
-      setBackendActionMessage("Retrying the packaged backend…");
+      setBackendActionMessage("Retrying the engine…");
       try {
         await restartDesktopBackend();
         setRetryingBackend(false);
         setBackendActionMessage(null);
       } catch (error) {
         setRetryingBackend(false);
-        setBackendActionMessage(error instanceof Error ? error.message : "Backend retry failed.");
+        setBackendActionMessage(error instanceof Error ? error.message : "Retry failed.");
       }
     };
     const copyLogPath = async () => {
@@ -141,14 +141,14 @@ function StagePilotApp() {
       try {
         const content = await copyBackendLog();
         await navigator.clipboard.writeText(content);
-        setBackendActionMessage("Backend log copied.");
+        setBackendActionMessage("Log copied.");
       } catch (error) {
         try {
           await navigator.clipboard.writeText(backendSupervisor.log_path);
-          setBackendActionMessage("Backend log path copied.");
+          setBackendActionMessage("Log path copied.");
         } catch {
           setBackendActionMessage(
-            error instanceof Error ? error.message : `Backend log: ${backendSupervisor.log_path}`,
+            error instanceof Error ? error.message : `Log: ${backendSupervisor.log_path}`,
           );
         }
       }
@@ -202,7 +202,7 @@ function StagePilotApp() {
                     size="touch"
                     variant="destructive-soft"
                   >
-                    Retry Backend
+                    Try again
                   </Button>
                 )}
                 {backendSupervisor?.log_path && (
@@ -211,7 +211,7 @@ function StagePilotApp() {
                     size="touch"
                     variant="secondary"
                   >
-                    Copy Backend Log
+                    Copy log
                   </Button>
                 )}
               </div>

@@ -25,8 +25,8 @@ describe("CrashLoopAlertDialog", () => {
     // `crashLoop` prop regardless of any dashboard-visibility value.
     render(<CrashLoopAlertDialog crashLoop={crashLoop} onDismiss={vi.fn()} />);
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
-    expect(screen.getByText("StagePilot\u2019s backend keeps crashing")).toBeInTheDocument();
-    expect(screen.getByText("The StagePilot server keeps stopping.")).toBeInTheDocument();
+    expect(screen.getByText("StagePilot keeps crashing")).toBeInTheDocument();
+    expect(screen.getByText("The engine keeps stopping.")).toBeInTheDocument();
   });
 
   it("renders nothing when there is no crash-loop payload", () => {
@@ -45,7 +45,7 @@ describe("CrashLoopAlertDialog", () => {
     render(<CrashLoopAlertDialog crashLoop={crashLoop} onDismiss={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Copy log" }));
 
-    expect(await screen.findByText("Backend log copied.")).toBeInTheDocument();
+    expect(await screen.findByText("Log copied.")).toBeInTheDocument();
     expect(mocks.copyDiagnosticsLog).toHaveBeenCalledOnce();
     expect(writeText).toHaveBeenCalledWith("log contents here");
   });

@@ -1,11 +1,11 @@
 import type { Tone } from "./types";
 
-export type StatusWord = "Connected" | "Connecting" | "Disconnected" | "Error" | "Ready";
+export type StatusWord = "Connected" | "Connecting" | "Not connected" | "Error" | "Ready";
 
 export const statusTone: Record<StatusWord, Tone> = {
   Connected: "success",
   Connecting: "warning",
-  "Disconnected": "idle",
+  "Not connected": "idle",
   Error: "danger",
   // Output open, delivery not proven (UDP/OSC before the first cue): not green, not an alarm.
   Ready: "info",
@@ -17,8 +17,8 @@ export type ConnectionState = "connected" | "connecting" | "disconnected" | "err
 export const connectionWord: Record<ConnectionState, StatusWord> = {
   connected: "Connected",
   connecting: "Connecting",
-  disconnected: "Disconnected",
+  disconnected: "Not connected",
   error: "Error",
   ready: "Ready",
-  loading: "Disconnected",
+  loading: "Not connected",
 };

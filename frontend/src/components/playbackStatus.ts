@@ -19,14 +19,17 @@ export function validPlaybackHost(host: string): boolean {
  * The backend's sentences, in the buttons' words. Playback says "Choose Scan Network to find Playback" (that sentence is part of the
  * contract the backend is held to), but the button is now Search: the page says the button's name.
  */
-export const playbackWords = (text: string): string => text.replace("Choose Scan Network to", "Choose Search to");
+export const playbackWords = (text: string): string => text
+  .replace("Choose Scan Network to", "Choose Search to")
+  // One word for that state (DESIGN.md section 10): the backend's sentences say Disconnected, the page says Not connected.
+  .replace(/^Disconnected\./, "Not connected.")
+  .replace(/\b(Playback|MIDI) is disconnected\./, "$1 is not connected.");
 
 // Shared wording: connection health is not song-order/action readiness.
 export const playbackConnectionDetail = (status: PlaybackConnection) => playbackWords(status.reason);
 export const STALE_SETLIST_NOTICE = "Your Playback setlist changed. Scan the setlist again before updating Planning Center.";
 export const STALE_PLAN_NOTICE = "Your Services plan changed since the last scan. Scan the setlist again before updating Planning Center.";
 export const LEARN_SWITCH_LABEL = "Learn the order as songs play";
-export const LEARN_SWITCH_HELP = "A scan always replaces the learned order.";
 export const DOUBTFUL_ORDER_HINT = "Check the order: a song's length differs from the plan. Run a scan.";
 
 // Learning is on unless the saved setting says off. Older backends send no order_mode: they only ever have a scanned order.
@@ -77,7 +80,7 @@ export const playbackBannerTone = (status: PlaybackConnection & { scan?: { state
 export const playbackMidiNote = (status: PlaybackConnection) =>
   status.sources.midi.connected
     ? status.active_source === "playback_api" ? "MIDI is connected and standing by." : "MIDI is connected."
-    : status.sources.midi.reason;
+    : playbackWords(status.sources.midi.reason);
 
 const EVENT_TEXT: Record<string, string> = {
   "song.started": "started", "song.resumed": "resumed", "song.paused": "Paused", "song.stopped": "Stopped",
@@ -137,20 +140,26 @@ export function songScanButton({ libraryUsable, libraryNote, apiConnected, playi
         : null;
   return { kind, label: library ? SCAN_PLAYBACK_LIBRARY : SCAN_PLAYBACK_API, reason };
 }
-/** The help line when the button reads the Library Link (the order already comes from it / it does not yet). */
-export const LIBRARY_ORDER_HELP = "The song order comes from the Library Link. The button reads it again now; Playback is not touched.";
-export const LIBRARY_BUTTON_HELP = "The button reads the song order from the Library Link. Playback is not touched and can keep playing.";
 export const readFromLibraryText = (songs: number): string => `Read ${songs} ${songs === 1 ? "song" : "songs"} from the Library Link`;
 
-/** One line for the Song order header, so it still says something while the section is folded. */
+const orderIsSaved = (status: PlaybackStatusResponse) => Boolean(status.song_order.length) && !status.stale && !status.plan_changed;
+
+/**
+ * The neutral chip in the Song order header while StagePilot learns the order as songs play (`Learning order (0 of 4)`), or null. Learning
+ * works as designed, so it is a state, not a warning; a saved scan wins over it.
+ */
+export function learningOrderChip(status: PlaybackStatusResponse): string | null {
+  if (orderIsSaved(status) || playbackOrderMode(status) !== "learned") return null;
+  return `Learning order (${status.learned_songs?.length ?? 0} of ${status.plan_song_count})`;
+}
+
+/** One line for the Song order header: THE fact about the order, so the open section says nothing twice and a folded one still says something. */
 export function songOrderSummary(status: PlaybackStatusResponse, running: boolean): string {
   if (running) return "Scanning Playback songs…";
-  const saved = Boolean(status.song_order.length) && !status.stale && !status.plan_changed;
   const songs = `${status.song_order.length} ${status.song_order.length === 1 ? "song" : "songs"}`;
   // Backends that say where the order came from get the words for it; older ones keep the old summary.
-  if (saved && status.order_source === "library") return `From the Library Link (${songs})`;
-  if (saved && status.order_source === "scan") return `From a scan (${songs})`;
-  if (saved) return `Saved - ${songs}`;
-  if (playbackOrderMode(status) === "learned") return status.order_source === "learned" ? "Learning as songs play" : `Learning - ${status.learned_songs?.length ?? 0} of ${status.plan_song_count} placed`;
+  if (orderIsSaved(status) && status.order_source === "library") return `Order from the Library Link (${songs})`;
+  if (orderIsSaved(status) && status.order_source === "scan") return `Order from a scan (${songs})`;
+  if (orderIsSaved(status)) return `Order saved (${songs})`;
   return status.song_order.length > 0 ? "Needs a new scan" : "No order yet";
 }

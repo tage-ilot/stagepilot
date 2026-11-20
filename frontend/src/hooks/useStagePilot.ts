@@ -259,7 +259,7 @@ export function useStagePilot() {
         await loadSettings();
       } catch (cause) {
         if (active) {
-          setError(describeError(cause, "Backend unavailable."));
+          setError(describeError(cause, "StagePilot is unavailable."));
         }
       }
     };

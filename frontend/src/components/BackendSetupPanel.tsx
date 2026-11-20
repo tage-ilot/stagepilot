@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { timeWords } from "../lib/dateWords";
 
 import { apiOrigin, websocketUrl } from "../api";
 import { copyDiagnosticsLog, sendDiagnosticsBundle } from "../diagnostics";
@@ -232,7 +233,7 @@ export function BackendSetupPanel({
       setSaveFailed(Boolean(error));
       if (!error) {
         setDashboardPin("");
-        setAutoSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        setAutoSavedAt(timeWords(new Date()));
       }
     }
     wasPending.current = pending;
@@ -334,7 +335,7 @@ export function BackendSetupPanel({
       header={(
         <SetupPanelHeader
           closeLabel="Close StagePilot configuration"
-          kicker="Backend configuration"
+          kicker="StagePilot configuration"
           headingId="backend-setup-heading"
           onClose={onClose}
           status={connectionStatus}
@@ -351,7 +352,7 @@ export function BackendSetupPanel({
             { label: "Version", value: health ? health.version : "Loading" },
             { label: "State revision", value: state.revision, tabular: true },
             { label: "API endpoint", value: apiOrigin, mono: true },
-            { label: "WebSocket", value: live ? "Connected" : "Disconnected", tone: live ? "ok" : "danger", detail: websocketUrl },
+            { label: "WebSocket", value: live ? "Connected" : "Not connected", tone: live ? "ok" : "danger", detail: websocketUrl },
           ]}
           label="Status"
           variant="cards"
