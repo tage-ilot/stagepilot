@@ -17,7 +17,7 @@ describe("the Presenter Link states", () => {
   it("lists every state, as the task names them", () => {
     draw();
     const ids = Array.from(document.querySelectorAll('[data-group="presenter-link"] [data-sample]')).map((node) => node.getAttribute("data-sample")?.replace("presenter-link-", ""));
-    expect(ids).toEqual(["no-playlists", "options", "end-of-playlist", "no-sections", "two-headers", "names", "playback", "mixed", "no-songs", "playback-stopped", "statuses", "playing", "swap", "previewing", "progress", "result", "result-differs", "result-stopped", "result-names", "live", "library", "try-again", "this-computer", "not-ready"]);
+    expect(ids).toEqual(["no-playlists", "options", "end-of-playlist", "no-sections", "two-headers", "names", "playback", "mixed", "no-songs", "playback-stopped", "pick-one", "picked", "picked-by-name", "statuses", "playing", "swap", "previewing", "progress", "result", "result-differs", "result-stopped", "result-names", "live", "library", "try-again", "this-computer", "not-ready"]);
   });
 
   it("no playlists yet: nothing to choose, the button off with its reason", async () => {
@@ -96,6 +96,35 @@ describe("the Presenter Link states", () => {
     const phrases = within(sample("playback-stopped")).getAllByTestId("add-songs-phrase").map((node) => node.textContent);
     expect(phrases).toContain("Interlude (3rd use): 2nd group");
     expect(phrases).toContain("Missing: Bridge");
+  });
+
+  it("Pick one: the card has the files as radio buttons under the title and nothing was imported", async () => {
+    draw();
+    await waitFor(() => expect(within(sample("pick-one")).getByRole("radiogroup", { name: "Firm Foundation: use file" })).toBeInTheDocument(), WAIT);
+    const radios = within(sample("pick-one")).getAllByRole("radio");
+    expect(radios.map((radio) => radio.textContent)).toEqual(["Firm Foundation (Live)", "Firm Foundation"]);
+    expect(within(sample("pick-one")).getByTestId("add-songs-summary")).toHaveTextContent("1 pick one");
+    expect(within(sample("pick-one")).getByRole("checkbox", { name: "Firm Foundation" }).closest("li")).toContainElement(radios[0]!);
+    expect(within(sample("pick-one")).queryByRole("dialog")).toBeNull();
+  });
+
+  it("Pick one, picked: the card is New copy with its quiet phrase and Change, and the buttons are gone", async () => {
+    draw();
+    await waitFor(() => expect(within(sample("picked")).getByTestId("add-songs-using")).toHaveTextContent("Using \u201CFirm Foundation (Live)\u201D"), WAIT);
+    const li = within(sample("picked")).getByRole("checkbox", { name: "Firm Foundation" }).closest("li") as HTMLElement;
+    expect(within(li).getByTestId("add-songs-using-chip")).toHaveTextContent("New copy");
+    expect(within(li).getByRole("button", { name: "Firm Foundation: change the file" })).toHaveTextContent("Change");
+    expect(within(li).queryByRole("radiogroup")).toBeNull();
+    expect(window.localStorage.getItem("stagepilot.presenter-song-file.8412")).toBe("Songs / Firm Foundation (Live).pro");
+  });
+
+  it("Pick one, decided by the name rule: the same phrase and Change, and Change brings the buttons back with the file checked", async () => {
+    draw();
+    await waitFor(() => expect(within(sample("picked-by-name")).getByTestId("add-songs-using")).toHaveTextContent("Using \u201CFirm Foundation\u201D"), WAIT);
+    const li = within(sample("picked-by-name")).getByRole("checkbox", { name: "Firm Foundation" }).closest("li") as HTMLElement;
+    expect(within(li).getByTestId("add-songs-using-chip").getAttribute("title")).toContain("its name matches the Playback title");
+    within(li).getByRole("button", { name: "Firm Foundation: change the file" }).click();
+    await waitFor(() => expect(within(li).getAllByRole("radio").map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true"]), WAIT);
   });
 
   it("every status in one preview: the four of the old screenshot, then will import, can't map, no mtID, check, ready and new copy", async () => {

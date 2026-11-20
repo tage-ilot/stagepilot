@@ -1,5 +1,5 @@
 import type { AddSongsGuess, AddSongsPlan, AddSongsReport, AddSongsSong, AddSongsSongResult } from "../propresenterLink";
-import { guessLine, mappingLines, ordinal, OUTCOME, songSentence } from "./addSongsWording";
+import { guessLine, mappingLines, ordinal, OUTCOME, songSentence, usingPhrase } from "./addSongsWording";
 import type { Tone } from "./ui/types";
 
 /**
@@ -89,11 +89,12 @@ function copyPhrase(song: AddSongsSong): string {
 /** The sentences behind a status: the engine's own sentence for the song, how its sections matched, and every guess. */
 export function songDetail(song: AddSongsSong): string {
   const sentence = songSentence(song, null);
+  const used = song.chosen_by && song.chosen_file ? [song.notes.find((note) => note.startsWith("Used ")) ?? `Used ${song.chosen_file}.`] : [];
   const matched = mappingLines(song);
   // A guess is told once: the engine's mapping line may already say it.
   const guessed = song.guesses.map(guessLine).filter((line) => !matched.some((said) => said.includes(line.split(" (Playback")[0]!)));
   const lines = [...matched, ...guessed].map((line) => (/[.!?)]$/.test(line) ? line : `${line}.`));
-  return [sentence, ...lines].join(" ");
+  return [sentence, ...used, ...lines].join(" ");
 }
 
 /** One song of the preview: its chip, its one phrase, and (for Pick one) its files. */
@@ -108,11 +109,13 @@ export function songStatus(song: AddSongsSong, skipped = false): SongStatus {
   }
   if (song.already_in_playlist) return make("in_playlist");
   if (song.guesses.length > 0 || song.mapping.some((m) => m.how === "guessed")) return make("check", guessesPhrase(song.guesses));
+  // A song that used a file without being asked (the person's pick, or the name rule) says which, in place of its usual phrase.
+  const using = song.chosen_by && song.chosen_file ? usingPhrase(song.chosen_file) : null;
   switch (song.action) {
-    case "reuse": return make("ready", "Copy exists");
-    case "as_is": return make("ready", "Used as is");
+    case "reuse": return make("ready", using ?? "Copy exists");
+    case "as_is": return make("ready", using ?? "Used as is");
     case "import_then_copy": return make("will_import");
-    default: return make("new_copy", copyPhrase(song));
+    default: return make("new_copy", using ?? copyPhrase(song));
   }
 }
 

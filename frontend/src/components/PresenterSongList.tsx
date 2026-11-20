@@ -1,31 +1,37 @@
-import { Fragment, useId } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 
 import type { AddSongsController } from "../hooks/useAddSongs";
 import { useKeyChangeClock } from "../hooks/useKeyChangeClock";
+import type { AddSongsSong } from "../propresenterLink";
 import type { AddSongsRow } from "./addSongsSongs";
 import { songStatus, STATUS, type StatusWords } from "./addSongsStatus";
 import {
-  isStuck, NO_NUMBER, NO_NUMBER_PHRASE, NO_NUMBER_WHY, NO_PLAN_SONGS, NOT_IN_PROPRESENTER, NOT_IN_PROPRESENTER_PHRASE, NOT_IN_PROPRESENTER_WHY, PLANNING_CENTER,
+  CHANGE_FILE, isStuck, NO_NUMBER, NO_NUMBER_PHRASE, NO_NUMBER_WHY, NO_PLAN_SONGS, NOT_IN_PROPRESENTER, NOT_IN_PROPRESENTER_PHRASE, NOT_IN_PROPRESENTER_WHY, PLANNING_CENTER,
   selectedWords, SEVERAL_IN_PROPRESENTER, SEVERAL_IN_PROPRESENTER_WHY,
 } from "./addSongsWording";
 import { StatusChip } from "./StatusChips";
+import { SongFilePicker } from "./SongFilePicker";
+import { Button } from "./ui/Button";
 import { keyWas, librarySongCover } from "./playbackLibrary";
 import { FactChips } from "./sections";
 import { SONG_CARD_LOOK, SONG_GRID_CHECK, SongCardBody, SongCardShell } from "./SongCard";
 
 /** What the last preview (while it is still true) and the last import say about a song: the chip of a song it stopped for, and whether a section was guessed. */
-interface Marks { stuck: StatusWords | null; guessed: boolean }
+interface Marks { stuck: StatusWords | null; guessed: boolean; /** The song as the last preview (while it is still true) names it. */ song: AddSongsSong | null }
+
+/** The chip's own props: the word, the mark and the tone (a status also carries a `key`, which React must not get in a spread). */
+const words = ({ word, mark, tone }: StatusWords): StatusWords => ({ word, mark, tone });
 
 function marksOf(add: AddSongsController): Map<string, Marks> {
   const marks = new Map<string, Marks>();
   const mark = (ref: string, next: Partial<Marks>) => {
     const row = add.previewRows.get(ref);
     if (!row) return;
-    const was = marks.get(row.id) ?? { stuck: null, guessed: false };
-    marks.set(row.id, { stuck: next.stuck ?? was.stuck, guessed: was.guessed || Boolean(next.guessed) });
+    const was = marks.get(row.id) ?? { stuck: null, guessed: false, song: null };
+    marks.set(row.id, { stuck: next.stuck ?? was.stuck, guessed: was.guessed || Boolean(next.guessed), song: next.song ?? was.song });
   };
   if (add.plan && !add.stale) {
-    for (const song of add.plan.songs) mark(song.ref_id, { stuck: isStuck(song) ? songStatus(song) : null, guessed: song.mapping.some((m) => m.how === "guessed") || song.guesses.length > 0 });
+    for (const song of add.plan.songs) mark(song.ref_id, { song, stuck: isStuck(song) ? songStatus(song) : null, guessed: song.mapping.some((m) => m.how === "guessed") || song.guesses.length > 0 });
   }
   for (const song of add.report?.songs ?? []) mark(song.ref_id, { guessed: song.guesses.length > 0 });
   return marks;
@@ -52,6 +58,26 @@ function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row
   const order = row.sections.join(", ");
   const was = playback && row.song ? keyWas(row.song, now) : null;
   const stopped = block ? BLOCK_CHIP[block] : null;
+  // A song ProPresenter has in more than one file: the file buttons under the title while it is asked (or the person pressed Change), and the file in use otherwise.
+  const song = marks?.song ?? null;
+  const [changing, setChanging] = useState(false);
+  const changeButton = useRef<HTMLButtonElement>(null);
+  const files = song?.choices ?? [];
+  const reviewing = add.phase === "previewed";
+  const used = song && song.chosen_by && song.chosen_file && song.action !== "blocked" ? song : null;
+  const asking = song !== null && files.length > 1 && (song.action === "needs_choice" || (song.action === "blocked" && song.chosen_by === "pick"));
+  const showFiles = reviewing && files.length > 1 && (asking || (used !== null && changing));
+  const pressed = add.picking?.row === row.id ? add.picking.file : null;
+  // After a pick the buttons are gone: the focus goes to the card's Change button instead of being lost.
+  useEffect(() => { if (add.pickedRow === row.id) changeButton.current?.focus(); }, [add.pickedRow, row.id]);
+  const pick = (file: string) => {
+    if (file === song?.chosen_file) { setChanging(false); return; }
+    void add.pickFile(row.id, file).then(() => setChanging(false));
+  };
+  const under = !song || !reviewing ? null : showFiles
+    ? <SongFilePicker current={song.chosen_file} files={files} loadingFile={pressed} onPick={pick} title={row.title} />
+    : used && files.length > 1 ? <Button aria-label={`${row.title}: change the file`} data-testid="add-songs-change-file" onClick={() => setChanging(true)} ref={changeButton} size="touch" variant="secondary">{CHANGE_FILE}</Button> : null;
+  const using = used ? songStatus(used) : null;
   // The key and `mtID-23126`, one square chip each (`FactChips`, no dot between). The number is the MultiTracks Song Master ID (what ProPresenter shows as MTID), never Playback's own song number.
   const keyWords = row.keyName ? `${row.keyName}${was ? ` (was ${was})` : ""}` : "No key";
   const mtid = row.contentId !== null ? String(row.contentId) : "\u2014";
@@ -67,8 +93,9 @@ function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row
     <span className="contents" id={`${uid}-chips`}>
       {!playback && <SourceChip>{PLANNING_CENTER}</SourceChip>}
       {stopped && block && <><StatusChip mark="!" testId="add-songs-blocked" title={stopped.why} tone={stopped.tone} word={stopped.word} /><span className="text-xs text-ink-body" data-testid="add-songs-why" title={stopped.why}>{stopped.phrase}</span></>}
-      {marks?.stuck && <StatusChip {...marks.stuck} testId="add-songs-stuck" />}
-      {marks?.guessed && <StatusChip {...STATUS.check} testId="add-songs-guessed" />}
+      {marks?.stuck && <StatusChip {...words(marks.stuck)} testId="add-songs-stuck" />}
+      {using && using.key !== "check" && <><StatusChip {...words(using)} testId="add-songs-using-chip" title={using.detail} /><span className="text-xs text-ink-body" data-testid="add-songs-using" title={using.detail}>{using.phrase}</span></>}
+      {marks?.guessed && <StatusChip {...words(STATUS.check)} testId="add-songs-guessed" />}
     </span>
   );
   // The order Playback plays, always on the card (no button, no heading), UNDER the colored bar: the section names, wrapping onto as many lines as it needs.
@@ -94,6 +121,7 @@ function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row
       mode="check"
       onActivate={() => add.toggle(row.id)}
       selected={ticked && !block}
+      under={under}
     >
       {body}
     </SongCardShell>

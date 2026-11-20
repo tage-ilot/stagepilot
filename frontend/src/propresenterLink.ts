@@ -9,6 +9,7 @@ import type { AddSongsStepState } from "../../generated/ts/AddSongsStepState";
 import type { TitleFound } from "../../generated/ts/TitleFound";
 
 export type { AddSongsAction } from "../../generated/ts/AddSongsAction";
+export type { AddSongsChosenBy } from "../../generated/ts/AddSongsChosenBy";
 export type { AddSongsEvent } from "../../generated/ts/AddSongsEvent";
 export type { AddSongsGuess } from "../../generated/ts/AddSongsGuess";
 export type { AddSongsMapping } from "../../generated/ts/AddSongsMapping";
@@ -46,7 +47,10 @@ export type AddSongsPreviewRequest = (
   | { setlist_song_ids: number[] }
   | { content_ids: number[] }
   | { titles: string[] }
-) & { playlist_id: string } & AddSongsPlace;
+) & { playlist_id: string } & AddSongsPlace & {
+  /** The file the person picked for a song that has more than one, by the song's `ref_id`, written as the song's `choices` lists it (`Songs / Firm Foundation.pro`). */
+  sources?: Record<string, string>;
+};
 
 /** `POST add-songs/titles`: which of the titles ProPresenter's Songs library has, in the order asked. */
 export interface AddSongsTitlesAnswer {

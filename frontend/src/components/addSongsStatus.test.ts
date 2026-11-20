@@ -149,3 +149,22 @@ describe("the result in a few words", () => {
     expect(differenceLine("Something else happened.")).toBe("Something else happened");
   });
 });
+
+describe("a song that used a file without being asked", () => {
+  const FILE = "Songs / Firm Foundation (Live).pro";
+  const used = (over: Partial<AddSongsSong> = {}) => song({ action: "copy", file: "Firm Foundation (Live) (1)", chosen_by: "pick", chosen_file: FILE, choices: [FILE, "Songs / Firm Foundation.pro"], notes: ["Used \"Firm Foundation (Live)\": the file you picked."], ...over });
+
+  it("says which file in place of its usual phrase, and its hover text has the engine's line", () => {
+    const status = songStatus(used());
+    expect([status.key, status.phrase]).toEqual(["new_copy", "Using \u201CFirm Foundation (Live)\u201D"]);
+    expect(status.detail).toContain("Used \"Firm Foundation (Live)\": the file you picked.");
+    expect(songStatus(used({ action: "reuse", chosen_by: "title" })).phrase).toBe("Using \u201CFirm Foundation (Live)\u201D");
+    expect(songStatus(used({ action: "as_is" })).key).toBe("ready");
+  });
+
+  it("keeps the guess of a Check song and the words of a song that is stuck", () => {
+    expect(songStatus(used({ guesses: [guess()] })).key).toBe("check");
+    expect(songStatus(used({ action: "blocked", reason: "These sections have no group with that name in the song: Chorus. Nothing is made for this song." })).key).toBe("cant_map");
+    expect(songStatus(song({ action: "copy", file: "Holy Forever (2)" })).phrase).toBe("Playback order, \u201C(2)\u201D");
+  });
+});

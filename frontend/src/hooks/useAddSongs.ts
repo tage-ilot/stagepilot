@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { presenterLinkReady, type AddSongsRow } from "../components/addSongsSongs";
 import { resultHeading } from "../components/addSongsStatus";
-import { guessAnnouncement, IMPORTING, isStuck, liveText, LINK_NOT_READY_WORDS, PLAYING_WORDS, stuckReason } from "../components/addSongsWording";
+import { fileWords, guessAnnouncement, IMPORTING, isStuck, liveText, LINK_NOT_READY_WORDS, PLAYING_WORDS, stuckReason } from "../components/addSongsWording";
 import { describeError } from "../errorText";
 import type { AddSongsJob, AddSongsPlan, AddSongsPreviewRequest, ProPresenterPlaylist } from "../propresenterLink";
 import type { ProPresenterLinkController } from "./useProPresenterLink";
 import { usePresenterApi } from "./presenterApi";
+import { forgetFile, rememberedFile, rememberFile } from "./songFilePicks";
 import { useTitleLookup } from "./useTitleLookup";
 
 /**
@@ -106,6 +107,12 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const [job, setJob] = useState<AddSongsJob | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [lostContact, setLostContact] = useState(false);
+  // The file the person picked for a song that has more than one, by row: kept here while the section is open, and in this browser by the song's MultiTracks number.
+  const picks = useRef(new Map<string, string>());
+  // The pick being asked about (its button shows the loading sweep), the row whose card just changed, and what a screen reader hears for it.
+  const [picking, setPicking] = useState<{ row: string; file: string } | null>(null);
+  const [pickedRow, setPickedRow] = useState<string | null>(null);
+  const [pickNote, setPickNote] = useState<string | null>(null);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
@@ -163,22 +170,41 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
             : null;
 
   // ---- the one button -----------------------------------------------------------------------------------------------------
-  /** The preview of what is ticked. `null` when it could not be made (then `problem` says why). */
-  const makePreview = useCallback(async (): Promise<AddSongsPlan | null> => {
-    setPhase("previewing");
+  /** The file the person picked for a song: this session's pick, else the one remembered in this browser for its MultiTracks number. */
+  const pickedFileOf = useCallback((row: AddSongsRow): string | null => picks.current.get(row.id) ?? rememberedFile(row.contentId), []);
+
+  /**
+   * The preview of what is ticked. `null` when it could not be made (then `problem` says why). `quiet`: a preview asked for by a pick on a
+   * card; nothing else on the page changes while it is made (no `previewing` phase) and a failure leaves the last preview as it was.
+   */
+  const makePreview = useCallback(async (quiet = false): Promise<AddSongsPlan | null> => {
+    if (!quiet) { setPhase("previewing"); setPickNote(null); }
     setProblem(null);
     setGone(false);
     setJob(null);
     setJobId(null);
     const where = place === PLACE_END ? { place: "end" as const } : { after_header: place };
-    const request: AddSongsPreviewRequest = fromPlayback
-      ? { setlist_song_ids: picked.map((row) => Number(row.ref)), playlist_id: playlistId, ...where }
-      : { titles: picked.map((row) => row.title), playlist_id: playlistId, ...where };
     // What the preview calls a song: Playback's number, or `t1`, `t2`... in the order the titles were sent.
     const refs = new Map(picked.map((row, index) => [fromPlayback ? row.ref : `t${index + 1}`, row] as const));
+    // The files picked before (this session, or remembered for the song's number) go with every preview.
+    const sources: Record<string, string> = {};
+    for (const [ref, row] of refs) {
+      const file = pickedFileOf(row);
+      if (file) sources[ref] = file;
+    }
+    const withFiles = Object.keys(sources).length > 0 ? { sources } : {};
+    const request: AddSongsPreviewRequest = fromPlayback
+      ? { setlist_song_ids: picked.map((row) => Number(row.ref)), playlist_id: playlistId, ...where, ...withFiles }
+      : { titles: picked.map((row) => row.title), playlist_id: playlistId, ...where, ...withFiles };
     try {
       const made = await stagepilot.preview(request);
       if (!alive.current) return null;
+      // A pick that is no longer one of the song's files is dropped without a word: the card asks again.
+      for (const song of made.songs) {
+        const row = refs.get(song.ref_id);
+        const file = sources[song.ref_id];
+        if (row && file && song.choices.length > 0 && !song.choices.includes(file)) { picks.current.delete(row.id); forgetFile(row.contentId); }
+      }
       setPlan(made);
       setPreviewSignature(signature);
       setPreviewRows(refs);
@@ -187,12 +213,29 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
       return made;
     } catch (cause) {
       if (!alive.current) return null;
-      setPlan(null);
+      if (!quiet) { setPlan(null); setPhase("choose"); }
       setProblem(problemOf(cause, "StagePilot could not make the preview."));
-      setPhase("choose");
       return null;
     }
-  }, [fromPlayback, picked, place, playlistId, signature, stagepilot]);
+  }, [fromPlayback, picked, pickedFileOf, place, playlistId, signature, stagepilot]);
+
+  /** A file picked on a card: remembered, then the preview is asked for again with it (nothing is imported). The card turns into its real status. */
+  const pickFile = useCallback(async (rowId: string, file: string) => {
+    const row = rows.find((candidate) => candidate.id === rowId);
+    if (!row || picking || phase !== "previewed") return;
+    picks.current.set(rowId, file);
+    rememberFile(row.contentId, file);
+    setPicking({ row: rowId, file });
+    setPickedRow(null);
+    const made = await makePreview(true);
+    if (!alive.current) return;
+    setPicking(null);
+    if (!made) return;
+    setPickedRow(rowId);
+    const ref = fromPlayback ? row.ref : `t${picked.findIndex((candidate) => candidate.id === rowId) + 1}`;
+    const used = made.songs.find((song) => song.ref_id === ref)?.chosen_file;
+    setPickNote(used ? `${row.title}: using ${fileWords(used)}` : null);
+  }, [fromPlayback, makePreview, phase, picked, picking, rows]);
 
   /** Applies a preview that was just made; `skip` leaves out the songs it called stuck. */
   const start = useCallback(async (made: AddSongsPlan, skip: boolean) => {
@@ -269,6 +312,7 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
   const report = job?.report ?? null;
   const announcement = useMemo(() => {
     if (phase === "previewing") return IMPORTING;
+    if (phase === "previewed" && plan && !stale && pickNote) return `${pickNote}. ${stopped ?? "Preview ready"}`;
     if (phase === "previewed" && plan && !stale) return stopped ? `Preview ready. ${stopped}` : `Preview ready. ${plan.to_add === 1 ? "1 song" : `${plan.to_add} songs`} would be imported.`;
     if (phase === "applying") {
       const last = job?.events[job.events.length - 1];
@@ -278,12 +322,13 @@ export function useAddSongs({ rows, link, playing }: { rows: AddSongsRow[]; link
     }
     if (phase === "finished") return report ? [`${resultHeading(report).text}. ${report.message}`, guessAnnouncement(report)].filter(Boolean).join(" ") : job?.error ?? "The job stopped.";
     return "";
-  }, [phase, plan, stale, stopped, job, report]);
+  }, [phase, plan, stale, stopped, job, report, pickNote]);
 
   return {
     rows, choices, blockOf, selected, toggle, toggleAll, selectedCount: picked.length, fromPlayback, previewRows,
     playlists, playlistsError, reloadPlaylists: loadPlaylists, playlistId, choosePlaylist, place, choosePlace, playlist, placeTwice,
     phase, plan, stale, skipBlocked, problem, blockedBy, stopped, canSkip,
+    pickFile, picking, pickedRow,
     run, skipAndAdd, tryAgain, job, report, lostContact, announcement, linkReady,
   };
 }

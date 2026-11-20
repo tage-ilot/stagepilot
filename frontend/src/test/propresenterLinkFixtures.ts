@@ -82,7 +82,7 @@ export const playlists = (): ProPresenterPlaylist[] => [
 
 export const addSong = (over: Partial<AddSongsSong> & Pick<AddSongsSong, "ref_id" | "title">): AddSongsSong => ({
   position: 1, content_id: 23_126, action: "copy", file: `${over.title} (1)`, source: `Songs / ${over.title}.pro`, import_as: null, reason: null,
-  choices: [], notes: [], mapping: [], guesses: [], sections: 9, key: "G", already_in_playlist: false, ...over,
+  choices: [], chosen_by: null, chosen_file: null, notes: [], mapping: [], guesses: [], sections: 9, key: "G", already_in_playlist: false, ...over,
 });
 
 export const addPlan = (songs: AddSongsSong[], over: Partial<AddSongsPlan> = {}): AddSongsPlan => {

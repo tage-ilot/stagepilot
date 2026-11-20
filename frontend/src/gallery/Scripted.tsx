@@ -3,6 +3,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { REMOTE_ACCESS_OPEN_KEY } from "../components/BackendSetupPanel";
 import { LIGHTING_CUE_BOARD_OPEN_KEY, LIGHTING_TIMELINE_OPEN_KEY } from "../components/LightingSetupPanel";
 import { SONG_ORDER_OPEN_KEY } from "../components/playbackStatus";
+import { SONG_FILE_KEY_PREFIX } from "../hooks/songFilePicks";
 
 /**
  * One thing a person does on a page: type into a field by its label, pick an option, or press a button by its words. The gallery runs
@@ -87,7 +88,7 @@ export function Fresh({ flags = {}, children }: { flags?: Record<string, boolean
     seeded.current = true;
     try {
       for (const key of [REMOTE_ACCESS_OPEN_KEY, SONG_ORDER_OPEN_KEY, LIGHTING_TIMELINE_OPEN_KEY, LIGHTING_CUE_BOARD_OPEN_KEY]) window.localStorage.removeItem(key);
-      for (const key of Object.keys(window.localStorage)) if (key.startsWith("gallery.optional.")) window.localStorage.removeItem(key);
+      for (const key of Object.keys(window.localStorage)) if (key.startsWith("gallery.optional.") || key.startsWith(SONG_FILE_KEY_PREFIX)) window.localStorage.removeItem(key);
       for (const [key, value] of Object.entries(flags)) window.localStorage.setItem(key, String(value));
     } catch { /* storage unavailable: the defaults apply */ }
   }

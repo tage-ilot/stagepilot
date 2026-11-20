@@ -84,6 +84,21 @@ export const isStuck = (song: Pick<AddSongsSong, "action">): boolean => song.act
 
 const quoted = (name: string) => `\u201C${name}\u201D`;
 
+/** The small button that brings the file buttons back on a card that used a file without asking. */
+export const CHANGE_FILE = "Change";
+/** `Songs / Firm Foundation (Live).pro` is `Firm Foundation (Live)`: the file's name as a person reads it. */
+export const fileWords = (file: string): string => {
+  const at = file.indexOf(" / ");
+  return (at >= 0 ? file.slice(at + 3) : file).replace(/\.pro$/i, "");
+};
+/** The files of a song as the buttons say them: the file name alone, and `Songs / Name` only for a name that two libraries share. */
+export function fileLabels(files: readonly string[]): string[] {
+  const names = files.map(fileWords);
+  return files.map((file, index) => (names.filter((name) => name === names[index]).length > 1 ? file.replace(/\.pro$/i, "") : names[index]!));
+}
+/** The quiet phrase of a song that used a file without being asked (a pick or the name rule): `Using “Firm Foundation (Live)”`. */
+export const usingPhrase = (file: string): string => `Using ${quoted(fileWords(file))}`;
+
 /** What the preview says will happen to one song, as one plain sentence. */
 export function songSentence(song: AddSongsSong, library: Pick<LibrarySong, "sections"> | null | undefined): string {
   const file = song.file ?? song.title;
