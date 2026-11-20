@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { timeWords } from "../lib/dateWords";
 
 import type {
   ApplicationState,
@@ -644,7 +645,7 @@ export function LightingSetupPanel({
       setSaveFailed(Boolean(error));
     }
     if (previous === "save-cues" && pendingOperation !== "save-cues" && !error) {
-      setAutoSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      setAutoSavedAt(timeWords(new Date()));
     }
   }, [pendingOperation, error]);
   const saveState: SaveBarState = pendingOperation === "save"
@@ -745,7 +746,7 @@ export function LightingSetupPanel({
   const oscStatusLine = savedMethod === "osc" && lights?.connection_status === "error"
     ? lights.detail
     : savedMethod === "osc" && lights?.last_osc_cue
-      ? `Last sent: ${lights.last_osc_cue.address}${lights.last_cue_at ? ` at ${new Date(lights.last_cue_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : ""}. UDP does not confirm delivery.`
+      ? `Last sent: ${lights.last_osc_cue.address}${lights.last_cue_at ? ` at ${timeWords(lights.last_cue_at, { seconds: true })}` : ""}. UDP does not confirm delivery.`
       : savedMethod === "osc" && lights?.connection_status === "ready"
         ? null
         : savedMethod === "osc" ? null : "OSC is sent over UDP, so StagePilot cannot confirm a cue arrived. Use Send test cue to check.";

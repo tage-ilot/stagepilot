@@ -1,3 +1,4 @@
+import { dateWords } from "./dateWords";
 // Dates for the service date picker. A plan's date is a calendar date ("2026-11-22"), never an instant, so it is
 // carried as that string and only formatted here. No date library: Intl does the words, and the configured Planning
 // Center time zone decides what "today" is.
@@ -59,15 +60,17 @@ function format(value: IsoDate, options: Intl.DateTimeFormatOptions): string {
     .format(new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 12)));
 }
 
-/** `Sun, Nov 22, 2026` */
-export const formatLongDate = (value: IsoDate) =>
-  format(value, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+/** `Sun 22 Nov` (the app's one date style, `lib/dateWords.ts`). */
+export const formatLongDate = (value: IsoDate) => dateWords(value);
 
-/** `Sun, Nov 29` */
-export const formatShortDate = (value: IsoDate) => format(value, { weekday: "short", month: "short", day: "numeric" });
+/** `Sun 29 Nov`: the same style; there is no shorter one. */
+export const formatShortDate = (value: IsoDate) => dateWords(value);
 
-/** `Nov 29` */
-export const formatMonthDay = (value: IsoDate) => format(value, { month: "short", day: "numeric" });
+/** `29 Nov` */
+export const formatMonthDay = (value: IsoDate) => {
+  const words = dateWords(value);
+  return /^\w{3} \d+ \w{3}$/.test(words) ? words.slice(4) : words;
+};
 
 /** `Sunday Nov 29` (what a screen reader reads for a day). */
 export function formatSpokenDay(value: IsoDate): string {

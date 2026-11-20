@@ -735,6 +735,7 @@ Rules:
 | **Remote access / People** | remote users | the Internet section and who may sign in |
 | **Connected · Connecting · Not connected · Error** | Disconnected (lower case inside a sentence is fine: `Services not connected`) | the four status words (sentence case in text, uppercase pixel in badges and cards) |
 | **Current · live / Up next** | | the song actually started / the song Start next will play |
+- **One date and time style (decided 2026-11-18):** dates read `Thu 19 Nov`, times read `2:31 PM` (12-hour, no leading zero; `2:31:42 PM` only in the Event stream), service times `9:00 AM`. Everything goes through `lib/dateWords.ts` (`dateWords`, `timeWords`, `clockWords`, `whenWords`); nothing formats its own, and no ISO date (`2026-11-19`) or `11/19/2026` is shown to an operator. The Services summary reads `Account: Signed in`, `Plan date`, `Last loaded`; the sign-in button is `Planning Center`.
 - Sentence case everywhere except badges and kickers. Plain verb-and-object labels. Short: delete a sentence if the control already says it ("Required to open the dashboard from another device." was removed; so was "Sends cues by MIDI").
 - Copy states what **will happen**, never how the UI works. Do not add text that explains a toggle the toggle already shows.
 

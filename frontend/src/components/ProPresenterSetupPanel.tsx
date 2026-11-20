@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { timeWords } from "../lib/dateWords";
 import { rememberAddress } from "../hooks/useRecentAddresses";
 
 import type {
@@ -300,7 +301,7 @@ export function ProPresenterSetupPanel({
           items={[
             { label: "API", value: propresenter ? connectionWord[propresenter.connection_status] : "Unknown" },
             { label: "Configured timer", value: propresenter?.timer_found ? propresenter.timer_name : "Not found", tone: propresenter?.timer_found ? "ok" : "warn" },
-            { label: "Last checked", value: propresenter?.last_checked_at ? new Date(propresenter.last_checked_at).toLocaleTimeString() : "Not checked", tabular: true },
+            { label: "Last checked", value: propresenter?.last_checked_at ? timeWords(propresenter.last_checked_at) : "Not checked", tabular: true },
           ]}
         />
       )}

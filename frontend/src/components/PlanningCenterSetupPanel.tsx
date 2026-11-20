@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { clocksWords, dateWords, whenWords } from "../lib/dateWords";
 
 import { useDelayedHover } from "../hooks/useDelayedHover";
 import { openExternalUrl } from "../desktop";
@@ -124,8 +125,7 @@ const systemTimezone = () => {
   }
 };
 
-const formatTimestamp = (value: string | null) =>
-  value ? new Date(value).toLocaleString() : "Not yet";
+const formatTimestamp = (value: string | null) => whenWords(value, new Date(), "Not yet");
 
 export function PlanningCenterSetupPanel({
   state,
@@ -389,7 +389,7 @@ export function PlanningCenterSetupPanel({
                 <SectionNotice
                   actions={(
                     <Button disabled={busy || !onSignInOAuth} onClick={onSignInOAuth} variant="primary">
-                      {pendingOperation === "oauth-sign-in" ? "Signing in…" : "Planning Center OAuth"}
+                      {pendingOperation === "oauth-sign-in" ? "Signing in…" : "Planning Center"}
                     </Button>
                   )}
                   title="Sign in with Planning Center"
@@ -499,9 +499,9 @@ export function PlanningCenterSetupPanel({
         <StatusSummary
           items={[
             { label: "Connection", value: connectionWord[status?.connection_status ?? state.planning_center_status] },
-            { label: "Credential", value: status?.planning_center_secret_saved ? "Saved securely" : "Not saved" },
-            { label: "Target date", value: serviceLoad.target_date ?? "Not selected", tabular: true },
-            { label: "Last successful sync", value: formatTimestamp(state.last_successful_plan_reload_at), tabular: true },
+            { label: "Account", value: status?.planning_center_secret_saved || status?.oauth_connected ? "Signed in" : "Not signed in" },
+            { label: "Plan date", value: serviceLoad.target_date ? dateWords(serviceLoad.target_date) : "Not selected", tabular: true },
+            { label: "Last loaded", value: formatTimestamp(state.last_successful_plan_reload_at), tabular: true },
           ]}
         />
       )}
@@ -514,7 +514,7 @@ export function PlanningCenterSetupPanel({
               <div className="flex items-center justify-between gap-3 rounded-ds-lg bg-surface-900/60 px-3 py-2" key={candidate.id}>
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink">{candidate.title}</p>
-                  <p className="text-xs text-ink-muted">{candidate.service_type_name} · {candidate.service_times.join(", ")}</p>
+                  <p className="text-xs text-ink-muted">{candidate.service_type_name} · {clocksWords(candidate.service_times)}</p>
                 </div>
                 <Button
                   className="shrink-0"

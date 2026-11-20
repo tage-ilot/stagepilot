@@ -60,6 +60,7 @@ import {
 } from "./dashboard/dashboardReadiness";
 import { observePlanRun, type PlanRunMemory } from "./dashboard/planProgress";
 import { describeStream, isHiddenEvent, sourceName } from "../lib/eventWords";
+import { clocksWords, dateWords, timeWords, whenWords } from "../lib/dateWords";
 import { LightingSetupPanel, type LightingPanelActions } from "./LightingSetupPanel";
 import { MidiSetupPanel } from "./MidiSetupPanel";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
@@ -111,18 +112,11 @@ const formatDuration = (seconds: number | null | undefined) => {
     : `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 };
 
-const formatTime = (value: string | null | undefined) =>
-  value
-    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date(value))
-    : "No activity yet";
+const formatTime = (value: string | null | undefined) => timeWords(value, { seconds: true, fallback: "No activity yet" });
 
 const formatPlanCurrent = (value: string | null | undefined) => {
-  if (!value) return "Load time unavailable";
-  const loadedAt = new Date(value);
-  if (Number.isNaN(loadedAt.getTime())) return "Load time unavailable";
-  const time = `${String(loadedAt.getHours()).padStart(2, "0")}:${String(loadedAt.getMinutes()).padStart(2, "0")}`;
-  const date = `${String(loadedAt.getMonth() + 1).padStart(2, "0")}-${String(loadedAt.getDate()).padStart(2, "0")}-${loadedAt.getFullYear()}`;
-  return `Current ${time} ${date}`;
+  const when = whenWords(value);
+  return when ? `Last loaded ${when}` : "Load time unavailable";
 };
 
 const connectionIcon = (source: string, name: string, compact = false) => (
@@ -1022,7 +1016,7 @@ export function Dashboard({
               <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-ds-lg border border-warning/15 bg-surface-950/30 px-3 py-3">
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink">{candidate.title}</p>
-                  <p className="mt-0.5 text-xs text-ink-muted">{candidate.service_type_name} · {candidate.service_times.join(", ")}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">{candidate.service_type_name} · {clocksWords(candidate.service_times)}</p>
                 </div>
                 {canOperate && <button
                   aria-label={pendingPlanId === candidate.id ? `Loading ${candidate.title}` : `Use ${candidate.title}`}
@@ -1241,7 +1235,7 @@ export function Dashboard({
               <p className="text-type-kicker uppercase text-ink-muted">Service plan</p>
               <h2 className="font-pixel mt-1 break-words !text-[1.125rem] text-ink [overflow-wrap:anywhere]">{plan?.title ?? "No service loaded"}</h2>
               <p className="mt-1 break-words text-xs text-ink-muted [overflow-wrap:anywhere]">
-                {plan ? `${plan.service_type} · ${plan.date} · ${plan.service_times.join(", ")}` : "Waiting for a current or upcoming service plan."}
+                {plan ? `${plan.service_type} · ${dateWords(plan.date)} · ${clocksWords(plan.service_times)}` : "Waiting for a current or upcoming service plan."}
               </p>
               {plan && state.selection?.pinned && (
                 <NotUpcomingPill

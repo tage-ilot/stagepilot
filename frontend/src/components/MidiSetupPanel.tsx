@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { timeWords } from "../lib/dateWords";
 
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import type {
@@ -236,7 +237,7 @@ export function MidiSetupPanel({
                   key={`${item.timestamp}-${item.channel}-${item.note}-${index}`}
                 >
                   <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink-muted">
-                    {new Date(item.timestamp).toLocaleTimeString()}
+                    {timeWords(item.timestamp, { seconds: true })}
                   </td>
                   <td className="max-w-52 truncate px-3 py-2">
                     {item.input_name ?? "Unknown input"}

@@ -41,7 +41,7 @@ describe("useServicePlanChoice", () => {
     await act(async () => { result.current.pick("p-nov-29"); });
     expect(pin).toHaveBeenCalledWith("p-nov-29");
     expect(apply).toHaveBeenCalledWith(expect.objectContaining({ selection: expect.objectContaining({ pinned: true }) }));
-    expect(result.current.announcement).toBe("Loaded Advent Sunday, Nov 29");
+    expect(result.current.announcement).toBe("Loaded Advent Sunday, 29 Nov");
     expect(result.current.pending).toBe(false);
     expect(result.current.error).toBeNull();
   });
@@ -51,7 +51,7 @@ describe("useServicePlanChoice", () => {
     const { result } = renderHook(() => useServicePlanChoice(true, vi.fn()));
     await act(async () => { result.current.back(); });
     expect(unpin).toHaveBeenCalledTimes(1);
-    expect(result.current.announcement).toBe("Loaded Sunday Service, Nov 22");
+    expect(result.current.announcement).toBe("Loaded Sunday Service, 22 Nov");
   });
 
   it("is pending while it loads and never has two requests going", async () => {
@@ -93,7 +93,7 @@ describe("useServicePlanChoice", () => {
     await act(async () => { first.finish(answer(1, true)); });
     expect(pin.mock.calls.map((c) => c[0])).toEqual(["p-nov-29", "p-dec-13"]);
     expect(apply).toHaveBeenLastCalledWith(expect.objectContaining({ plan: expect.objectContaining({ id: "p-dec-13" }) }));
-    expect(result.current.announcement).toBe("Loaded Family Sunday, Dec 13");
+    expect(result.current.announcement).toBe("Loaded Family Sunday, 13 Dec");
     expect(result.current.pending).toBe(false);
   });
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { timeWords } from "../lib/dateWords";
 
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
@@ -29,7 +30,7 @@ export interface PlaybackSave {
   discard: () => void;
 }
 
-const timeText = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const timeText = () => timeWords(new Date());
 
 // One Save configuration for the whole Playback panel. Order: method, song arrangement, MIDI settings.
 // The first failure stops the save; steps that already succeeded are not repeated on retry.

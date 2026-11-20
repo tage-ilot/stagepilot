@@ -750,8 +750,8 @@ describe("Dashboard Planning Center plan states", () => {
     expect(screen.getByText("Sunday Morning")).toBeInTheDocument();
     expect(screen.getByText("Sunday Evening")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Multiple plans match 2026-07-19" })).toBeInTheDocument();
-    expect(screen.getByText("Weekend Services \u00B7 09:00")).toBeInTheDocument();
-    expect(screen.getByText("Weekend Services \u00B7 18:00")).toBeInTheDocument();
+    expect(screen.getByText("Weekend Services \u00B7 9:00 AM")).toBeInTheDocument();
+    expect(screen.getByText("Weekend Services \u00B7 6:00 PM")).toBeInTheDocument();
 
     expect(screen.getByText(ambiguousServiceState.message!)).toBeInTheDocument();
 
@@ -1028,7 +1028,7 @@ describe("Dashboard Planning Center plan states", () => {
       }),
     });
 
-    expect(screen.getByText("Current 18:28 06-15-2026")).toBeInTheDocument();
+    expect(screen.getByText("Last loaded Mon 15 Jun, 6:28 PM")).toBeInTheDocument();
     expect(screen.queryByText("Planning Center scheduled item length")).not.toBeInTheDocument();
   });
 
@@ -1053,7 +1053,7 @@ describe("Dashboard Planning Center plan states", () => {
     });
 
     expect(screen.getByText("Upcoming Sunday Service")).toBeInTheDocument();
-    expect(screen.getByText("Weekend Services \u00B7 2026-07-19 \u00B7 09:00")).toBeInTheDocument();
+    expect(screen.getByText("Weekend Services \u00B7 Sun 19 Jul \u00B7 9:00 AM")).toBeInTheDocument();
     expect(screen.getByText("Service plan loaded")).toBeInTheDocument();
     expect(screen.getByText("Service plan")).toBeInTheDocument();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);

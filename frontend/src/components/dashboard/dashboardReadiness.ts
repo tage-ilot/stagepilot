@@ -12,6 +12,7 @@ import type {
 import { connectionWord } from "../ui/statusWord";
 import { playbackConnectionDetail, playbackOrderMode, playbackOrderModeText, playbackOrderNotice } from "../playbackStatus";
 import { songClock } from "../../lib/songClock";
+import { timeWords } from "../../lib/dateWords";
 import { scanReminderCheck } from "./scanReminder";
 import type { PlanRunMemory } from "./planProgress";
 
@@ -182,11 +183,7 @@ export function buildConnectionCardViews({
                 state.planning_center_status,
                 state.planning_center_status === "connected"
                   ? state.last_successful_plan_reload_at
-                    ? `Last plan sync ${new Intl.DateTimeFormat(undefined, {
-                        hour: "numeric",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      }).format(new Date(state.last_successful_plan_reload_at))}`
+                    ? `Last plan sync ${timeWords(state.last_successful_plan_reload_at)}`
                     : "Services API connected"
                   : undefined,
               )

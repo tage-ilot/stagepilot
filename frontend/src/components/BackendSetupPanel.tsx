@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { timeWords } from "../lib/dateWords";
 
 import { apiOrigin, websocketUrl } from "../api";
 import { copyDiagnosticsLog, sendDiagnosticsBundle } from "../diagnostics";
@@ -232,7 +233,7 @@ export function BackendSetupPanel({
       setSaveFailed(Boolean(error));
       if (!error) {
         setDashboardPin("");
-        setAutoSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        setAutoSavedAt(timeWords(new Date()));
       }
     }
     wasPending.current = pending;
