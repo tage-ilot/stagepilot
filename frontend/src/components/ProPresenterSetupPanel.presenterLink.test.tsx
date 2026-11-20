@@ -56,7 +56,7 @@ describe("the Presenter Link section in the ProPresenter panel", () => {
     await screen.findByRole("option", { name: "Sunday Morning Service" });
     const row = screen.getByTestId("add-songs-row");
     expect(row).toHaveAttribute("data-source", "playback");
-    expect(row).toHaveTextContent("E mtID 5123");
+    expect(row).toHaveTextContent("E mtID-5123");
     expect(row).not.toHaveTextContent("30389715");
     // The arrangement's name is not on the card; the order Playback plays is.
     expect(row).not.toHaveTextContent("Radio");

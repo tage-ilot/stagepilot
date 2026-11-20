@@ -22,7 +22,7 @@ const KEY: Fact = { text: "Ab", name: "Key Ab" };
 const WAS: Fact = { text: "Ab (was G)", name: "Key Ab, was G" };
 const LENGTH: Fact = { text: "4:37", name: "length 4:37" };
 const BPM: Fact = { text: "65 BPM" };
-const MTID: Fact = { text: "mtID 23126" };
+const MTID: Fact = { text: "mtID-23126" };
 
 const chipsByThemselves = (
   <div className="space-y-2 border border-edge-medium bg-surface-panel p-3">
