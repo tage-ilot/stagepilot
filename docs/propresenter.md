@@ -181,6 +181,73 @@ ProPresenter's API reading the same folder as `tools/fake_propresenter_link.py` 
 was selected, like the real lazy loading; a song item reads back the arrangement its file has selected; a wrong name or id makes
 the whole write `404`).
 
+## The screens, and a one-page guide for the operator
+
+### The ProPresenter Live Link block (Configuration, Presentation)
+
+Under the timer and Look fields (which are not touched by it) sits a block built like the Playback Live Link block: a title, two
+pills (`ProPresenter: Connected`, `ProPresenter Link: Connected`) and one polite line that says both in words, a dot and words, never
+colour alone.
+
+| The line says | It means | What to do |
+|---|---|---|
+| `ProPresenter: Connected to ProPresenter at <host>` | the connection the timer and Looks use (the existing status) | nothing |
+| `ProPresenter Link: Ready, on this computer` | ProPresenter runs on the computer StagePilot runs on | nothing, there is nothing to set up |
+| `ProPresenter Link: Ready, version 0.1.0` | the helper on the other ProPresenter computer answers | nothing |
+| `Can add songs, cannot import missing songs (macOS Accessibility not allowed)` | the Link works, but cannot drive ProPresenter's own Search to load a missing song | the sentence under the lines says how: allow it in System Settings > Privacy & Security > Accessibility |
+| `Update available, version 0.0.9` | the helper works and is older than the one StagePilot carries | StagePilot updates it by itself when nothing is playing; if it says it cannot, press **Update the ProPresenter Link** and run the command |
+| `Needs the command again` | the helper does not know this StagePilot's key | press **Set up the ProPresenter computer** and run the command again |
+| `Not answering` | the other computer is off, asleep or not on the network | wake it; if it was set up again from another StagePilot, run the command here again |
+| `Not installed` | there is no Link (grey, never a warning) | nothing, unless you want Add to ProPresenter |
+
+When ProPresenter is on **this** computer the block has no setup button and says so. For **another** computer the button **Set up the
+ProPresenter computer** opens a box: **press it** to get one command (nothing is made until you press), paste it in Terminal on the
+ProPresenter computer, and wait: the box shows the command, **Copy**, how long it still works (30 minutes, this network only), **Cancel**,
+and closes by itself with `The ProPresenter Link is ready.` when the helper answers. The command never holds the key. A computer without
+the Link shows no warning anywhere, and the Link never changes the header's Ready / Check system verdict.
+
+### Add to ProPresenter (Configuration, Playback, under the songs Playback plays)
+
+The button is drawn **only when all three hold**: the ProPresenter Link is **Ready** (this computer, or the helper), the Playback Library
+Link answers with fresh data, and the loaded plan is paired with a Playback setlist. Otherwise nothing is drawn. It opens one window:
+
+1. **Songs**: the paired setlist songs, all ticked, each with Playback's **key** (a chip, `Key Ab`) and **arrangement name**. A song Playback
+   gave no number cannot be added and says so. Under the list: *ProPresenter does not show the key for these songs; it is written into the
+   copy and shown here.*
+2. **Playlist** and **Place** (`After "Worship"` for each header of that playlist, or `At the end`). The last choice is kept in this
+   browser only.
+3. **Preview** (a button; nothing is written): one line per song with a stamp (`Already there`, `New copy`, `Load first`, `Needs a choice`,
+   `Blocked`), what will happen in a sentence, how well Playback's sections matched the song's groups, and *Nothing in ProPresenter changes until you
+   press Add songs.* and *Adds 4 songs after Worship in Sunday Morning Service. Other items stay as they are.* On a wide screen the preview
+   is beside the choice; on a phone it is below, and the window's buttons stay at the bottom edge.
+4. **Add songs**: off, with its reason in words beside the buttons, until the preview is current (changing a song, the playlist or the place
+   makes it stale), nothing is blocked (or **Skip blocked songs** is ticked), nothing plays (a song is playing, or the countdown runs), and the
+   Link is ready. While it runs, each song and each step shows a word and a mark (`Done`, `Working`, `Failed`), the newest thing said is
+   announced politely, and the window cannot be closed. The end is a result: what was added, anything ProPresenter shows differently from the
+   plan, and the name of the playlist backup.
+
+### One page
+
+**Set up (once).** *Same computer:* nothing. *Another computer:* Configuration > Presentation > save the host and port > in **ProPresenter
+Live Link** press **Set up the ProPresenter computer**, paste the command in Terminal on that computer, wait for `Ready`. For songs missing
+from ProPresenter, allow ProPresenter Link (or StagePilot, when it is the same Mac) in System Settings > Privacy & Security > Accessibility.
+In ProPresenter, Settings > Network must have the API on.
+
+**Add the songs.** Playback panel > **Add to ProPresenter** > tick the songs > choose the playlist and the place > **Preview** > read it >
+**Add songs**. Do it before the service, not while a song plays.
+
+**"Open the Playback library in ProPresenter once, then press Try again."** ProPresenter loads a new song file only when it looks at its
+library. In ProPresenter, click the library **Playback** in the left list once, then press **Try again** (it makes a new preview, then press
+**Add songs**). Nothing was added to the playlist, and the copies already made are reused.
+
+**What the Link never does.** It never edits, renames or deletes a song or a playlist item; it never edits a file in `Songs`; it never
+deletes a playlist; it never touches more than the `Playback` library folder, ProPresenter's own import into `Songs`, and **one** named
+playlist (saved as a backup first, read back after); it never changes anything until you pressed Add songs after a preview; never while a
+song plays; it never shows or sends the helper's key; it never quits or restarts ProPresenter; and ProPresenter itself does not show the key
+Playback plays a song in.
+
+To look at all of this without ProPresenter, see `docs/preview-live-link.md` ("The ProPresenter Link").
+
 ## Timer sequence
 
 For `song.started` and `song.restarted`, StagePilot performs:

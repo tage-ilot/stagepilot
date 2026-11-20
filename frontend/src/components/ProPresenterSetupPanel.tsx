@@ -17,6 +17,8 @@ import { SaveBar, type SaveBarState } from "./ui/SaveBar";
 import { useSaveAttempt } from "../hooks/useSaveAttempt";
 import { Select } from "./ui/Select";
 import { connectionWord } from "./ui/statusWord";
+import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
+import { ProPresenterLinkBlock } from "./ProPresenterLinkBlock";
 
 export function ProPresenterSetupPanel({
   propresenter,
@@ -29,6 +31,7 @@ export function ProPresenterSetupPanel({
   onRefreshTimers,
   onClose,
   onDirtyChange,
+  link,
 }: {
   propresenter: ProPresenterStatusResponse | null;
   error: string | null;
@@ -40,6 +43,8 @@ export function ProPresenterSetupPanel({
   onRefreshTimers: () => void;
   onClose?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  /** The optional ProPresenter Link (the block under the timer fields). Left out, the panel is exactly the timer and Look setup. */
+  link?: ProPresenterLinkController;
 }) {
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("1025");
@@ -261,6 +266,8 @@ export function ProPresenterSetupPanel({
       {changeCount > 0 && <p className="mt-3 text-sm text-ink-muted" id="propresenter-test-saved-note">Test connection and Refresh use the saved settings. Save configuration first to try the new ones.</p>}
 
       <PanelAlert className="mt-4" error={error} message={message} messageTone="success" onRetry={!propresenter ? onRetryLoad : undefined} />
+
+      {link && <ProPresenterLinkBlock link={link} propresenter={propresenter} />}
 
       {blockedReason && <p className="mt-4 text-sm text-ink-body" id="propresenter-save-blocked">{blockedReason}</p>}
       <SaveBar className="mt-5" onDiscard={discard} onRetry={save} onSave={save} state={saveState} />

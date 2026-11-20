@@ -49,6 +49,15 @@ import type {
   OscArgument,
 } from "./types";
 
+import type {
+  AddSongsJob,
+  AddSongsPlan,
+  AddSongsPreviewRequest,
+  AddSongsStarted,
+  LinkStatus,
+  ProPresenterPlaylist,
+} from "./propresenterLink";
+
 const SERVER_PORT_KEY = "stagepilot.server-port";
 const configuredOrigin = import.meta.env.VITE_STAGEPILOT_API_URL as string | undefined;
 
@@ -88,7 +97,8 @@ export const apiOrigin = resolveApiOrigin(
 export const websocketUrl = `${apiOrigin.replace(/^http/, "ws")}/ws`;
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) { super(message); }
+  /** `code` is the server's short reason (`song_playing`, `plan_changed`...) when it sent one. Only the window's logic reads it; never shown. */
+  constructor(message: string, readonly status: number, readonly code?: string) { super(message); }
 }
 
 const accessEndpoints = new Set([
@@ -125,16 +135,18 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     let detail: string | null = null;
+    let code: string | undefined;
     try {
-      const payload = (await response.json()) as { detail?: unknown };
+      const payload = (await response.json()) as { detail?: unknown; code?: unknown };
       if (typeof payload.detail === "string") detail = payload.detail;
+      if (typeof payload.code === "string") code = payload.code;
     } catch {
       // Fall back to the status-only message when the server did not return JSON.
     }
     if ((response.status === 401 || response.status === 403) && !accessEndpoints.has(path)) {
       invalidateAccess(generation);
     }
-    throw new ApiError(detail ?? `StagePilot API returned ${response.status}.`, response.status);
+    throw new ApiError(detail ?? `StagePilot API returned ${response.status}.`, response.status, code);
   }
   return response.status === 204 ? undefined as T : (await response.json()) as T;
 }
@@ -476,3 +488,31 @@ export const startPlaybackHelperInstall = (address?: string) =>
 /** Ends the setup session (the command stops working at once). */
 export const endPlaybackHelperInstall = () =>
   requestJson<{ ended: boolean }>("/api/v1/playback-library/helper-install", { method: "DELETE" });
+
+// The ProPresenter Link (optional; nothing here is asked until a ProPresenter computer is saved). Writes only through apply.
+const linkAsk = (path: string, check: boolean) => `/api/v1/propresenter-link/${path}${check ? "?check=1" : ""}`;
+export const getProPresenterLinkStatus = (check = false) => requestJson<LinkStatus>(linkAsk("status", check));
+/** Opens (or extends) the one-time setup session for the ProPresenter computer (another computer only; this one needs none). */
+export const startProPresenterHelperInstall = (address?: string) =>
+  requestJson<PlaybackHelperInstall>("/api/v1/propresenter-link/helper-install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(address ? { address } : {}),
+  });
+/** Ends the setup session (the command stops working at once). */
+export const endProPresenterHelperInstall = () =>
+  requestJson<{ ended: boolean }>("/api/v1/propresenter-link/helper-install", { method: "DELETE" });
+export const getProPresenterPlaylists = () =>
+  requestJson<{ playlists: ProPresenterPlaylist[] }>("/api/v1/propresenter-link/playlists");
+/** What would be done. Writes nothing anywhere. */
+export const previewAddSongs = (request: AddSongsPreviewRequest) =>
+  requestJson<AddSongsPlan>("/api/v1/propresenter-link/add-songs/preview", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request),
+  });
+/** Does what the preview named (`skip`: songs the preview called stuck, left out by name). Answers at once with a job. */
+export const applyAddSongs = (planId: string, skip: string[]) =>
+  requestJson<AddSongsStarted>("/api/v1/propresenter-link/add-songs/apply", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan_id: planId, skip }),
+  });
+export const getAddSongsJob = (jobId: string) =>
+  requestJson<AddSongsJob>(`/api/v1/propresenter-link/add-songs/jobs/${encodeURIComponent(jobId)}`);

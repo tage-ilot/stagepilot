@@ -62,6 +62,7 @@ import { libraryNotices, libraryPillLine } from "./playbackLibrary";
 import { playbackStreamRows } from "./playbackStatus";
 import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
+import { useProPresenterLink } from "../hooks/useProPresenterLink";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
 import { genieDurationMs } from "../lib/genieDuration";
@@ -868,6 +869,8 @@ export function Dashboard({
   const reducedMotion = typeof window !== "undefined" && (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
   const revealMs = reducedMotion ? REDUCED_MS : genieDurationMs(EMERGE_MS);
   const { shown, phase, closeEnded } = usePanelPresence(canConfigure ? activeConnection : null, revealMs, null, { swap: true });
+  // The optional ProPresenter Link: asked only while ProPresenter is saved and a panel that shows it (Presentation, or the Playback songs) is open.
+  const propresenterLink = useProPresenterLink(canConfigure && Boolean(propresenter?.enabled), shown === "propresenter" || shown === "midi");
   const [panelDirty, setPanelDirty] = useState(false);
   // A one-time note about a pick that ended by itself ("Back to the upcoming service"); closing it hides that note.
   const [dismissedNotice, setDismissedNotice] = useState<string | null>(null);
@@ -1112,6 +1115,8 @@ export function Dashboard({
           <MidiSetupPanel
             playback={playback}
             library={library}
+            propresenterLink={propresenterLink}
+            timerRunning={state.timer.status === "running"}
             plan={state.plan}
             error={midiError}
             onRetryLoad={retryLoads}
@@ -1133,6 +1138,7 @@ export function Dashboard({
         )}
           {shown === "propresenter" && (
           <ProPresenterSetupPanel
+            link={propresenterLink}
             onDirtyChange={setPanelDirty}
             error={propresenterError}
             onRetryLoad={retryLoads}

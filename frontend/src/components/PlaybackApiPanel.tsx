@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
+import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ServicePlan } from "../types";
 import { PlaybackLibrarySongs } from "./PlaybackLibrarySongs";
 import { PlaybackLiveLink } from "./PlaybackLiveLink";
@@ -18,7 +19,7 @@ import { LIBRARY_BUTTON_HELP, LIBRARY_ORDER_HELP, SCAN_PLAYBACK_SONGS, SCAN_WITH
 
 // Connecting automatically is always on (owner, 2026-10-16): there is no switch for it. `draft` holds the song arrangement
 // (skipped songs) until Save configuration. The scan, the computer chooser and the Library Link are the first block, PlaybackLiveLink.
-export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZone = "UTC" }: { playback?: PlaybackController; draft?: PlaybackDraft; library?: PlaybackLibraryController; plan?: ServicePlan | null; timeZone?: string }) {
+export function PlaybackApiPanel({ playback, draft, library, link, plan = null, timeZone = "UTC", timerRunning = false }: { playback?: PlaybackController; draft?: PlaybackDraft; library?: PlaybackLibraryController; link?: ProPresenterLinkController; plan?: ServicePlan | null; timeZone?: string; timerRunning?: boolean }) {
   const status = playback?.status;
   const [confirm, setConfirm] = useState(false);
   const [orderOpen, setOrderOpen] = usePersistedFlag(SONG_ORDER_OPEN_KEY, true);
@@ -57,7 +58,7 @@ export function PlaybackApiPanel({ playback, draft, library, plan = null, timeZo
 
       <PlaybackLiveLink library={library} playback={playback} />
 
-      {library && <PlaybackLibrarySongs library={library} plan={plan} timeZone={timeZone} />}
+      {library && <PlaybackLibrarySongs library={library} link={link} plan={plan} playing={Boolean(status?.playing) || timerRunning} timeZone={timeZone} />}
 
       {status && (
         <section className="space-y-2 rounded-ds-xl bg-integration-playback-soft/5 p-4" aria-labelledby="song-order-heading">
