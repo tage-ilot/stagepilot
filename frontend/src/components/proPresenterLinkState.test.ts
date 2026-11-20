@@ -39,6 +39,7 @@ describe("the Presenter Link line: every status text", () => {
     ["can add songs, cannot import (this computer)", localStatus({ can_import: false, import_blocker: "Allow StagePilot in System Settings > Privacy & Security > Accessibility, then try again." }), "info", "Can add songs, cannot import missing songs (macOS Accessibility not allowed), on this computer"],
     ["not a Mac", localStatus({ can_import: false, import_blocker: "Importing a song needs a Mac; this computer is not one." }), "info", "Can add songs, cannot import missing songs (needs a Mac), on this computer"],
     ["this computer's folder is not there", localStatus({ state: "not_answering" }), "warning", "Not answering, on this computer"],
+    ["macOS is asking for permission", localStatus({ state: "waiting", can_import: false }), "info", "Waiting for macOS"],
   ])("%s", (_name, status, tone, text) => {
     expect(linkLine(status, true)).toEqual({ tone, text });
   });
@@ -51,7 +52,7 @@ describe("the Presenter Link line: every status text", () => {
   });
 
   it("never turns an optional Link into a danger", () => {
-    for (const state of ["ready", "not_installed", "outdated", "needs_command", "not_answering", "checking"] as const) {
+    for (const state of ["ready", "not_installed", "outdated", "needs_command", "not_answering", "checking", "waiting"] as const) {
       expect(["danger", "error"]).not.toContain(linkLine(helperStatus(state), true).tone);
     }
   });
@@ -65,6 +66,7 @@ describe("the Presenter Link line: every status text", () => {
     expect(linkPill(helperStatus("not_answering"), true)).toEqual({ word: "Not answering", tone: "warning" });
     expect(linkPill(helperStatus("not_installed"), true)).toEqual({ word: "Not installed", tone: "idle" });
     expect(linkPill(helperStatus("checking"), true).word).toBe("Checking");
+    expect(linkPill(localStatus({ state: "waiting", can_import: false }), true)).toEqual({ word: "Waiting for macOS", tone: "info" });
     expect(linkPill(null, true).word).toBe("Checking");
     expect(linkPill(null, false).word).toBe("Not installed");
     expect(linkPill(noComputerStatus(), true).word).toBe("Not installed");
@@ -87,6 +89,13 @@ describe("the import blocker, in plain words with the one-sentence fix", () => {
     expect(linkNote(helperStatus("ready"))).toBeNull();
     expect(linkNote(null)).toBeNull();
     expect(linkNote(noComputerStatus())).toBeNull();
+  });
+
+  it("says the backend's one sentence while macOS waits for the person to answer a prompt", () => {
+    const message = "macOS may be asking for permission on this computer. Answer the prompt, then press Connect again.";
+    const status = localStatus({ state: "waiting", can_import: false, libraries: [], message });
+    expect(importBlocked(status)).toBe(false);
+    expect(linkNote(status)).toBe(message);
   });
 
   it("says what the backend says when this computer's folder is not there, or the answer is a memory", () => {

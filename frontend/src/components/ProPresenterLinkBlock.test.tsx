@@ -37,6 +37,7 @@ describe("ProPresenterLinkBlock: the two lines", () => {
     ["Needs the command again", helperStatus("needs_command")],
     ["Not answering", helperStatus("not_answering")],
     ["Ready, version 0.1.0", helperStatus("ready")],
+    ["Waiting for macOS", localStatus({ state: "waiting", can_import: false, message: "macOS may be asking for permission on this computer. Answer the prompt, then press Connect again." })],
     ["Ready, on this computer", localStatus()],
     ["Can add songs, cannot import missing songs (macOS Accessibility not allowed), on this computer", localStatus({ can_import: false, import_blocker: "Allow StagePilot in System Settings > Privacy & Security > Accessibility, then try again." })],
     ["Can add songs, cannot import missing songs (macOS Accessibility not allowed)", helperStatus("ready", { can_import: false, import_blocker: "Allow the Presenter Link in System Settings > Privacy & Security > Accessibility, then try again." })],
@@ -50,6 +51,15 @@ describe("ProPresenterLinkBlock: the two lines", () => {
     expect(line()).toHaveAttribute("data-tone", "warning");
     expect(line().textContent).toMatch(/[A-Za-z]/);
     expect(screen.getByTestId("propresenter-link-pill")).toHaveAttribute("data-tone", "warning");
+  });
+
+  it("while macOS asks for permission the pill says Waiting for macOS and the Details open with the one sentence", () => {
+    const message = "macOS may be asking for permission on this computer. Answer the prompt, then press Connect again.";
+    block(localStatus({ state: "waiting", can_import: false, libraries: [], message }));
+    expect(screen.getByTestId("propresenter-link-pill")).toHaveTextContent("Presenter Link: Waiting for macOS");
+    expect(screen.getByTestId("propresenter-link-pill")).toHaveAttribute("data-tone", "info");
+    expect(screen.getByTestId("propresenter-link-note")).toHaveTextContent(message);
+    expect(screen.queryByTestId("propresenter-install")).toBeNull();
   });
 
   it("the lines are one polite live region", () => {

@@ -148,19 +148,21 @@ impl Screen for MacScreen {
                 return (ok, why);
             }
         }
-        let line = self
+        let asked = self
             .run(
                 "check_access.applescript",
                 CHECK_ACCESS,
                 &[],
                 Duration::from_secs(10),
             )
-            .await
-            .unwrap_or_else(|_| "ERR|check|".to_string());
-        let ok = line.starts_with("OK");
+            .await;
+        let ok = asked.as_ref().is_ok_and(|line| line.starts_with("OK"));
         let why = (!ok).then(|| NO_ACCESS.to_string());
-        *self.access.lock().unwrap_or_else(|p| p.into_inner()) =
-            Some((Instant::now(), ok, why.clone()));
+        // A check that got no answer (macOS may be asking the person) is not remembered as "not allowed": it is asked again.
+        if !matches!(asked, Err(LinkError::Timeout(_))) {
+            *self.access.lock().unwrap_or_else(|p| p.into_inner()) =
+                Some((Instant::now(), ok, why.clone()));
+        }
         (ok, why)
     }
 

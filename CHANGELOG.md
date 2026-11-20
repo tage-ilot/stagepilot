@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Presenter Link: no more endless "Checking…" while macOS asks for permission.** When ProPresenter is on the same computer, the first look at its folder (and later the System Events check) can make macOS ask *"StagePilot would like to access files in your Documents folder"*, and the panel waited for the answer for minutes. StagePilot now waits at most 8 seconds, then says **Presenter Link: Waiting for macOS** and *macOS may be asking for permission on this computer. Answer the prompt, then press Connect again.* The next look tries again by itself. Nothing changes for another computer's helper.
+
 ## [2.44.0-rc.3] - 2026-11-19
 
 ### Added

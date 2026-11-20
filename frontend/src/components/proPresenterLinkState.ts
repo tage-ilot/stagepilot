@@ -46,6 +46,7 @@ const LINK_TONE: Record<LinkState, Tone> = {
   outdated: "info",
   needs_command: "warning",
   not_answering: "warning",
+  waiting: "info",
   not_installed: "idle",
   checking: "idle",
 };
@@ -78,6 +79,7 @@ export function linkLine(status: LinkStatus | null, hasComputer: boolean): LiveL
     case "needs_command": return { tone: LINK_TONE.needs_command, text: "Needs the command again" };
     case "not_answering": return { tone: LINK_TONE.not_answering, text: `Not answering${where}` };
     case "checking": return { tone: LINK_TONE.checking, text: "Checking…" };
+    case "waiting": return { tone: LINK_TONE.waiting, text: "Waiting for macOS" };
     default: return { tone: LINK_TONE.not_installed, text: `Not installed${where}` };
   }
 }
@@ -93,13 +95,14 @@ export function linkPill(status: LinkStatus | null, hasComputer: boolean): PillP
     case "needs_command": return { word: "Needs setup", tone: "warning" };
     case "not_answering": return { word: "Not answering", tone: "warning" };
     case "checking": return { word: "Checking", tone: "idle" };
+    case "waiting": return { word: "Waiting for macOS", tone: "info" };
     default: return { word: "Not installed", tone: "idle" };
   }
 }
 
 /**
  * A sentence under the lines when there is something to do or know: the import blocker with its one-sentence fix, a computer that
- * answers from memory, the reason this computer's own ProPresenter folder is not usable.
+ * answers from memory, the reason this computer's own ProPresenter folder is not usable, and the macOS prompt that is waiting for an answer.
  */
 export function linkNote(status: LinkStatus | null): string | null {
   if (!status || status.mode === null) return null;
@@ -107,7 +110,7 @@ export function linkNote(status: LinkStatus | null): string | null {
     const fix = status.import_blocker ?? "";
     return `StagePilot can add songs ProPresenter already has, but cannot load a missing song from ProPresenter's search. ${fix}`.trim();
   }
-  if (status.stale || (status.mode === "local" && status.state === "not_answering")) return status.message;
+  if (status.stale || status.state === "waiting" || (status.mode === "local" && status.state === "not_answering")) return status.message;
   return null;
 }
 

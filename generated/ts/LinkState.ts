@@ -3,4 +3,4 @@
 /**
  * The ProPresenter Link's state. The helper states are those of the Playback Library Link.
  */
-export type LinkState = "ready" | "not_installed" | "outdated" | "needs_command" | "not_answering" | "checking";
+export type LinkState = "ready" | "not_installed" | "outdated" | "needs_command" | "not_answering" | "checking" | "waiting";
