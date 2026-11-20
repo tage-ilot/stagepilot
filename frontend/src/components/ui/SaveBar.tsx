@@ -94,7 +94,11 @@ export function SaveBar({
       className={cx(
         "flex flex-col gap-3 rounded-ds-lg border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] min-[481px]:flex-row min-[481px]:items-center min-[481px]:justify-between",
         // Inside a connection's panel the bar is a deep tint of its colour; warning and error keep their own outline.
-        accent && (kind === "clean" || kind === "auto" || kind === "saving") ? accentClasses[accent].bar : cx(edges[kind], "bg-surface-900"),
+        accent && (kind === "clean" || kind === "auto" || kind === "saving")
+          // Sticky on a phone, the cards scroll under the bar, so below `lg` it sits on the opaque panel colour (the tint alone let their text
+          // run through the status and the button); from `lg` up it is not sticky and keeps the tint.
+          ? cx(accentClasses[accent].bar, stickyOnPhone && "max-lg:bg-surface-panel max-lg:border-t-2")
+          : cx(edges[kind], "bg-surface-900"),
         stickyOnPhone && "sticky bottom-0 z-10 lg:static",
         className,
       )}
