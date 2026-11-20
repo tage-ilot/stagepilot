@@ -88,7 +88,7 @@ function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row
       disabled={Boolean(block) || busy}
       item={item}
       label={row.title}
-      look={block ? SONG_CARD_LOOK.empty : SONG_CARD_LOOK.plain}
+      look={block ? SONG_CARD_LOOK.empty : ticked ? SONG_CARD_LOOK.picked : SONG_CARD_LOOK.unpicked}
       mode="check"
       onActivate={() => add.toggle(row.id)}
       selected={ticked && !block}

@@ -62,17 +62,33 @@ describe("the song cards", () => {
     expect(screen.getByTestId("add-songs-count")).toHaveTextContent("4 of 4 selected");
   });
 
-  it("shows the selection by the outline AND a visible check mark, never colour alone", async () => {
+  it("shows the selection by the card's look, not by a mark in the corner and not by colour alone: solid border, tinted fill and outline against a dashed, dimmed card", async () => {
     draw();
     const user = await ready();
-    const mark = () => card("Battle Belongs").querySelector("[data-part=check]") as HTMLElement;
-    expect(mark()).toHaveTextContent("\u2713");
-    expect(mark()).not.toHaveClass("text-transparent");
+    const picked = card("Battle Belongs");
+    // No check mark is drawn (it used to shorten the colored bar).
+    expect(picked.querySelector("[data-part=check]")).toBeNull();
+    expect(picked).toHaveClass("border-integration-presentation-soft", "bg-integration-presentation-soft/20", "outline", "outline-2", "outline-ink");
+    expect(picked).not.toHaveClass("border-dashed");
     await user.click(screen.getByRole("checkbox", { name: "Battle Belongs" }));
     expect(screen.getByRole("checkbox", { name: "Battle Belongs" })).toHaveAttribute("aria-checked", "false");
-    expect(card("Battle Belongs")).not.toHaveClass("outline");
-    expect(mark()).toHaveClass("text-transparent", "border-ink-muted");
-    expect(mark()).toHaveAttribute("aria-hidden", "true");
+    const unpicked = card("Battle Belongs");
+    expect(unpicked).toHaveClass("border-dashed", "bg-surface-900/40");
+    expect(unpicked).not.toHaveClass("outline");
+    expect(unpicked).not.toHaveClass("bg-integration-presentation-soft/20");
+    expect(unpicked.querySelector("[data-part=check]")).toBeNull();
+  });
+
+  it("the colored bar runs the whole width of the card, as in Lighting: nothing is reserved at the right for a mark", async () => {
+    draw();
+    await ready();
+    const button = screen.getByRole("checkbox", { name: "Holy Forever" });
+    expect(button.className).not.toMatch(/\bpr-\d/);
+    expect(button.className).toMatch(/\bpx-2\.5\b/);
+    expect(within(button).getByTestId("library-bar").parentElement).toBe(button);
+    // Lighting's press-mode card has the same padding, so both bars end at the same edges.
+    const strip = render(<SongsStrip chips={[{ key: "a", title: "A", order: 0, looks: 1, handmade: 0, hasLoudness: false }]} liveKey="" noun="looks" onClear={vi.fn()} onSelect={vi.fn()} selectedKey="a" />);
+    expect(strip.container.querySelector("button[aria-pressed]")!.className).toMatch(/\bpx-2\.5\b/);
   });
 
   it("Space and Enter toggle a card; the count is a polite live region", async () => {
