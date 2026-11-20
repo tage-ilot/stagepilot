@@ -1,5 +1,6 @@
 import { playbackLibraryArtworkUrl } from "../api";
 import type { LengthSource, LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySong, ServicePlan } from "../types";
+import type { Fact } from "./sections/FactChips";
 import { serviceStartsMs, zonedWallTimeToMs } from "./dashboard/scanReminder";
 
 /**
@@ -67,9 +68,13 @@ export function anyKeyWas(library: LibraryPlan | null | undefined, now: number):
   return library?.state === "ready" && library.songs.some((song) => song.library !== null && keyWas(song.library, now) !== null);
 }
 
-/** "Ab (was C) · 4:57": only the key and the countdown length, the two facts the Playback config cards show. */
-export function songKeyLength(song: LibrarySong, now: number): string[] {
-  return songFaceFacts(song, now).filter((fact) => !/ BPM$/.test(fact));
+/** The key and the countdown length as chips (`Ab (was C)`, `4:57`), the two facts the Playback config cards show; each says its plain words to a screen reader. */
+export function songKeyLength(song: LibrarySong, now: number): Fact[] {
+  const was = keyWas(song, now);
+  const facts: Fact[] = [];
+  if (song.key) facts.push({ text: was ? `${song.key} (was ${was})` : song.key, name: was ? `Key ${song.key}, was ${was}` : `Key ${song.key}` });
+  if (song.countdown_length_s !== null) facts.push({ text: formatLength(song.countdown_length_s), name: `length ${formatLength(song.countdown_length_s)}` });
+  return facts;
 }
 
 /** The face of a song: its key (with "was X" only for a key changed in Playback in the last day), BPM and the countdown length m:ss; only what the helper gave. */
@@ -82,7 +87,7 @@ export function songFaceFacts(song: LibrarySong, now: number): string[] {
   return facts;
 }
 
-/** "Ab (was G) · 65 BPM · 4:57 · 7 sections · Default": only what the helper gave; nothing for a song with no beat grid length. */
+/** ["Ab (was G)", "65 BPM", "4:57", "7 sections", "Default"]: only what the helper gave; nothing for a song with no beat grid length. */
 export function songFacts(song: LibrarySong, now: number): string[] {
   const facts = songFaceFacts(song, now);
   if (song.section_count !== null) facts.push(sectionWord(song.section_count));
@@ -99,8 +104,8 @@ export function lengthDifference(song: LibraryPlanSong): { playback: string; pla
 }
 
 export interface ChipLibrary {
-  /** The chip's extra words. */
-  text: string;
+  /** The facts, one string each (key, BPM, length, sections, arrangement), for a card to draw as chips. */
+  facts: string[];
   /** All of it, for the hover and the screen reader. */
   title: string;
 }
@@ -121,7 +126,7 @@ export function chipLibrary(song: LibraryPlanSong | undefined, now: number): Chi
   if (why) title.push(why);
   const was = keyWas(song.library, now);
   if (was) title.push(`Key changed in Playback from ${was} to ${song.library.key} in the last day`);
-  return { text: facts.join(" · "), title: title.join(". ") };
+  return { facts, title: title.join(". ") };
 }
 
 /** The moment a rental must outlast: the last service start of the plan's day, else the end of that day, in the saved time zone. */

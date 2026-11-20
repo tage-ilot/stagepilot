@@ -91,7 +91,11 @@ describe("the matchup with the library", () => {
     expect(cover).toHaveAttribute("height", "28");
     expect(cover.getAttribute("src")).toContain("/api/v1/playback-library/songs/2000002/artwork");
     expect(first.querySelector("[data-testid=library-bar]")).toBeInTheDocument();
-    expect(first.querySelector(".arr-pb")).toHaveTextContent("Key Ab · 65 BPM");
+    expect(first.querySelector(".arr-pb")).toHaveTextContent("Ab 65 BPM");
+    // The key and the tempo are one square chip each (the bare key letter, as everywhere), with no dot between them.
+    const facts = within(first.querySelector(".arr-pb") as HTMLElement).getByRole("list", { name: "Key Ab, 65 BPM", hidden: true });
+    expect(within(facts).getAllByRole("listitem", { hidden: true }).map((chip) => chip.textContent)).toEqual(["Ab", "65 BPM"]);
+    expect(first.textContent).not.toMatch(/Key Ab|\u00B7/);
     expect(first.querySelector("[title]")).toBeTruthy();
     const stamps = rows().map((row) => row.querySelector("[data-stamp]")!.textContent);
     expect(stamps).toEqual(["!Check order", "!Check order", "!Check key", "?Check title", "+Only in Playback"]);

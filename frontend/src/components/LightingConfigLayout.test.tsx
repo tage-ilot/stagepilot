@@ -6,6 +6,9 @@ import * as api from "../api";
 import type { ApplicationState, LightkeyStatus, LightsStatusResponse, OscLightingCue, SettingsResponse, Song } from "../types";
 import { LightingSetupPanel, LIGHTING_CUE_BOARD_OPEN_KEY } from "./LightingSetupPanel";
 
+/** The song cards of a list: each card's facts are a list of their own inside it (`FactChips`), so they are left out. */
+const cardsIn = (list: HTMLElement) => within(list).getAllByRole("listitem").filter((item) => item.dataset.song !== undefined);
+
 const songs: Song[] = [
   { id: "i1", source_song_id: "song-1", title: "Holy Forever", duration_seconds: 300, order: 1, is_generic: false },
   { id: "i2", source_song_id: "song-2", title: "Goodness", duration_seconds: 240, order: 2, is_generic: false },
@@ -127,7 +130,7 @@ describe("songs strip in the panel", () => {
   it("one chip per plan song in plan order: captured coloured, others greyed, live dot on the playing song", async () => {
     mount({ state: stateWith(songs[1]) });
     const list = screen.getByRole("list", { name: "Songs in this service" });
-    const items = within(list).getAllByRole("listitem");
+    const items = cardsIn(list);
     expect(items.map((i) => i.getAttribute("data-song"))).toEqual(["song-1", "song-2", "song-3"]);
     expect(items.map((i) => i.getAttribute("data-state"))).toEqual(["captured", "empty", "captured"]);
     expect(items[0]).toHaveTextContent("Incomplete capture");

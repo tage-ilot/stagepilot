@@ -2,6 +2,7 @@ import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { LibraryPlanSong, ServicePlan } from "../types";
 import { useKeyChangeClock } from "../hooks/useKeyChangeClock";
 import { anyKeyWas, chipLibrary, libraryNotices, songKeyLength } from "./playbackLibrary";
+import { FactChips } from "./sections/FactChips";
 import { cardLibrary, SongCardBody, songCover } from "./SongCard";
 
 /** What a chip says for a song Playback cannot be paired with (no cover, no bar). */
@@ -17,7 +18,9 @@ const unpaired = (song: LibraryPlanSong) =>
 function SongChip({ song, now }: { song: LibraryPlanSong; now: number }) {
   const library = song.library;
   const card = cardLibrary(song, now);
-  const facts = library ? songKeyLength(library, now).join(" · ") || "no details" : unpaired(song);
+  const facts = library ? songKeyLength(library, now) : [];
+  // A song with facts shows them as chips; one without says why in words (not paired) or that Playback gave no details.
+  const words = library ? (facts.length ? null : "no details") : unpaired(song);
   return (
     <li
       className="flex min-h-[44px] min-w-0 flex-col justify-between gap-0.5 rounded-ds-lg border border-edge-medium bg-surface-panel px-2.5 py-1.5 text-sm"
@@ -25,7 +28,7 @@ function SongChip({ song, now }: { song: LibraryPlanSong; now: number }) {
       data-status={song.status}
       title={library ? chipLibrary(song, now)?.title : undefined}
     >
-      <SongCardBody cover={songCover(song)} sections={card?.sections ?? []} title={song.title}>{facts}</SongCardBody>
+      <SongCardBody cover={songCover(song)} facts={facts.length ? <FactChips facts={facts} /> : undefined} sections={card?.sections ?? []} title={song.title}>{words}</SongCardBody>
     </li>
   );
 }

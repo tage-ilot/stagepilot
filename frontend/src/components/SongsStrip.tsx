@@ -1,4 +1,5 @@
 import { captureLabelText, type CaptureLabel } from "./lightingLooks";
+import { FactChips, type Fact } from "./sections/FactChips";
 import type { CardLibrary } from "./SongCard";
 import { SONG_CARD_LOOK, SONG_GRID, SongCardBody, SongCardShell } from "./SongCard";
 
@@ -62,6 +63,12 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
             chip.library?.title ?? null,
             live ? "live now" : null,
           ].filter(Boolean).join(", ");
+          // The capture status, the loudness note and the tempo: each its own chip (no dots between them).
+          const facts: Fact[] = [
+            { text: captureWords, testId: "song-chip-capture" },
+            ...(has && chip.hasLoudness ? [{ text: "\u266A", name: "has loudness", title: "Has loudness", testId: "song-chip-loudness" }] : []),
+            ...(chip.library?.bpm ? [{ text: chip.library.bpm, title: chip.library.title, testId: "song-chip-bpm" }] : []),
+          ];
           return (
             <SongCardShell
               after={chip.looks + (chip.loops ?? 0) + chip.handmade > 0 && (
@@ -83,14 +90,11 @@ export function SongsStrip({ chips, noun, selectedKey, liveKey, onSelect, onClea
             >
               <SongCardBody
                 cover={chip.library?.cover ?? null}
+                facts={<FactChips facts={facts} />}
                 lead={live ? <span aria-hidden="true" className="size-2 shrink-0 rounded-ds-full bg-success" data-testid="song-chip-live" /> : undefined}
                 sections={chip.library?.sections ?? []}
                 title={chip.title}
-              >
-                <span data-testid="song-chip-capture">{captureWords}</span>
-                {has && chip.hasLoudness && <span className="ml-1" data-testid="song-chip-loudness" title="Has loudness">♪</span>}
-                {chip.library?.bpm && <span data-testid="song-chip-bpm" title={chip.library.title}>{` · ${chip.library.bpm}`}</span>}
-              </SongCardBody>
+              />
             </SongCardShell>
           );
         })}
