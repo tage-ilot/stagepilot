@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **The colored section bar now spans the whole song card in the Presenter Link and Lighting lists on the Mac app.**
 - **The Playback waveform now shows for songs that Playback stores under a different content number (about one in nine songs).** The Library Link is now version 0.4.1; StagePilot updates it by itself when nothing is playing.
 - **A song that has no waveform in Playback is no longer reported as "The Playback computer did not answer."** The timeline shows the arrangement bar alone, as before.
 

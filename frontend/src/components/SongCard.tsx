@@ -99,7 +99,8 @@ export const SONG_CARD_LOOK = {
 
 /** The outline round a selected card (Lighting's selected song; a ticked card in a list that picks songs). */
 const SELECTED = "outline outline-2 outline-offset-1 outline-ink";
-const PRESSABLE = "flex min-h-[44px] min-w-0 flex-1 touch-manipulation flex-col justify-between gap-0.5 rounded-ds-lg px-2.5 py-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
+/** `items-stretch` is written down on purpose: WebKit's own style for a `button` is `align-items: flex-start`, which left the colored bar a quarter wide on the Mac app. */
+const PRESSABLE = "flex min-h-[44px] min-w-0 flex-1 touch-manipulation flex-col items-stretch justify-between gap-0.5 rounded-ds-lg px-2.5 py-1.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
 type DataAttributes = { [key: `data-${string}`]: string | undefined };
 
