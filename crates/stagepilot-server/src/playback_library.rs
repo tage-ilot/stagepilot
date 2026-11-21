@@ -1560,6 +1560,32 @@ pub fn parse_waveform(value: &Value) -> Option<(f64, Vec<u8>)> {
     Some((step, peak))
 }
 
+/// What the helper says in its `error` when the song has no folder or no waveform pictures (the `LookupError`
+/// texts of `waveform()` in `playback_library.py`). Any other 503 text is a helper that cannot read the library.
+const HELPER_NO_WAVEFORM_TEXTS: [&str; 2] = ["no waveform pictures stored", "folder was not found"];
+
+/// The most of a 503 body that is read to find those words.
+const HELPER_ERROR_CAP: usize = 2048;
+
+/// True when this error answer of the helper says that the song has no waveform pictures.
+async fn says_no_waveform(response: &mut reqwest::Response) -> bool {
+    let mut body: Vec<u8> = Vec::new();
+    while let Ok(Some(chunk)) = response.chunk().await {
+        if body.len() + chunk.len() > HELPER_ERROR_CAP {
+            return false;
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice::<Value>(&body)
+        .ok()
+        .and_then(|value| value.get("error")?.as_str().map(str::to_string))
+        .is_some_and(|text| {
+            HELPER_NO_WAVEFORM_TEXTS
+                .iter()
+                .any(|known| text.contains(known))
+        })
+}
+
 impl PlaybackLibrary {
     /// `GET base/songs/<id>/waveform?points_per_second=8&clock=performed`, at most `WAVEFORM_CAP`
     /// bytes, 6 s in all, same client as every other ask (no redirect, no proxy).
@@ -1582,6 +1608,11 @@ impl PlaybackLibrary {
         match response.status().as_u16() {
             200 => {}
             404 => return Err(WaveformFailure::NoWaveform),
+            // The helper answers 503 both when it cannot read Playback's library and when this one song has
+            // no waveform pictures: only its own words for the second are a song without a waveform.
+            503 if says_no_waveform(&mut response).await => {
+                return Err(WaveformFailure::NoWaveform)
+            }
             _ => return Err(WaveformFailure::NoAnswer),
         }
         if response

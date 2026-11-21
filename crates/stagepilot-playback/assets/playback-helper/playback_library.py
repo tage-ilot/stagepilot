@@ -43,13 +43,14 @@ import urllib.parse
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 HOME = os.path.expanduser("~")
 BUNDLE_ID = "com.multitracks.custommixplayer"
 APP_SUPPORT = os.path.join(HOME, "Library", "Application Support", "PlaybackLibrary")
 DEFAULT_CONFIG_PATH = os.path.join(APP_SUPPORT, "config.json")
 CORE_DATA_EPOCH = 978307200  # Core Data counts seconds from 2001-01-01 UTC
+FOLDER_PAIRED_FROM, FOLDER_PAIRED_TO = 13, 32    # a type-13 row whose song folder is not there is looked up as type 32 (same content id), nothing else
 
 DEFAULTS = {
     "port": 8780,
@@ -895,9 +896,15 @@ class Library:
             names = os.listdir(base)
         except OSError:
             return None
-        want = "%s-%s-" % (s.get("contenttypeid"), s.get("contentid"))
-        hits = sorted(n for n in names if n.startswith(want))
-        return os.path.join(base, hits[0]) if hits else None
+        kind, cid = s.get("contenttypeid"), s.get("contentid")
+        wants = ["%s-%s-" % (kind, cid)]
+        if kind == FOLDER_PAIRED_FROM:
+            wants.append("%s-%s-" % (FOLDER_PAIRED_TO, cid))     # no exact folder: Playback may keep this song under the other number
+        for want in wants:                                         # the exact folder always wins; the pairing is only a fallback
+            hits = sorted(n for n in names if n.startswith(want))
+            if hits:
+                return os.path.join(base, hits[0])
+        return None
 
     def song(self, sid):
         s = self.song_row(sid)

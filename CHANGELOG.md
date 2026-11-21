@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Playback waveform now shows for songs that Playback stores under a different content number (about one in nine songs).** The Library Link is now version 0.4.1; StagePilot updates it by itself when nothing is playing.
+- **A song that has no waveform in Playback is no longer reported as "The Playback computer did not answer."** The timeline shows the arrangement bar alone, as before.
+
 ## [2.44.0] - 2026-11-20
 
 StagePilot 2.44.0 is the Link release. StagePilot can now put the songs of the service plan into a ProPresenter playlist with Playback's arrangement and key, and every connection (Lighting, Playback, Presentation) looks and works the same. The candidates rc.1 to rc.3 below hold the step-by-step history.
