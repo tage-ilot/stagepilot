@@ -107,6 +107,7 @@ describe("the matchup with the library", () => {
     expect(rows()[3]).toHaveTextContent("The titles are alike but not the same: the plan says “Way Maker”, Playback has “Waymaker”.");
     expect(rows()[3]!.querySelector(".arr-pb")).toHaveTextContent("Waymaker");
     expect(rows()[3]!.querySelector(".arr-pb img")).toBeNull();
+    expect(rows()[3]!.querySelector(".arr-pb [data-part=\"cover-placeholder\"]")).not.toBeNull();
     expect(rows()[1]!.querySelector("[data-stamp]")).toHaveTextContent("Check order");
   });
 

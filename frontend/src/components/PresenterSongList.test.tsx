@@ -132,6 +132,7 @@ describe("the song cards", () => {
     const holy = card("Holy Forever");
     expect(holy.querySelector("img")).not.toBeNull();
     expect(card("Battle Belongs").querySelector("img")).toBeNull();
+    expect(card("Battle Belongs").querySelector("[data-part=\"cover-placeholder\"]")).not.toBeNull();
     expect(within(holy).getByTestId("library-bar")).toHaveAttribute("role", "img");
     // Under the title: the key letters, then mtID and the number, each in its own square chip with no dot between; no \"Key\" word on screen.
     const facts = holy.querySelector("[id$='-facts']") as HTMLElement;

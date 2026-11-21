@@ -2,6 +2,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import type { LibraryPlanSong, LibrarySection } from "../types";
 import { ArrangementBar } from "./ArrangementBar";
+import { CoverSlot } from "./CoverSlot";
 import { bpmText, chipLibrary, librarySongCover, type ChipLibrary } from "./playbackLibrary";
 
 /** The picture of a paired plan song. */
@@ -23,7 +24,7 @@ export function cardLibrary(song: LibraryPlanSong | undefined, now: number): Car
 
 /**
  * The inside of a song card, shared by the Playback config (Songs in Playback) and the Lighting tab (Songs in this service) so the
- * two lists read as the same thing: a small cover when Playback has a picture, the title, one line of facts, and under both a thin
+ * two lists read as the same thing: a small cover (the picture when Playback has one, else a placeholder tile, so the titles line up), the title, one line of facts, and under both a thin
  * bar of the arranged song. The caller draws the border and any buttons around it.
  */
 export function SongCardBody({ title, cover, sections, lead, facts, chips, below, children }: {
@@ -44,18 +45,7 @@ export function SongCardBody({ title, cover, sections, lead, facts, chips, below
   return (
     <>
       <span className="flex min-w-0 items-center gap-2">
-        {cover && (
-          <img
-            alt=""
-            className="h-7 w-7 shrink-0 rounded-ds-md bg-surface-900 object-cover"
-            decoding="async"
-            height={28}
-            loading="lazy"
-            onError={(event) => { event.currentTarget.style.visibility = "hidden"; }}
-            src={cover}
-            width={28}
-          />
-        )}
+        <CoverSlot src={cover} />
         <span className="block min-w-0 leading-tight">
           <span className="flex min-w-0 items-center gap-1.5">
             {lead}
