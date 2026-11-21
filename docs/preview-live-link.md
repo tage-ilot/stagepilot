@@ -7,7 +7,7 @@ computer stand in for them. All use only the Python standard library, bind to `1
 | Stand-in | File | What it pretends to be |
 |---|---|---|
 | Playback API | `tools/fake_playback_api.py` | Playback's remote connection (heartbeats every second): the "Playback API: Connected" line |
-| Library Link | `tools/fake_playback_library.py` | `huntrw6/playback-library` 0.4.0: it checks the HMAC key exactly like the real helper |
+| Library Link | `tools/fake_playback_library.py` | `huntrw6/playback-library` 0.4.1: it checks the HMAC key exactly like the real helper |
 | StagePilot | `cargo run -p stagepilot-server -- --demo` | the demo backend (a demo Planning Center plan, no keychain) |
 
 The demo backend has no Playback API of its own, so the stand-in is a real listener the demo's own Playback connection finds. Nothing in
@@ -33,7 +33,7 @@ curl -s -X PUT http://127.0.0.1:8765/api/v1/playback-api/settings -H 'content-ty
 curl -s -X PUT http://127.0.0.1:8765/api/v1/playback-library/settings -H 'content-type: application/json' -d '{"address":"127.0.0.1:18780"}'
 ```
 
-The block now reads **Playback API: Connected to Playback on this computer** and **Library Link: Update available, version 0.4.0**
+The block now reads **Playback API: Connected to Playback on this computer** and **Library Link: Update available, version 0.4.1**
 (a helper with no key: it works, and the setup is offered). The Songs in Playback chips appear with covers.
 
 ## Pair it, like a real install
@@ -49,7 +49,7 @@ The setup command is for the *Playback computer's* Terminal; for the preview, th
    ```
 
    (Use the address in the command StagePilot shows.) Within a few seconds the box says **The Library Link is ready.**, closes and the block reads
-   **Library Link: Ready, version 0.4.0** with the pill **Connected**.
+   **Library Link: Ready, version 0.4.1** with the pill **Connected**.
 
 ## Other states to look at
 
@@ -65,7 +65,7 @@ The setup command is for the *Playback computer's* Terminal; for the preview, th
 
 ## What this does not prove
 
-The stand-ins speak the protocol the way the written spec and `playback_library.py` 0.4.0 describe it (the fake is tested against the bundled
+The stand-ins speak the protocol the way the written spec and `playback_library.py` 0.4.1 describe it (the fake is tested against the bundled
 file's own signing code). They cannot show how the real installer behaves on macOS (launchd, Playback's permission prompts, `curl` and `sh`
 versions), or the real covers and arrangements. Run the setup command once on the real Playback computer to see that.
 
