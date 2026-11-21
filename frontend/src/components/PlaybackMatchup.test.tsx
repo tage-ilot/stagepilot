@@ -273,10 +273,17 @@ describe("the Playback setlist chooser", () => {
   });
 
   it("follows the loaded plan's date, never today's", () => {
-    render(<Host initial={{ song_order: [] }} library={withLibrary(none({ plan_date: "2031-05-04", message: "Playback has no setlist for 2031-05-04." }))} />);
-    const line = screen.getByTestId("playback-setlist");
-    expect(line).toHaveTextContent("Playback has no setlist for 2031-05-04.");
-    expect(screen.getByRole("button", { name: /Use Saturday Night/ })).toBeVisible();
-    expect(line).not.toHaveTextContent(new Date().toISOString().slice(0, 10));
+    // Today is fixed to a day no fixture setlist has, so the check cannot pass or fail by the real date matching one.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2030-01-02T12:00:00Z"));
+    try {
+      render(<Host initial={{ song_order: [] }} library={withLibrary(none({ plan_date: "2031-05-04", message: "Playback has no setlist for 2031-05-04." }))} />);
+      const line = screen.getByTestId("playback-setlist");
+      expect(line).toHaveTextContent("Playback has no setlist for 2031-05-04.");
+      expect(screen.getByRole("button", { name: /Use Saturday Night/ })).toBeVisible();
+      expect(line).not.toHaveTextContent(new Date().toISOString().slice(0, 10));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
