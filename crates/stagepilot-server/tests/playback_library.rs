@@ -59,6 +59,8 @@ struct Behaviour {
     waveform: Option<String>,
     /// Answer every waveform ask with this status instead.
     wave_status: Option<u16>,
+    /// The text the fake sends instead of `{"error": "no"}` with that status (any bytes).
+    wave_body: Option<String>,
     /// Wait this long before a waveform answer only.
     wave_delay: Duration,
     /// The query string of each waveform ask.
@@ -287,8 +289,11 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
     if let Some(id) = path.strip_prefix("/songs/") {
         if id.ends_with("/waveform") {
             if let Some(status) = b.wave_status {
-                return (StatusCode::from_u16(status).unwrap(), "{\"error\": \"no\"}")
-                    .into_response();
+                let text = b
+                    .wave_body
+                    .clone()
+                    .unwrap_or_else(|| "{\"error\": \"no\"}".to_string());
+                return (StatusCode::from_u16(status).unwrap(), text).into_response();
             }
             return match b.waveform.clone() {
                 Some(text) => (
@@ -3161,4 +3166,78 @@ async fn a_damaged_key_file_is_ignored_and_a_reset_clears_what_was_remembered() 
     // Resetting the Library Link (a new key) clears what was remembered.
     library.reset().await;
     assert!(!file.exists());
+}
+
+/// What the real helper (`playback_library.py`) answers: 503 with `{"error": <the LookupError text>}`.
+fn helper_error(text: &str) -> String {
+    json!({ "error": text }).to_string()
+}
+
+#[tokio::test]
+async fn a_song_the_helper_has_no_waveform_for_is_a_404_not_a_connection_fault() {
+    for (what, text) in [
+        (
+            "no folder",
+            "this song's folder was not found in Playback's Songs folder",
+        ),
+        ("no pictures", "no waveform pictures stored for this song"),
+    ] {
+        let (helper, router, runtime) = waves(None).await;
+        helper.set(|b| {
+            b.wave_status = Some(503);
+            b.wave_body = Some(helper_error(text));
+        });
+        let (status, _, body) = raw(&router, WAVE_ONE, None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{what}");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&body).unwrap(),
+            json!({"detail": "No waveform."}),
+            "{what}"
+        );
+        assert_eq!(helper.count("/songs/11/waveform"), 1, "{what}");
+        assert_eq!(runtime.playback_library.waveforms_held(), 0, "{what}");
+    }
+}
+
+#[tokio::test]
+async fn a_helper_that_cannot_read_playbacks_library_is_still_a_503() {
+    let cannot = helper_error("the Playback library is not readable");
+    let long = format!(
+        "{{\"error\": \"no waveform pictures stored{}\"}}",
+        " x".repeat(2000)
+    );
+    for (what, status, text) in [
+        ("other words", 503, cannot.clone()),
+        (
+            "not JSON",
+            503,
+            "<html>folder was not found</html>".to_string(),
+        ),
+        (
+            "no error field",
+            503,
+            "{\"detail\": \"no waveform pictures stored\"}".to_string(),
+        ),
+        ("error is not text", 503, "{\"error\": 3}".to_string()),
+        ("an answer too long to be the helper's", 503, long),
+        (
+            "another status with the same words",
+            500,
+            helper_error("no waveform pictures stored for this song"),
+        ),
+    ] {
+        let (helper, router, runtime) = waves(None).await;
+        helper.set(|b| {
+            b.wave_status = Some(status);
+            b.wave_body = Some(text);
+        });
+        let (code, _, body) = raw(&router, WAVE_ONE, None).await;
+        assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE, "{what}");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&body).unwrap(),
+            json!({"detail": "The Playback computer did not answer."}),
+            "{what}"
+        );
+        assert_eq!(runtime.playback_library.waveforms_held(), 0, "{what}");
+    }
 }
