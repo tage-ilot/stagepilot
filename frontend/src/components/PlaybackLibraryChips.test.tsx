@@ -66,9 +66,10 @@ describe("the song chips in the Playback config", () => {
     expect(chips()[0]!.querySelector("img")!.getAttribute("src")).not.toBe(before);
   });
 
-  it("shows no cover box at all for a song with no picture (an old helper, or none stored)", () => {
+  it("shows the placeholder tile, not an empty gap, for a song with no picture (an old helper, or none stored)", () => {
     mount(planOf([planSong("Song One", 1, { library: library({ artwork: null }) })]));
     expect(chips()[0]!.querySelector("img")).toBeNull();
+    expect(chips()[0]!.querySelector("[data-part=\"cover-placeholder\"]")).toHaveAttribute("aria-hidden", "true");
     expect(chips()[0]).toHaveTextContent("Song OneAb 6:29");
   });
 
@@ -127,10 +128,11 @@ describe("the song chips in the Playback config", () => {
     mount(planOf([planSong("Way Maker", 1, { status: "uncertain", confidence: "uncertain", library: null, candidate: library({ title: "Waymaker" }) })]));
     expect(chips()[0]).toHaveTextContent("Way Makermay be “Waymaker” in Playback, not sure");
     expect(chips()[0]!.querySelector("img")).toBeNull();
+    expect(chips()[0]!.querySelector("[data-part=\"cover-placeholder\"]")).not.toBeNull();
     expect(screen.queryByTestId("library-bar")).toBeNull();
   });
 
-  it("keeps the words for a song Playback is missing or cannot tell apart, as a chip with no cover and no bar", () => {
+  it("keeps the words for a song Playback is missing or cannot tell apart, as a chip with the placeholder tile and no bar", () => {
     mount(planOf([
       planSong("Song One", 1),
       planSong("Song Two", 2, { status: "missing", library: null }),
@@ -144,6 +146,7 @@ describe("the song chips in the Playback config", () => {
     expect(rows[3]).toHaveTextContent("Song Fourappears more than once, so StagePilot cannot tell which Playback song it is");
     for (const row of rows.slice(1)) {
       expect(row.querySelector("img")).toBeNull();
+      expect(row.querySelector("[data-part=\"cover-placeholder\"]")).not.toBeNull();
       expect(row).toHaveClass(...chips()[0]!.className.split(" ").filter((name) => name.startsWith("rounded") || name === "border"));
       expect(row).not.toHaveAttribute("title");
     }

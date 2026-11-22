@@ -3,7 +3,7 @@
 import { MatchupRow } from "../components/MatchupRow";
 import { PlaybackLibrarySongs } from "../components/PlaybackLibrarySongs";
 import { FactChips, type Fact } from "../components/sections";
-import { cardLibrary } from "../components/SongCard";
+import { cardLibrary, SONG_CARD_LOOK, SONG_GRID, SongCardBody, SongCardShell } from "../components/SongCard";
 import { SongsStrip, type SongChip } from "../components/SongsStrip";
 import type { MatchRow, RowStamp } from "../components/songMatchup";
 import { libraryController, libraryOf } from "./fixtures";
@@ -67,6 +67,23 @@ const ledgerRows: MatchRow[] = [
   { ...ledgerRow("r4", "only-plan", "E", null, [], 3), kind: "plan-only", playback: null },
 ];
 
+// A picture that needs no server (a data: address is always allowed by the desktop policy), one that is not there (the gallery has no server, so
+// it fails like a 404 or a blocked address does in the app), and none at all (a song Playback has no artwork for).
+const PICTURE = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><rect width='28' height='28' fill='sienna'/><circle cx='14' cy='14' r='8' fill='wheat'/></svg>")}`;
+const coverSections = [{ name: "Verse 1", start: 0, end: 20 }, { name: "Chorus", start: 20, end: 50 }];
+const coverCard = (title: string, cover: string | null) => (
+  <SongCardShell look={SONG_CARD_LOOK.plain} mode="static">
+    <SongCardBody cover={cover} facts={<FactChips facts={[KEY, LENGTH]} />} sections={coverSections} title={title} />
+  </SongCardShell>
+);
+const coverSlot = (
+  <ul aria-label="Songs" className={SONG_GRID}>
+    {coverCard("Picture", PICTURE)}
+    {coverCard("No picture", null)}
+    {coverCard("Picture that fails to load", "/gallery-no-such-cover.jpg")}
+  </ul>
+);
+
 export const factTemplates: SampleState[] = [
   { id: "chips", label: "Fact chips: by themselves", look: "One square chip per fact (the look the Presenter Link's key used to have), a small gap, no dot or bullet between; a tone only where the words said it; a long fact is cut inside its chip; the box on the dashed line is one card wide.", render: () => chipsByThemselves },
   { id: "lighting", label: "Lighting's songs", look: "Under each title: the capture words, a note chip when it has loudness, and the tempo, each its own chip. A song Playback does not have shows only its capture words.", render: () => <SongsStrip chips={lightingChips} liveKey="s2" noun="looks" onClear={none} onSelect={none} selectedKey="s1" /> },
@@ -77,6 +94,7 @@ export const factTemplates: SampleState[] = [
       return <PlaybackLibrarySongs library={{ ...libraryController(libraryOf("ready")), plan: { ...PLAN, songs: songs4 } }} plan={null} timeZone="America/Los_Angeles" />;
     },
   },
+  { id: "cover-slot", label: "Cover slot: the picture, or the placeholder", look: "A song card always has a cover slot: the picture, or the placeholder. The first card has a picture; the second has none (no artwork, not in Playback); the third's picture cannot be loaded (404, 503, or blocked), so it swaps to the same tile. The 28 px slot is the same in all three, so the titles line up.", render: () => coverSlot },
   { id: "ledger", label: "The song matchup row with its chips (the shared row's default; the Song order section hides them)", look: "The key (the bare letter) and the tempo as chips on the Playback side, the key as a chip on the plan side (when the plan names one); a side with no facts keeps its place.", render: () => <ol aria-label="Song pairs" className="arr-list m-0 grid list-none gap-0 p-0">{ledgerRows.map((r) => <MatchupRow key={r.id} row={r} skips={false} />)}</ol> },
   { id: "song-order", label: "Song order: titles, order, stamp, length (no key or BPM)", look: "The same rows as the Song order section draws them: the title, the length beside it, the arrangement bar and the match / Check order stamp; no key or BPM chips under the songs.", render: () => <ol aria-label="Song pairs" className="arr-list m-0 grid list-none gap-0 p-0">{ledgerRows.map((r) => <MatchupRow hideKeyAndBpm key={r.id} row={r} skips={false} />)}</ol> },
 ];

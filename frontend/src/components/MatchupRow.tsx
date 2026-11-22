@@ -1,6 +1,7 @@
 import { playbackLibraryArtworkUrl } from "../api";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import { ArrangementBar } from "./ArrangementBar";
+import { CoverSlot } from "./CoverSlot";
 import { bpmText, lengthSourceTitle } from "./playbackLibrary";
 import { FactChips, type Fact } from "./sections";
 import { clock, STAMP_WORDS, type MatchRow, type RowStamp } from "./songMatchup";
@@ -82,7 +83,7 @@ export function MatchupRow({ row, draft, skips, hideKeyAndBpm = false }: { row: 
           <span className="font-mono tabular-nums text-ink-body" title={(song && lengthSourceTitle(song)) ?? undefined}>{clock(playback.seconds)}</span>
         </div>
         <div className="flex min-w-0 items-center gap-2.5">
-          {cover && <img alt="" className="h-7 w-7 shrink-0 rounded-ds-md bg-surface-900 object-cover" decoding="async" height={28} loading="lazy" onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} src={cover} width={28} />}
+          <CoverSlot src={cover} />
           <span className={cx("min-w-0 break-words font-semibold", playback.skipped ? "text-ink-muted line-through decoration-ink-muted/50" : "text-ink")}>{playback.title ?? `Playback song ${playback.number}`}</span>
         </div>
         {song && <ArrangementBar sections={song.sections} />}

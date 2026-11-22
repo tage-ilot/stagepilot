@@ -161,8 +161,9 @@ describe("SongsStrip capture labels", () => {
     expect(within(items[0]!).getByTestId("library-bar").querySelectorAll(".library-seg")).toHaveLength(2);
     // The facts are still one hover away, and in the button's spoken name.
     expect(within(items[0]!).getByRole("button", { name: /Playback counts this song down to 6:29; the plan says 5:55/ })).toBeInTheDocument();
-    // A song with no library data is the same card without cover or bar.
+    // A song with no library data is the same card with the placeholder tile and no bar.
     expect(items[1]!.querySelector("img")).toBeNull();
+    expect(items[1]!.querySelector("[data-part=\"cover-placeholder\"]")).not.toBeNull();
     expect(within(items[1]!).queryByTestId("library-bar")).toBeNull();
   });
 });
