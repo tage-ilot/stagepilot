@@ -3147,7 +3147,9 @@ async fn a_restart_keeps_a_key_change_and_an_ordinary_read_writes_nothing() {
     assert_eq!(first_song(&plan).key_was.as_deref(), Some("G"));
     let text = std::fs::read_to_string(&file).unwrap();
     assert!(
-        !text.contains("Song One") && !text.contains("2026-11-22"),
+        // The setlist's date is a field of its own (`"2026-11-22"` in quotes); a saved time ("2026-11-22T..") is allowed to fall on the same
+        // day as the fixture's date, which it does on that very day.
+        !text.contains("Song One") && !text.contains("\"2026-11-22\""),
         "only numbers, keys and times: {text}"
     );
 }
