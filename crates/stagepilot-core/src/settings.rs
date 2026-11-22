@@ -947,7 +947,8 @@ pub trait KeychainBackend: Send + Sync {
     fn delete(&self) -> Result<(), KeychainUnavailable>;
 }
 
-/// The OS keychain entry for one account (service `StagePilot`).
+/// The OS keychain entry for one account (service `StagePilot`). On macOS this is the legacy
+/// per-account item: kept for migration and for older apps, never written or deleted.
 pub struct OsKeychain {
     #[cfg_attr(
         not(any(windows, target_os = "macos", target_os = "linux")),
@@ -956,16 +957,21 @@ pub struct OsKeychain {
     account: String,
 }
 
+/// The keychain service in use. Rig verification A: STAGEPILOT_KEYRING_SERVICE points a test run
+/// at its own scratch keychain service so it never touches the real StagePilot items. On macOS
+/// the vault item and the legacy per-account items both follow it.
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+fn keyring_service() -> String {
+    std::env::var("STAGEPILOT_KEYRING_SERVICE")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| KEYRING_SERVICE.to_string())
+}
+
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 impl OsKeychain {
     fn entry(&self) -> Result<keyring::Entry, keyring::Error> {
-        // Rig verification A: STAGEPILOT_KEYRING_SERVICE points a test run at its own scratch
-        // keychain service so it never touches the real StagePilot items.
-        let service = std::env::var("STAGEPILOT_KEYRING_SERVICE")
-            .ok()
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| KEYRING_SERVICE.to_string());
-        keyring::Entry::new(&service, &self.account)
+        keyring::Entry::new(&keyring_service(), &self.account)
     }
 }
 
@@ -1013,10 +1019,23 @@ pub struct KeyringCredentialStore {
 }
 
 impl KeyringCredentialStore {
+    /// On macOS every account of the process lives in one shared keychain item (the vault, see
+    /// `keychain_vault`), so an update asks for keychain access once, not once per account.
+    /// Windows and Linux keep one keychain item per account.
     pub fn new(account: &str) -> Self {
-        Self::with_backend(Box::new(OsKeychain {
-            account: account.to_string(),
-        }))
+        #[cfg(target_os = "macos")]
+        {
+            Self::with_backend(Box::new(crate::keychain_vault::VaultAccount::new(
+                crate::keychain_vault::vault_for_service(&keyring_service()),
+                account,
+            )))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Self::with_backend(Box::new(OsKeychain {
+                account: account.to_string(),
+            }))
+        }
     }
     pub fn with_backend(backend: Box<dyn KeychainBackend>) -> Self {
         Self {

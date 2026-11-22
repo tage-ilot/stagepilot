@@ -11,6 +11,7 @@ pub mod config;
 pub mod credential_guard;
 pub mod events;
 pub mod helper_update;
+pub mod keychain_vault;
 pub mod logging;
 pub mod plugin;
 pub mod redact;
