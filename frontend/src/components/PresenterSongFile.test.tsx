@@ -8,6 +8,7 @@ import type { AddSongsPlan, AddSongsPreviewRequest, AddSongsSong } from "../prop
 import { libraryController, libraryPlan, librarySong, librarySongOf } from "../test/libraryFixtures";
 import { addPlan, addSong, helperStatus, jobOf, linkController, playlists } from "../test/propresenterLinkFixtures";
 import { PresenterLinkSection } from "./PresenterLinkSection";
+import { PRESENTER_LINK_OPEN_KEY } from "./proPresenterLinkState";
 
 /**
  * "Pick one": the person chooses the song's ProPresenter file on the card. The buttons are a radio group under the title; pressing one
@@ -68,6 +69,8 @@ async function previewed(plan = songs(), waitForPreview = true) {
 
 beforeEach(() => {
   window.localStorage.clear();
+  // The person has opened the section (it starts folded): these tests are about what is inside it.
+  window.localStorage.setItem(PRESENTER_LINK_OPEN_KEY, "true");
   vi.mocked(api.getProPresenterPlaylists).mockResolvedValue({ playlists: playlists() });
   vi.mocked(api.lookupAddSongsTitles).mockImplementation(async (titles) => ({ titles: titles.map((title) => ({ title, state: "found" as const })) }));
   vi.mocked(api.previewAddSongs).mockImplementation(async (request) => route(request));

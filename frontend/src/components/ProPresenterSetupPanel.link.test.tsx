@@ -10,6 +10,7 @@ import { PlaybackApiPanel } from "./PlaybackApiPanel";
 import { rememberAddress } from "../hooks/useRecentAddresses";
 import { libraryController } from "../test/libraryFixtures";
 import { playbackStatus } from "../test/playbackFixtures";
+import { PRESENTER_LINK_OPEN_KEY } from "./proPresenterLinkState";
 
 vi.mock("../api", async (original) => ({ ...(await original<typeof import("../api")>()), getProPresenterPlaylists: vi.fn().mockResolvedValue({ playlists: [] }) }));
 void api;
@@ -124,6 +125,8 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
 describe("ProPresenterSetupPanel: tab order follows the new visual order", () => {
   it("Host, API, Scan, Connect, the Details button, then Timer, Look, Refresh, Save", async () => {
     const user = userEvent.setup();
+    // The Presenter Link section starts folded (its body is not tabbable then); here the person has opened it.
+    window.localStorage.setItem(PRESENTER_LINK_OPEN_KEY, "true");
     // (With Looks listed, so the Look box is a tab stop: without them it is disabled and tabbing skips it.)
     panel(linkController(helperStatus("ready")), { propresenter: presentation({ looks: [{ id: "l1", name: "Default", index: 0 }], current_look_id: "l1" }) });
     const seen: string[] = [];
@@ -136,8 +139,8 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
       "Host", "ProPresenter API port", "Search", "Connect", "Presenter Link setup",
       "Timer", "Look", "Refresh timers and Looks",
-      // The Presenter Link section sits between the settings and the Save bar (it has no list to tick without a plan).
-      "Playlist",
+      // The Presenter Link section sits between the settings and the Save bar: its toggle (heading and header line), then the body (it has no list to tick without a plan).
+      "Presenter LinkNo songs in the plan", "Playlist",
       "Save configuration",
     ]);
   });

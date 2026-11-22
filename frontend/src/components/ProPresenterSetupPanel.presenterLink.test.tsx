@@ -6,6 +6,7 @@ import { libraryController, libraryPlan, librarySong, librarySongOf } from "../t
 import { helperStatus, linkController, playlists, presentation } from "../test/propresenterLinkFixtures";
 import type { Song } from "../types";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
+import { PRESENTER_LINK_OPEN_KEY } from "./proPresenterLinkState";
 
 vi.mock("../api", async (original) => ({
   ...(await original<typeof import("../api")>()),
@@ -23,6 +24,8 @@ const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) 
 afterEach(() => vi.clearAllMocks());
 beforeEach(() => {
   window.localStorage.clear();
+  // The person has opened the section (it starts folded): these tests are about what is inside it.
+  window.localStorage.setItem(PRESENTER_LINK_OPEN_KEY, "true");
   vi.mocked(api.getProPresenterPlaylists).mockResolvedValue({ playlists: playlists() });
   vi.mocked(api.lookupAddSongsTitles).mockImplementation(async (titles) => ({ titles: titles.map((title) => ({ title, state: "found" as const })) }));
 });

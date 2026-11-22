@@ -1,6 +1,6 @@
 import { linkController, linkOf, localLink } from "./fixtures";
 import {
-  JOB_DIFFERS, JOB_DONE, JOB_DONE_NAMES, JOB_LIBRARY, JOB_LIVE, JOB_RUNNING, JOB_STOPPED, NAMES_IN_PROPRESENTER, PREVIEW_ALL_STATUSES, PREVIEW_NAMES, PREVIEW_PLAYBACK_CLEAN,
+  JOB_DIFFERS, JOB_DONE, JOB_DONE_NAMES, JOB_LIBRARY, JOB_LIVE, JOB_RUNNING, JOB_STOPPED, NAMES_IN_PROPRESENTER, NONE_IN_PROPRESENTER, PREVIEW_ALL_STATUSES, PREVIEW_NAMES, PREVIEW_PLAYBACK_CLEAN,
   PREVIEW_PICK_ONE, PREVIEW_PICKED, PREVIEW_PICKED_BY_NAME, PREVIEW_PLAYBACK_STOPPED,
 } from "./presenterLinkData";
 import { Sample, Swap } from "./PresenterLinkSample";
@@ -11,6 +11,17 @@ const sunday: Step[] = [{ pick: ["Playlist", "PL-SUNDAY"] }, { pick: ["Section",
 const press: Step = { press: "Import songs to ProPresenter" };
 
 export const presenterLinkStates: SampleState[] = [
+  // The section is a fold that STARTS FOLDED; the header line says whether the songs can be imported. Every state below these (they need the body) starts from the remembered flag
+  // set to open (`Sample` seeds it, as Song order's states do); these start from a new install's closed one, or say so.
+  { id: "closed-ready", label: "Folded: songs ready to import", look: "How the section starts: the heading Presenter Link is the toggle (chevron, tinted band) and ONE short line beside it says the songs can be imported: 4 songs ready to import. No playlist is mentioned. The body is folded away and not tabbable.", render: () => <Sample open={false} playback /> },
+  { id: "closed-some", label: "Folded: some songs cannot be imported", look: "3 of 4 songs can be imported: the rest are the grey dashed Can't import cards inside (here Firm Foundation, which ProPresenter does not have).", render: () => <Sample open={false} scenario={{ titles: NAMES_IN_PROPRESENTER }} /> },
+  { id: "closed-none", label: "Folded: no song can be imported", look: "No songs can be imported: every card inside is the grey dashed kind.", render: () => <Sample open={false} scenario={{ titles: NONE_IN_PROPRESENTER }} /> },
+  { id: "closed-playing", label: "Folded: a song is playing", look: "Not while a song plays: the same words the section waits with when it is open.", render: () => <Sample open={false} playback playing /> },
+  { id: "closed-no-songs", label: "Folded: no songs in the plan", look: "No songs in the plan.", render: () => <Sample open={false} plan={{ songs: [] }} /> },
+  { id: "open", label: "Opened with the heading", look: "The heading was pressed (chevron turned down, aria-expanded true): the Playlist and Section boxes, the cards and the one button, with the header line still beside the heading. The choice is remembered in this browser.", render: () => <Sample playback open={false} steps={[{ press: "Presenter Link" }, ...sunday]} /> },
+  { id: "forced-preview", label: "Folded, then the preview stops: opens by itself", look: "The remembered choice is folded, the import was pressed and the preview stopped for a song: the section is open (the work is never hidden), the header line says 1 can't be imported yet, and nothing closes it but the person's press.", render: () => <Sample open={false} playback scenario={{ previews: [PREVIEW_PLAYBACK_STOPPED] }} steps={[...sunday, press]} /> },
+  { id: "forced-importing", label: "Folded, then importing: open and locked", look: "The remembered choice is folded and the import is running: the section is open, the header line says Importing… and the heading cannot fold it away until the job has ended.", render: () => <Sample open={false} playback scenario={{ previews: [PREVIEW_PLAYBACK_CLEAN], jobs: [JOB_RUNNING] }} steps={[...sunday, press]} /> },
+  { id: "forced-finished", label: "Folded, then done: open with the result", look: "The remembered choice is folded and the job just ended: the section stays open with the result, and the header line says Done: 4 added.", render: () => <Sample open={false} playback scenario={{ previews: [PREVIEW_PLAYBACK_CLEAN], jobs: [JOB_DONE] }} steps={[...sunday, press]} /> },
   { id: "no-playlists", label: "No playlists yet", look: "The Playlist box has nothing to choose and the Section box waits; the one button is off and says why in a small neutral pill beside it (Choose a playlist; it wraps under the button on a phone). No sentence explains the button.", render: () => <Sample scenario={{ playlists: [], titles: NAMES_IN_PROPRESENTER }} /> },
   { id: "options", label: "Options chosen", look: "Playlist and Section picked: the Section box lists only the playlist's section names, in order (no End of Playlist next to real sections). The cards are selected; the button is on. Nothing has been asked of ProPresenter's playlist yet.", render: () => <Sample steps={sunday} /> },
   { id: "end-of-playlist", label: "Section: the last section is the default", look: "A playlist chosen for the first time: the Section box starts at the LAST section (Message), which is the same place as the end. A section last used for an import for that playlist wins.", render: () => <Sample steps={[{ pick: ["Playlist", "PL-SUNDAY"] }]} /> },

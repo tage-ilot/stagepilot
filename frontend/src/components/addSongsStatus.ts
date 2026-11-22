@@ -189,3 +189,10 @@ export function resultHeading(report: Pick<AddSongsReport, "outcome" | "songs" |
     default: return make(words.heading);
   }
 }
+
+/** The result as the Presenter Link's header says it: the result's own headline, and `Stopped: nothing changed` when the job stopped before it wrote the playlist. */
+export function finishedWords(report: Pick<AddSongsReport, "outcome" | "songs" | "differences" | "playlist_changed"> | null): string {
+  if (!report) return "Stopped";
+  const heading = resultHeading(report).text;
+  return report.outcome === "stopped" && heading === OUTCOME.stopped.heading && !report.playlist_changed ? `${heading}: nothing changed` : heading;
+}

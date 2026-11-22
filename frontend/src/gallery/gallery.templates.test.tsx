@@ -29,15 +29,15 @@ describe("the section gallery: configuration pages", () => {
     expect(ids("template-actions")).toEqual(["idle", "busy", "disabled", "primary"]);
     expect(ids("template-summary")).toEqual(["list-ok", "list-warn", "list-four", "cards", "cards-danger"]);
     expect(ids("template-notices")).toEqual(["boxes", "title-actions", "group", "lines"]);
-    expect(ids("template-optional")).toEqual(["advanced-closed", "advanced-open", "activity", "feature", "forced", "band-open"]);
+    expect(ids("template-optional")).toEqual(["advanced-closed", "advanced-open", "activity", "feature", "forced", "band-open", "band-closed", "band-forced"]);
   });
 
   it("draws the Presentation page from the templates, in the fixed order, and reaches a held change and an error by doing what a person does", async () => {
     render(<Frame />);
     const clean = sample("page-presentation-clean");
     const sections = Array.from(clean.querySelectorAll("[data-section]")).map((node) => node.getAttribute("data-section"));
-    // The Live Link block, the settings pair (Timer and Look), the actions, the Presenter Link section (its own options, its song cards with no header row over them, and its button row), then the summary.
-    expect(sections).toEqual(["connection", "settings", "actions", "settings", "actions", "summary"]);
+    // The Live Link block, the settings pair (Timer and Look), the actions, the Presenter Link band (it starts folded; inside: its own options, its song cards with no header row over them, and its button row), then the summary.
+    expect(sections).toEqual(["connection", "settings", "actions", "band", "settings", "actions", "summary"]);
     expect(clean.querySelector("[data-panel-body]")).toBeInTheDocument();
     await waitFor(() => expect(sample("page-presentation-held").querySelectorAll("[data-held-marker]").length).toBeGreaterThanOrEqual(2), WAIT);
     await waitFor(() => expect(Array.from(sample("page-presentation-error").querySelectorAll("[role=alert]")).some((node) => /Enter a host\./.test(node.textContent ?? ""))).toBe(true), WAIT);

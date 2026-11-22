@@ -8,6 +8,7 @@ import { addPlan, addSong, guess, helperStatus, jobOf, linkController, playlists
 import { PresenterLinkSection } from "./PresenterLinkSection";
 import { SONG_GRID, SONG_GRID_CHECK } from "./SongCard";
 import { SongsStrip } from "./SongsStrip";
+import { PRESENTER_LINK_OPEN_KEY } from "./proPresenterLinkState";
 
 /**
  * The Presenter Link's songs are the Lighting tab's song cards in check mode: the same grid, border, outline and 44 px target, a visible
@@ -35,6 +36,8 @@ const card = (name: string) => screen.getByRole("checkbox", { name }).closest("l
 const ready = async () => { await screen.findByRole("option", { name: "Sunday Morning Service" }); return userEvent.setup({ advanceTimers: vi.advanceTimersByTime }); };
 
 beforeEach(() => {
+  // The person has opened the section (it starts folded): these tests are about what is inside it.
+  window.localStorage.setItem(PRESENTER_LINK_OPEN_KEY, "true");
   vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
   vi.mocked(api.getProPresenterPlaylists).mockResolvedValue({ playlists: playlists() });
   vi.mocked(api.lookupAddSongsTitles).mockImplementation(async (titles) => ({ titles: titles.map((title) => ({ title, state: "found" as const })) }));

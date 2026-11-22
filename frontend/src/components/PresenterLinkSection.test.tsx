@@ -11,6 +11,7 @@ import { libraryController, libraryPlan, librarySong, librarySongOf, libraryStat
 import { addPlan, addSong, guess, helperStatus, jobOf, linkController, localStatus, noComputerStatus, playlists, report, result, step } from "../test/propresenterLinkFixtures";
 import type { Song } from "../types";
 import { PresenterLinkSection } from "./PresenterLinkSection";
+import { PRESENTER_LINK_OPEN_KEY } from "./proPresenterLinkState";
 
 vi.mock("../api", async (original) => ({
   ...(await original<typeof import("../api")>()),
@@ -85,6 +86,8 @@ const nameOf = (row: HTMLElement) => within(row).getByRole("checkbox").getAttrib
 
 beforeEach(() => {
   window.localStorage.clear();
+  // The person has opened the section (it starts folded): these tests are about what is inside it.
+  window.localStorage.setItem(PRESENTER_LINK_OPEN_KEY, "true");
   vi.mocked(api.getProPresenterPlaylists).mockResolvedValue({ playlists: playlists() });
   vi.mocked(api.lookupAddSongsTitles).mockImplementation(async (titles) => ({ titles: titles.map((title) => ({ title, state: "found" as const })) }));
   vi.mocked(api.previewAddSongs).mockResolvedValue(copyPlan());
@@ -96,7 +99,7 @@ afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); window.localStorage.cl
 describe("when the section is drawn: only while the Presenter Link is ready", () => {
   it("is there for another computer and for this one, with or without the Playback library", async () => {
     const { unmount } = view();
-    expect(screen.getByRole("group", { name: "Presenter Link" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Presenter Link" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Presenter Link" })).toBeInTheDocument();
     expect(addButton()).toBeInTheDocument();
     await ready();
@@ -389,10 +392,12 @@ describe("the options: playlist and section", () => {
     expect(within(box).queryByRole("option", { name: "End of Playlist" })).toBeNull();
   });
 
-  it("is built from the settings template: a group named Presenter Link, two fields side by side", async () => {
+  it("is built from the templates: the Presenter Link band, and in it a settings group with two fields side by side", async () => {
     view();
     await ready();
-    const group = screen.getByRole("group", { name: "Presenter Link" });
+    const band = screen.getByRole("region", { name: "Presenter Link" });
+    expect(band).toHaveAttribute("data-section", "band");
+    const group = within(band).getByRole("group", { name: "Where the songs go" });
     expect(group).toHaveAttribute("data-section", "settings");
     expect(group.querySelector("[data-columns='pair']")).not.toBeNull();
     expect(within(group).getByLabelText("Playlist")).toBeInTheDocument();

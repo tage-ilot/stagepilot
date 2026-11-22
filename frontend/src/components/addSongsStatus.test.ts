@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { addPlan, addSong, guess, report, result } from "../test/propresenterLinkFixtures";
 import type { AddSongsSong } from "../propresenterLink";
-import { differenceLine, guessesPhrase, guessPhrase, isToAdd, placeHeading, resultHeading, resultWord, songDetail, songStatus, STATUS, stoppedAt, summaryLine, type StatusKey } from "./addSongsStatus";
+import { differenceLine, finishedWords, guessesPhrase, guessPhrase, isToAdd, placeHeading, resultHeading, resultWord, songDetail, songStatus, STATUS, stoppedAt, summaryLine, type StatusKey } from "./addSongsStatus";
 
 const song = (over: Partial<AddSongsSong> = {}) => addSong({ ref_id: "1", title: "Holy Forever", ...over });
 const MISSING = [{ section: "Bridge 2", group: null, how: "missing", line: "No group called Bridge 2." }, { section: "Bridge 2", group: null, how: "missing", line: null }];
@@ -166,5 +166,24 @@ describe("a song that used a file without being asked", () => {
     expect(songStatus(used({ guesses: [guess()] })).key).toBe("check");
     expect(songStatus(used({ action: "blocked", reason: "These sections have no group with that name in the song: Chorus. Nothing is made for this song." })).key).toBe("cant_map");
     expect(songStatus(song({ action: "copy", file: "Holy Forever (2)" })).phrase).toBe("Playback order, \u201C(2)\u201D");
+  });
+});
+
+describe("the result as the Presenter Link's header says it", () => {
+  it("is the result's own headline: Done: 3 added, 3 added, 1 differs, the song it stopped at", () => {
+    expect(finishedWords(report({ songs: [result("1", "A", "added"), result("2", "B", "added"), result("3", "C", "added")] }))).toBe("Done: 3 added");
+    expect(finishedWords(report({ outcome: "done_with_differences", songs: [result("1", "A", "added")], differences: ["x"] }))).toBe("1 added, 1 differs");
+    expect(finishedWords(report({ outcome: "stopped", playlist_changed: false, songs: [result("1", "Battle Belongs", "failed")] }))).toBe("Stopped: Can't import \u201CBattle Belongs\u201D");
+    expect(finishedWords(report({ outcome: "live_on_screen", playlist_changed: false }))).toBe("Live on screen: clear it, then try again");
+  });
+
+  it("says Stopped: nothing changed when the job stopped without a song to name and the playlist was not written", () => {
+    expect(finishedWords(report({ outcome: "stopped", playlist_changed: false, songs: [] }))).toBe("Stopped: nothing changed");
+    // The playlist WAS written: it must not claim nothing changed.
+    expect(finishedWords(report({ outcome: "stopped", playlist_changed: true, songs: [] }))).toBe("Stopped");
+  });
+
+  it("a job that ended with no answer at all is just Stopped", () => {
+    expect(finishedWords(null)).toBe("Stopped");
   });
 });

@@ -52,6 +52,48 @@ export const LINK_NOT_READY_WORDS = `${PRESENTER_LINK_NAME} not ready`;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+// ---- the Presenter Link's header: whether the songs can be imported ---------------------------------------------------------
+/** The header's words while a song plays (the whole import waits). */
+export const NOT_WHILE_PLAYING = "Not while a song plays";
+export const NO_SONGS_IN_PLAN = "No songs in the plan";
+export const NO_SONGS_CAN_BE_IMPORTED = "No songs can be imported";
+/** The header's one word for a problem (the full words are inside the section, which opens). */
+export const PROBLEM_WORDS = "Problem";
+
+export interface PresenterSummaryNumbers {
+  /** The cards on the list. */
+  songs: number;
+  /** The cards that can be imported: the ones that are not the grey dashed `Can't import` kind. */
+  ready: number;
+  /** A song is playing in Playback. */
+  playing?: boolean;
+  /** The preview is being made, or the import is running. */
+  importing?: boolean;
+  /** How the job that just ended was headed (`Done: 4 added`); `null` while none has ended. */
+  result?: string | null;
+  /** A problem is shown inside the section. */
+  problem?: boolean;
+  /** The one short word a preview that stopped says (`2 can't be imported yet`); `null` when it did not stop. */
+  reason?: string | null;
+}
+
+/**
+ * The one short line beside the Presenter Link's heading, folded or not: a status, never a sentence. Work in progress, a result or a
+ * problem comes first (the section is open for them too); then the songs: `4 songs ready to import`, `3 of 4 songs can be imported`,
+ * `No songs can be imported`, `Not while a song plays`, `No songs in the plan`. The playlist is not mentioned: its own pill says so inside.
+ */
+export function presenterSummary({ songs, ready, playing = false, importing = false, result = null, problem = false, reason = null }: PresenterSummaryNumbers): string {
+  if (problem) return PROBLEM_WORDS;
+  if (result) return result;
+  if (importing) return IMPORTING;
+  if (songs <= 0) return NO_SONGS_IN_PLAN;
+  if (playing) return NOT_WHILE_PLAYING;
+  if (reason) return reason;
+  if (ready <= 0) return NO_SONGS_CAN_BE_IMPORTED;
+  if (ready < songs) return `${ready} of ${songs} songs can be imported`;
+  return `${plural(songs, "song")} ready to import`;
+}
+
 /** `Folder / Name`, or the name alone. */
 export const playlistLabel = (playlist: Pick<ProPresenterPlaylist, "name" | "folder">) =>
   playlist.folder ? `${playlist.folder} / ${playlist.name}` : playlist.name;
