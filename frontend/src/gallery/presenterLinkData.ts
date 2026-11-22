@@ -17,6 +17,8 @@ export const PLAYLISTS: ProPresenterPlaylist[] = [
 const NAMES = ["Holy Forever", "Battle Belongs", "Gratitude", "Firm Foundation"];
 const song = (title: string, order: number): Song => ({ id: `pc-${order}`, title, duration_seconds: 300, order, is_generic: false, source_song_id: null });
 export const PLAN_NAMES = { songs: NAMES.map(song) };
+/** A plan none of whose names ProPresenter has. */
+export const NONE_IN_PROPRESENTER: Record<string, TitleFound> = { "Holy Forever": "missing", "Battle Belongs": "missing", "Gratitude": "missing", "Firm Foundation": "missing" };
 /** A plan whose names ProPresenter has, except the last one. */
 export const NAMES_IN_PROPRESENTER: Record<string, TitleFound> = { "Holy Forever": "found", "Battle Belongs": "found", "Gratitude": "found", "Firm Foundation": "missing" };
 

@@ -300,6 +300,8 @@ The section is drawn **only while the Presenter Link is Ready** (this computer, 
 said: the feature is optional. It is built from the section templates (a settings group for the options, the notices, the action row) and
 has no window; everything, including progress and the result, happens in place, under the button.
 
+The section **starts folded**, and its header says whether the songs can be imported (`4 songs ready to import`, `3 of 4 songs can be imported`, `No songs can be imported`, `Not while a song plays`, `No songs in the plan`); a preview, an import, its result or a problem opens it by itself, and it stays open until you fold it.
+
 1. **Playlist** and **Section**, side by side. **Section** lists the playlist's section (header) names in the playlist's order and nothing
    else: **End of Playlist** is offered **only when the playlist has no section header at all** (then it is the one option). A section is
    every item after its header up to the next header; the songs go at the **end** of the chosen section, right before the next header (for

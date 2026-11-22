@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The Presenter Link section now folds, starts folded, and its header says whether the songs can be imported.**
+
 ### Fixed
 
 - **The Lighting timeline header now counts only the songs of the service on screen, so it can no longer say "6 of 4 songs".**

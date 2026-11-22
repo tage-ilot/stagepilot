@@ -6,6 +6,8 @@ import type { Tone } from "./ui/types";
 /** The two connection statuses of the ProPresenter Live Link block, named in ONE place (pills, status lines, hover text, aria labels, live region). */
 export const PROPRESENTER_API_NAME = "ProPresenter API";
 export const PRESENTER_LINK_NAME = "Presenter Link";
+/** Where this browser remembers whether the Presenter Link section is open (it starts folded). */
+export const PRESENTER_LINK_OPEN_KEY = "stagepilot.presentation.presenter-link-open";
 
 /**
  * The words and tones of the ProPresenter Live Link block (DESIGN.md: a dot AND words, never colour alone). Two statuses are kept apart on

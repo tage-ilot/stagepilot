@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { addSong, guess, report, result } from "../test/propresenterLinkFixtures";
 import {
   backupName, canTryAgain, CHANGE_FILE, END_OF_PLAYLIST, fileLabels, fileWords, guessAnnouncement, guessLine, guessNote, IMPORT_SONGS, IMPORTING, isStuck, mappingLines, neighbours,
-  orderWords, ordinal, OUTCOME, playlistLabel, resultCounts, selectedWords, usingPhrase, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS, stuckReason, twoHeadersLine,
+  orderWords, ordinal, OUTCOME, playlistLabel, presenterSummary, resultCounts, selectedWords, usingPhrase, SONG_STATUS, songSentence, STEP_STATE, STEP_WORDS, stuckReason, twoHeadersLine,
 } from "./addSongsWording";
 
 const sections = (...names: string[]) => ({ sections: names.map((name, i) => ({ name, start: i, end: i + 1 })) });
@@ -210,5 +210,36 @@ describe("the files of a song with more than one", () => {
   it("the quiet phrase is six words at most for an ordinary name", () => {
     expect(usingPhrase("Songs / Firm Foundation (Live).pro")).toBe("Using \u201CFirm Foundation (Live)\u201D");
     expect(usingPhrase("Songs / Firm Foundation (Live).pro").split(" ").length).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("the Presenter Link's header line", () => {
+  it.each([
+    ["every song can be imported", { songs: 4, ready: 4 }, "4 songs ready to import"],
+    ["one song", { songs: 1, ready: 1 }, "1 song ready to import"],
+    ["some cannot", { songs: 4, ready: 3 }, "3 of 4 songs can be imported"],
+    ["one can", { songs: 4, ready: 1 }, "1 of 4 songs can be imported"],
+    ["none can", { songs: 4, ready: 0 }, "No songs can be imported"],
+    ["a song is playing", { songs: 4, ready: 4, playing: true }, "Not while a song plays"],
+    ["a song is playing and some cannot: the playing wins, it stops them all", { songs: 4, ready: 2, playing: true }, "Not while a song plays"],
+    ["no songs in the plan", { songs: 0, ready: 0 }, "No songs in the plan"],
+    ["no songs in the plan while a song plays", { songs: 0, ready: 0, playing: true }, "No songs in the plan"],
+    ["the preview is being made, or the import runs", { songs: 4, ready: 4, importing: true }, "Importing\u2026"],
+    ["a job that ended", { songs: 4, ready: 4, result: "Done: 4 added" }, "Done: 4 added"],
+    ["a problem comes before everything", { songs: 4, ready: 4, problem: true, result: "Done: 4 added", importing: true, playing: true }, "Problem"],
+    ["a result comes before the work and the songs", { songs: 4, ready: 0, importing: true, playing: true, result: "Stopped: nothing changed" }, "Stopped: nothing changed"],
+    ["a preview that stopped says why, in its own short words", { songs: 4, ready: 4, reason: "1 can't be imported yet" }, "1 can't be imported yet"],
+    ["a song playing is said before a preview's words", { songs: 4, ready: 4, reason: "1 can't be imported yet", playing: true }, "Not while a song plays"],
+  ])("%s", (_name, numbers, text) => {
+    expect(presenterSummary(numbers)).toBe(text);
+  });
+
+  it("never names the playlist, and is a short status (no sentence, no full stop)", () => {
+    for (const numbers of [{ songs: 4, ready: 4 }, { songs: 4, ready: 2 }, { songs: 4, ready: 0 }, { songs: 0, ready: 0 }, { songs: 4, ready: 4, playing: true }]) {
+      const text = presenterSummary(numbers);
+      expect(text).not.toMatch(/playlist/i);
+      expect(text).not.toMatch(/\.$/);
+      expect(text.length).toBeLessThanOrEqual(30);
+    }
   });
 });

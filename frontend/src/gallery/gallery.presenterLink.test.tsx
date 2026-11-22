@@ -18,7 +18,43 @@ describe("the Presenter Link states", { timeout: 60000 }, () => {
   it("lists every state, as the task names them", () => {
     draw();
     const ids = Array.from(document.querySelectorAll('[data-group="presenter-link"] [data-sample]')).map((node) => node.getAttribute("data-sample")?.replace("presenter-link-", ""));
-    expect(ids).toEqual(["no-playlists", "options", "end-of-playlist", "no-sections", "two-headers", "names", "playback", "mixed", "no-songs", "playback-stopped", "pick-one", "picked", "picked-by-name", "statuses", "playing", "swap", "previewing", "progress", "result", "result-differs", "result-stopped", "result-names", "live", "library", "try-again", "this-computer", "not-ready"]);
+    expect(ids).toEqual(["closed-ready", "closed-some", "closed-none", "closed-playing", "closed-no-songs", "open", "forced-preview", "forced-importing", "forced-finished", "no-playlists", "options", "end-of-playlist", "no-sections", "two-headers", "names", "playback", "mixed", "no-songs", "playback-stopped", "pick-one", "picked", "picked-by-name", "statuses", "playing", "swap", "previewing", "progress", "result", "result-differs", "result-stopped", "result-names", "live", "library", "try-again", "this-computer", "not-ready"]);
+  });
+
+  it("the fold: every closed state is folded and says whether the songs can be imported; the others are open for what they show", async () => {
+    draw();
+    const toggleOf = (id: string) => within(sample(id)).getByRole("button", { name: /^Presenter Link/ });
+    const summaryOf = (id: string) => within(sample(id)).getByTestId("presenter-link-summary");
+    await waitFor(() => expect(summaryOf("closed-some")).toHaveTextContent("3 of 4 songs can be imported"), WAIT);
+    for (const [id, words] of [["closed-ready", "4 songs ready to import"], ["closed-none", "No songs can be imported"], ["closed-playing", "Not while a song plays"], ["closed-no-songs", "No songs in the plan"]] as const) {
+      await waitFor(() => expect(summaryOf(id)).toHaveTextContent(words), WAIT);
+    }
+    for (const id of ["closed-ready", "closed-some", "closed-none", "closed-playing", "closed-no-songs"]) {
+      expect(toggleOf(id), id).toHaveAttribute("aria-expanded", "false");
+      expect(sample(id).querySelector("[data-part=region]"), id).toHaveAttribute("data-state", "closed");
+    }
+    // The states that show the body start from the remembered open flag.
+    for (const id of ["no-playlists", "options", "playback", "result"]) expect(toggleOf(id), id).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("opened with the heading: the body is open and the header line stays", async () => {
+    draw();
+    await waitFor(() => expect(within(sample("open")).getByRole("button", { name: /^Presenter Link/ })).toHaveAttribute("aria-expanded", "true"), WAIT);
+    expect(within(sample("open")).getByTestId("presenter-link-summary")).toHaveTextContent("4 songs ready to import");
+    await waitFor(() => expect(within(sample("open")).getByLabelText("Section")).toHaveValue("Worship"), WAIT);
+  });
+
+  it("folded, then the work arrives: the section opens by itself and the header says what it is doing", async () => {
+    draw();
+    await waitFor(() => expect(within(sample("forced-preview")).getByTestId("add-songs-preview")).toBeInTheDocument(), WAIT);
+    expect(within(sample("forced-preview")).getByRole("button", { name: /^Presenter Link/ })).toHaveAttribute("aria-expanded", "true");
+    expect(within(sample("forced-preview")).getByTestId("presenter-link-summary")).toHaveTextContent("1 can't be imported yet");
+    await waitFor(() => expect(within(sample("forced-importing")).getByTestId("add-songs-progress")).toBeInTheDocument(), WAIT);
+    expect(within(sample("forced-importing")).getByRole("button", { name: /^Presenter Link/ })).toHaveAttribute("aria-expanded", "true");
+    expect(within(sample("forced-importing")).getByTestId("presenter-link-summary")).toHaveTextContent("Importing\u2026");
+    await waitFor(() => expect(within(sample("forced-finished")).getByTestId("add-songs-result")).toBeInTheDocument(), WAIT);
+    expect(within(sample("forced-finished")).getByRole("button", { name: /^Presenter Link/ })).toHaveAttribute("aria-expanded", "true");
+    expect(within(sample("forced-finished")).getByTestId("presenter-link-summary")).toHaveTextContent("Done: 4 added");
   });
 
   it("no playlists yet: nothing to choose, the button off with its reason", async () => {
@@ -168,7 +204,7 @@ describe("the Presenter Link states", { timeout: 60000 }, () => {
 
   it("previewing, progress, result, the refusal and the library instruction are each reached by pressing the button", async () => {
     draw();
-    await waitFor(() => expect(within(sample("previewing")).getByRole("button", { name: /Importing/ })).toBeDisabled(), WAIT);
+    await waitFor(() => expect(within(sample("previewing")).getByRole("button", { name: /^Importing/ })).toBeDisabled(), WAIT);
     await waitFor(() => expect(within(sample("progress")).getByTestId("add-songs-progress")).toBeInTheDocument(), WAIT);
     await waitFor(() => expect(within(sample("result")).getByTestId("add-songs-result")).toHaveAttribute("data-outcome", "done"), WAIT);
     expect(within(sample("result")).getByTestId("add-songs-result").querySelector("h3")).toHaveTextContent("Done: 4 added");

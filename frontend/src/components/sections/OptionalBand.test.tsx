@@ -51,4 +51,36 @@ describe("OptionalBand", () => {
     await user.tab();
     expect(document.activeElement).toHaveTextContent("Scan");
   });
+
+  it("can start folded (defaultOpen={false}) and a saved choice wins over the default", () => {
+    const { unmount } = render(band({ defaultOpen: false }));
+    expect(screen.getByRole("button", { name: /Song order/ })).toHaveAttribute("aria-expanded", "false");
+    unmount();
+    window.localStorage.setItem("test.band", "true");
+    render(band({ defaultOpen: false }));
+    expect(screen.getByRole("button", { name: /Song order/ })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("forceOpen opens a folded band without touching what the person chose, and tells the page what the toggle asked for", async () => {
+    const user = userEvent.setup();
+    const asked: boolean[] = [];
+    const { container, rerender } = render(band({ defaultOpen: false, forceOpen: true, onOpenChange: (next) => asked.push(next) }));
+    const toggle = () => screen.getByRole("button", { name: /Song order/ });
+    const body = () => container.querySelector("[data-part=region]") as HTMLElement;
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(body().firstElementChild).not.toHaveAttribute("inert");
+    expect(window.localStorage.getItem("test.band")).toBeNull();
+    // Pressed while forced open: the page is told it was a request to close; the band stays open while it is forced.
+    await user.click(toggle());
+    expect(asked).toEqual([false]);
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    // Not forced any more: the person's own choice (the toggle's last press: closed) shows, nothing closed by itself before.
+    rerender(band({ defaultOpen: false, forceOpen: false, onOpenChange: (next) => asked.push(next) }));
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("takes the Presentation tint", () => {
+    const { container } = render(band({ tone: "presentation" }));
+    expect(container.firstElementChild?.className).toContain("bg-integration-presentation-soft/5");
+  });
 });
