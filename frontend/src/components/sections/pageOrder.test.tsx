@@ -66,8 +66,9 @@ describe("every configuration page follows PanelLayout's order", () => {
     await waitFor(() => expect(panel.querySelector("[data-section=connection]")).not.toBeNull());
     const parts = partsOf(panel);
     expectPanelOrder(parts);
-    // The Presenter Link section (the page's own content) comes after the actions and before the Save bar, with the Link ready.
-    expect(parts).toEqual(["connection", "settings", "actions", "content", "saveBar", "summary"]);
+    // Refresh sits inside the Timer field, so the page has no actions slot of its own (and draws no empty band for it). The Presenter Link
+    // section (the page's own content) comes after the settings and before the Save bar, with the Link ready.
+    expect(parts).toEqual(["connection", "settings", "content", "saveBar", "summary"]);
   });
 
   it("Services (Planning Center)", () => {

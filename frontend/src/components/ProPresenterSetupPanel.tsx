@@ -251,7 +251,20 @@ export function ProPresenterSetupPanel({
       settings={(
         <>
           <SettingsSection busy={busy} columns="pair">
-            <Field error={errTimer} heldChange={held.timer} label="Timer">
+            <Field
+              action={(
+                // The button belongs to the Timer box (it reads the timers and Looks again), so it sits right under it, in this column.
+                <ActionRow
+                  note={changeCount > 0 ? "Refresh uses the saved settings. Save configuration first to try the new ones." : undefined}
+                  noteId="propresenter-test-saved-note"
+                >
+                  <ActionButton aria-describedby={changeCount > 0 ? "propresenter-test-saved-note" : undefined} busy={pendingOperation === "refresh"} busyLabel="Refreshing…" disabled={disabled || busy} label="Refresh timers and Looks" onClick={onRefreshTimers} tone="presentation" />
+                </ActionRow>
+              )}
+              error={errTimer}
+              heldChange={held.timer}
+              label="Timer"
+            >
               <Select aria-label="Timer" onChange={(event) => setTimerName(event.target.value)} placeholder={CHOOSE_TIMER} value={timerName}>
                 {savedTimer && !timers.some((timer) => timer.name === savedTimer) && <option value={savedTimer}>{savedTimer}{UNAVAILABLE}</option>}
                 {timers.map((timer) => (
@@ -281,14 +294,6 @@ export function ProPresenterSetupPanel({
         </>
       )}
       content={link ? <PresenterLinkSection library={library} link={link} plan={plan} playing={playing} /> : undefined}
-      actions={(
-        <ActionRow
-          note={changeCount > 0 ? "Refresh uses the saved settings. Save configuration first to try the new ones." : undefined}
-          noteId="propresenter-test-saved-note"
-        >
-          <ActionButton busy={pendingOperation === "refresh"} busyLabel="Refreshing…" disabled={disabled || busy} label="Refresh timers and Looks" onClick={onRefreshTimers} tone="presentation" />
-        </ActionRow>
-      )}
       notices={blockedReason ? <SectionNotice id="propresenter-save-blocked" tone="info" variant="line">{blockedReason}</SectionNotice> : undefined}
       saveBar={<SaveBar onDiscard={discard} onRetry={save} onSave={save} state={saveState} />}
       summary={(

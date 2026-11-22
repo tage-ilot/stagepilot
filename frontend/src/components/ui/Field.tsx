@@ -11,6 +11,8 @@ export interface FieldProps {
   heldChange?: boolean;
   /** Something that belongs right beside the label, not inside it (a `?` help button). */
   labelExtra?: ReactNode;
+  /** A button that belongs to this one control and sits right under it (Presentation's `Refresh timers and Looks` under Timer): an `ActionRow` with its `ActionButton`. Drawn after the hint and the error, one `gap-1.5` below the control, so it stays in this column whatever the neighbouring field's height. */
+  action?: ReactNode;
   className?: string;
   children: ReactNode;
 }
@@ -18,9 +20,9 @@ export interface FieldProps {
 /**
  * Label above, control, hint, then error. Wiring uses a small context (simpler than a render prop):
  * Input and Select inside a Field pick up id, aria-describedby, aria-invalid and the held border.
- * Field clones nothing. Place exactly one control inside.
+ * Field clones nothing. Place exactly one control inside. An `action` (one button of its own, with its note) sits under all of that.
  */
-export function Field({ label, hint, error, heldChange = false, labelExtra, className, children }: FieldProps) {
+export function Field({ label, hint, error, heldChange = false, labelExtra, action, className, children }: FieldProps) {
   const uid = useId();
   const id = `${uid}-control`;
   const hintId = hint ? `${uid}-hint` : undefined;
@@ -55,6 +57,7 @@ export function Field({ label, hint, error, heldChange = false, labelExtra, clas
             {error}
           </p>
         )}
+        {action && <div className="min-w-0" data-part="action">{action}</div>}
       </div>
     </FieldContext.Provider>
   );
