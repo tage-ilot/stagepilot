@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 describe("the Presenter Link section in the ProPresenter panel", () => {
-  it("sits after the settings and the Refresh row, below the Live Link block, and before the Save bar and the summary", async () => {
+  it("sits after the settings (Refresh is inside them, under Timer), below the Live Link block, and before the Save bar and the summary", async () => {
     const { container } = panel();
     await screen.findByRole("option", { name: "Sunday Morning Service" });
     const body = container.querySelector("[data-panel-body]")!;
@@ -39,7 +39,7 @@ describe("the Presenter Link section in the ProPresenter panel", () => {
     const live = screen.getByRole("region", { name: "ProPresenter Live Link" });
     const link = screen.getByTestId("presenter-link-section");
     expect(parts[0]).toBe(live);
-    expect(parts.indexOf(link)).toBeGreaterThan(parts.findIndex((part) => part.matches("[data-section=actions]")));
+    expect(parts.indexOf(link)).toBeGreaterThan(parts.findIndex((part) => part.matches("[data-section=settings]")));
     expect(before(screen.getByRole("button", { name: "Refresh timers and Looks" }), link)).toBe(true);
     expect(before(link, screen.getByRole("button", { name: "Save configuration" }))).toBe(true);
     expect(before(link, container.querySelector("[data-section=summary]")!)).toBe(true);

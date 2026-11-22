@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Frame } from "./Gallery";
@@ -25,7 +25,7 @@ describe("the section gallery: configuration pages", () => {
     expect(ids("page-playback")).toEqual(["api-open", "api-closed", "midi", "midi-held"]);
     expect(ids("page-lighting")).toEqual(["osc", "midi", "midi-held", "midi-busy", "timeline-closed"]);
     expect(ids("page-remote")).toEqual(["connected", "persisted-open", "persisted-closed", "bootstrap", "confirm-disable", "confirm-regenerate", "error", "read-only"]);
-    expect(ids("template-settings")).toEqual(["clean", "title", "held", "error", "busy", "columns-standard", "columns-inset", "columns-pair", "columns-triple", "columns-lead", "columns-single", "boxed"]);
+    expect(ids("template-settings")).toEqual(["clean", "title", "held", "error", "busy", "columns-standard", "columns-inset", "columns-pair", "columns-triple", "columns-lead", "columns-single", "field-action", "boxed"]);
     expect(ids("template-actions")).toEqual(["idle", "busy", "disabled", "primary"]);
     expect(ids("template-summary")).toEqual(["list-ok", "list-warn", "list-four", "cards", "cards-danger"]);
     expect(ids("template-notices")).toEqual(["boxes", "title-actions", "group", "lines"]);
@@ -39,6 +39,11 @@ describe("the section gallery: configuration pages", () => {
     // The Live Link block, the settings pair (Timer and Look), the actions, the Presenter Link band (it starts folded; inside: its own options, its song cards with no header row over them, and its button row), then the summary.
     expect(sections).toEqual(["connection", "settings", "actions", "band", "settings", "actions", "summary"]);
     expect(clean.querySelector("[data-panel-body]")).toBeInTheDocument();
+    // Refresh is the first of those "actions": it is inside the Timer column of the settings pair, so the panel has no actions row between the pair and the Presenter Link.
+    const refresh = clean.querySelector("[data-section=actions]")!;
+    expect(refresh.closest("[data-field]")).toContainElement(within(clean).getByRole("combobox", { name: "Timer" }));
+    expect(refresh.closest("[data-section=settings]")).not.toBeNull();
+    expect(Array.from(clean.querySelector("[data-panel-body]")!.children).map((part) => part.getAttribute("data-section"))).not.toContain("actions");
     await waitFor(() => expect(sample("page-presentation-held").querySelectorAll("[data-held-marker]").length).toBeGreaterThanOrEqual(2), WAIT);
     await waitFor(() => expect(Array.from(sample("page-presentation-error").querySelectorAll("[role=alert]")).some((node) => /Enter a host\./.test(node.textContent ?? ""))).toBe(true), WAIT);
     // Busy: the section disables every control; the button says why in words.

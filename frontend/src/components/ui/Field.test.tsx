@@ -61,6 +61,20 @@ describe("Field", () => {
     expect(screen.queryByText("Not saved yet")).toBeNull();
   });
 
+  it("draws an action under the control, the hint and the error, in its own part, and nothing without one", () => {
+    const { container, rerender } = render(<Field action={<button type="button">Refresh</button>} error="Pick one" hint="Hint" label="Timer"><Select><option>A</option></Select></Field>);
+    const field = container.querySelector("[data-field]")!;
+    expect(field.lastElementChild).toHaveAttribute("data-part", "action");
+    expect(field.lastElementChild).toContainElement(screen.getByRole("button", { name: "Refresh" }));
+    const control = screen.getByLabelText("Timer");
+    for (const after of [screen.getByText("Hint"), screen.getByRole("alert")]) expect(control.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("alert").compareDocumentPosition(screen.getByRole("button", { name: "Refresh" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The action is not part of the control's description and never changes its wiring.
+    expect(control.getAttribute("aria-describedby")!.split(" ")).toHaveLength(2);
+    rerender(<Field label="Timer"><Select><option>A</option></Select></Field>);
+    expect(container.querySelector("[data-part=action]")).toBeNull();
+  });
+
   it("gives separate Fields separate ids", () => {
     render(<><Field label="A"><Input /></Field><Field label="B"><Input /></Field></>);
     expect(screen.getByLabelText("A").id).not.toBe(screen.getByLabelText("B").id);

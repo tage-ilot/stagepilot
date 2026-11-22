@@ -4,6 +4,7 @@
 
 ### Changed
 
+- **On the Presentation page the Refresh button now sits right under the Timer box.**
 - **The Presenter Link section now folds, starts folded, and its header says whether the songs can be imported.**
 
 ### Fixed

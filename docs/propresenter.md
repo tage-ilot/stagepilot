@@ -260,8 +260,8 @@ Live Link blocks, in the same spacing. It is built like them: a title, two pills
 `Presenter Link: Connected`) and one polite line that says both in words, a dot and words, never colour alone. It holds the
 **connection**, like the other two blocks do: under the two status lines, **Host** and **API** (the port of ProPresenter's network API); **Host** is the address box every Live Link block has (type any address, or open its arrow for the computers the last search found, under **Found**, and the ones that worked before, under **Recent**) and the
 same two buttons every Live Link block ends its row with, **Search** and **Connect**; under those, the Presenter Link's setup box when there is one. What follows the block, in this order, is not the
-connection: **Timer** and **Look** side by side on one line (stacked on a phone), **Refresh timers and Looks**, the note that Refresh uses the
-saved settings, the **Presenter Link** section (below; only while the Presenter Link is Ready), the Save bar, and the summary. A changed Host or API is marked `Not saved yet`
+connection: **Timer** and **Look** side by side on one line (stacked on a phone), with **Refresh timers and Looks** and the note that Refresh uses the
+saved settings right under the Timer box (in its column, never under the taller Look box), the **Presenter Link** section (below; only while the Presenter Link is Ready), the Save bar, and the summary. A changed Host or API is marked `Not saved yet`
 (in words, with the warning border) and is saved by **Save configuration**, or by **Connect**, which saves the connection (Host and API only) and connects the way Save does;
 with ProPresenter saved and nothing held in those two boxes, **Connect** only checks the saved connection again and the status line says `Checked again.` The two names are exactly **ProPresenter API** and **Presenter Link**; they are written once in the code
 (`proPresenterLinkState.ts`). macOS still lists the little app that runs the Presenter Link as "ProPresenter Link" in System Settings.

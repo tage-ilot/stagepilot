@@ -25,6 +25,13 @@ describe("DESIGN.md §6.6 and CONTRIBUTING.md", () => {
     }
   });
 
+  it("documents the Field action slot (a button under one field) beside SettingsSection, and says the actions slot then draws nothing", () => {
+    expect(read("../src/components/ui/Field.tsx")).toMatch(/action\?: ReactNode/);
+    expect(section).toMatch(/\| `SettingsSection` \| [^\n]*`Field` may carry an `action`/);
+    expect(section).toContain("`Field`'s `action`");
+    expect(section).toContain("draws nothing");
+  });
+
   it("says the parts the task asked for: the order of a panel, a worked example, a design change, the gallery, the guard", () => {
     for (const heading of ["**The order of a configuration page (`PanelLayout`)", "**How to add a connection**", "**How to make a design change to one section type.**", "**The guard.**", "**The section gallery**", "Last built from"]) {
       expect(section, heading).toContain(heading);

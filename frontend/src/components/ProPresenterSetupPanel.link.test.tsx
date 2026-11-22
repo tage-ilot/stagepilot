@@ -39,7 +39,7 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
     expect(before(header, block())).toBe(true);
   });
 
-  it("DOM order: header, alerts, block, Timer, Look, Refresh, the note, Save bar, summary list", async () => {
+  it("DOM order: header, alerts, block, Timer, Refresh, the note, Look, Save bar, summary list", async () => {
     const { container } = panel(linkController(helperStatus("ready")), { message: "Saved." });
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "192.0.2.10" } });
     const order = [
@@ -47,9 +47,9 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
       screen.getByText("Saved."),
       block(),
       screen.getByRole("combobox", { name: "Timer" }),
-      screen.getByRole("combobox", { name: "Look" }),
       screen.getByRole("button", { name: "Refresh timers and Looks" }),
       screen.getByText(/Refresh uses the saved settings/),
+      screen.getByRole("combobox", { name: "Look" }),
       screen.getByRole("button", { name: "Save configuration" }),
       container.querySelector("dl")!,
     ];
@@ -123,7 +123,7 @@ describe("ProPresenterSetupPanel: the Live Link block is where the other setup p
 });
 
 describe("ProPresenterSetupPanel: tab order follows the new visual order", () => {
-  it("Host, API, Scan, Connect, the Details button, then Timer, Look, Refresh, Save", async () => {
+  it("Host, API, Scan, Connect, the Details button, then Timer, Refresh, Look, Save", async () => {
     const user = userEvent.setup();
     // The Presenter Link section starts folded (its body is not tabbable then); here the person has opened it.
     window.localStorage.setItem(PRESENTER_LINK_OPEN_KEY, "true");
@@ -138,7 +138,7 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
     }
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
       "Host", "ProPresenter API port", "Search", "Connect", "Presenter Link setup",
-      "Timer", "Look", "Refresh timers and Looks",
+      "Timer", "Refresh timers and Looks", "Look",
       // The Presenter Link section sits between the settings and the Save bar: its toggle (heading and header line), then the body (it has no list to tick without a plan).
       "Presenter LinkNo songs in the plan", "Playlist",
       "Save configuration",

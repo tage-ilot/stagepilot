@@ -28,6 +28,12 @@ export const settingsTemplates: SampleState[] = [
   { id: "error", label: "Settings: error", look: "The red border and the sentence under the control (role alert).", render: () => inPanel("lighting", <SettingsSection>{fields(false, true)}</SettingsSection>) },
   { id: "busy", label: "Settings: busy", look: "Every control inside is disabled by the section, with no page passing disabled.", render: () => inPanel("playback", <SettingsSection busy>{fields()}</SettingsSection>) },
   ...COLUMNS.map(([columns, words]): SampleState => ({ id: `columns-${columns}`, label: `Settings: columns "${columns}"`, look: `${words}. Follows the width of the panel it is in.`, render: () => inPanel("midi", <SettingsSection columns={columns}>{fields().props.children.slice(0, columns === "pair" ? 2 : columns === "triple" || columns === "lead" ? 3 : 4)}</SettingsSection>) })),
+  { id: "field-action", label: "Settings: a button under one field", look: "A pair: the second field has a two-line hint; the button of the first (with its note) sits right under its box, in its own column, with no blank band. One column on a phone: box, its button, then the other field.", render: () => inPanel("presentation", (
+    <SettingsSection columns="pair">
+      <Field action={<ActionRow note="The note stays next to the button." noteId="gallery-field-action-note"><ActionButton aria-describedby="gallery-field-action-note" label="Refresh timers and Looks" onClick={noop} tone="presentation" /></ActionRow>} label="Timer"><Select defaultValue="a"><option value="a">Song Countdown (current)</option></Select></Field>
+      <Field hint="Selecting a Look does not change Presentation until you save these settings." label="Look"><Select defaultValue="a"><option value="a">Worship (current)</option></Select></Field>
+    </SettingsSection>
+  )) },
   { id: "boxed", label: "Settings: boxed group", look: "One bordered box (the two Remote-access groups); any fields or lines inside.", render: () => inPanel("backend", <SettingsSection aria-label="Example group" boxed columns="single">{fields().props.children.slice(0, 2)}</SettingsSection>) },
 ];
 
