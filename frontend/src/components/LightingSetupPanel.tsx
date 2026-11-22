@@ -26,6 +26,7 @@ import {
   type ClearCuesRequest,
 } from "./lightingCueConfirmations";
 import { ClearCuesDialog } from "./ClearCuesDialog";
+import { serviceCueText } from "./lightingCueCount";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
@@ -567,17 +568,11 @@ export function LightingSetupPanel({
     document.getElementById(`look-row-${focusId}`)?.scrollIntoView?.({ block: "nearest" });
   }, [focusId]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownCues = method === "osc" ? [...listedEffects, ...listedOsc] : listedMidi;
-  const songsWithCues = Object.values(settings?.settings.lights.cue_maps ?? {}).filter(
-    (map) => (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)) > 0,
-  ).length;
-  const cueTotal = Object.values(settings?.settings.lights.cue_maps ?? {}).reduce(
-    (total, map) => total + (method === "osc" ? (map.osc_cues?.length ?? 0) : (map.cues?.length ?? 0)),
-    0,
-  );
   const activePads = pads.filter((pad) => pad.method === method).length;
   // The line under the title, shown open or closed: what is in here, so the closed card still tells the story.
   const timelineDetail = [
-    cueTotal === 0 ? "No cues yet" : `${formatCount(cueTotal)} cue${cueTotal === 1 ? "" : "s"} on ${songsWithCues} of ${songs.length} song${songs.length === 1 ? "" : "s"}`,
+    // Only this service's songs count, found by the same key as the song cards (a saved map of an older service's song does not).
+    serviceCueText(songs.map(songKey), cueMaps, method, formatCount),
     `${activePads} pad${activePads === 1 ? "" : "s"}`,
     selectedSong && selectedSong.duration_seconds != null ? `${selectedSong.title} ${formatElapsed(selectedSong.duration_seconds)}` : null,
     selectedSong && songMapLibrary?.bpm != null ? bpmText(songMapLibrary.bpm) : null,
