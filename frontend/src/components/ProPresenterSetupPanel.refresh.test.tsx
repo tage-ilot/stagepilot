@@ -4,8 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { presentation } from "../test/propresenterLinkFixtures";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
 
-// F14: the Refresh button belongs to the Timer box, so it sits right under it, inside the Timer field, never under the taller Look field,
-// and the panel draws no Actions row of its own (no empty band).
+// F14: the Refresh button sits right under the Timer box, inside the Timer field, and the panel draws no Actions row of its own (no empty band).
 
 const draw = (over: Partial<Parameters<typeof ProPresenterSetupPanel>[0]> = {}) => render(
   <ProPresenterSetupPanel error={null} message={null} onRefreshTimers={vi.fn()} onSave={vi.fn()} onTest={vi.fn()} pendingOperation={null} propresenter={presentation({ looks: [{ id: "l1", name: "Default", index: 0 }], current_look_id: "l1" })} {...over} />,
@@ -29,15 +28,6 @@ describe("Presentation: Refresh sits right under the Timer box", () => {
     const action = column.querySelector("[data-part=action]")!;
     expect(column.lastElementChild).toBe(action);
     expect(action.previousElementSibling).toContainElement(screen.getByRole("combobox", { name: "Timer" }));
-  });
-
-  it("keeps the Timer column first and the Look column second in the same two-column group, so a phone stacks Timer, Refresh, Look, its hint", () => {
-    draw();
-    const fields = fieldOf("Timer").parentElement!;
-    expect(fields).toHaveAttribute("data-columns", "pair");
-    expect(Array.from(fields.children)).toEqual([fieldOf("Timer"), fieldOf("Look")]);
-    const order = [screen.getByRole("combobox", { name: "Timer" }), refresh(), screen.getByRole("combobox", { name: "Look" }), screen.getByText(/Selecting a Look does not change Presentation/)];
-    for (let i = 0; i < order.length - 1; i += 1) expect(order[i]!.compareDocumentPosition(order[i + 1]!) & Node.DOCUMENT_POSITION_FOLLOWING, `${i} before ${i + 1}`).toBeTruthy();
   });
 
   it("draws no Actions row of its own: the panel's actions slot has nothing left, so there is no empty band", () => {

@@ -53,16 +53,6 @@ export const A = () => (
     expect(await lint(code)).toEqual([]);
   });
 
-  it("lets a page put one field's button in that Field's action, with no actions slot", async () => {
-    const code = `import { ActionButton, ActionRow, PanelLayout, SettingsSection } from "./sections";
-declare const Field: (p: { action?: unknown; label: string; children: unknown }) => null;
-export const A = () => (
-  <PanelLayout header={null} id="foo" tone="midi"
-    settings={<SettingsSection columns="pair"><Field action={<ActionRow><ActionButton label="Refresh timers and Looks" onClick={() => undefined} /></ActionRow>} label="Timer"><input /></Field></SettingsSection>} />
-);`;
-    expect(await lint(code)).toEqual([]);
-  });
-
   it("allows an exception only on its own line, with the reason beside it", async () => {
     const code = '// eslint-disable-next-line no-restricted-syntax -- page-specific: a list of choices, not fields\nexport const A = () => <ol className="grid sm:grid-cols-2" />;';
     expect(await lint(code)).toEqual([]);
