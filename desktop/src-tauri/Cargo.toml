@@ -15,6 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+stagepilot-core = { path = "../../crates/stagepilot-core" }
 stagepilot-server = { path = "../../crates/stagepilot-server" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
