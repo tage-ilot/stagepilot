@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **The Lighting timeline header now counts only the songs of the service on screen, so it can no longer say "6 of 4 songs".**
 - **Album covers now show in the Mac and Windows app, and a song without a picture shows a placeholder so the titles line up.**
 - **The colored section bar now spans the whole song card in the Presenter Link and Lighting lists on the Mac app.**
 - **The Playback waveform now shows for songs that Playback stores under a different content number (about one in nine songs).** The Library Link is now version 0.4.1; StagePilot updates it by itself when nothing is playing.
