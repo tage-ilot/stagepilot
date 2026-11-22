@@ -2,18 +2,21 @@
 
 ## [Unreleased]
 
-### Changed
+## [2.44.1] - 2026-11-22
 
-- **On the Presentation page the Refresh button now sits right under the Timer box.**
-- **The Presenter Link section now folds, starts folded, and its header says whether the songs can be imported.**
+StagePilot 2.44.1 is a small update to 2.44.0 that fixes four things you could see and tidies two pages.
 
 ### Fixed
 
-- **The Lighting timeline header now counts only the songs of the service on screen, so it can no longer say "6 of 4 songs".**
-- **Album covers now show in the Mac and Windows app, and a song without a picture shows a placeholder so the titles line up.**
-- **The colored section bar now spans the whole song card in the Presenter Link and Lighting lists on the Mac app.**
-- **The Playback waveform now shows for songs that Playback stores under a different content number (about one in nine songs).** The Library Link is now version 0.4.1; StagePilot updates it by itself when nothing is playing.
-- **A song that has no waveform in Playback is no longer reported as "The Playback computer did not answer."** The timeline shows the arrangement bar alone, as before.
+- **Album covers show in the Mac and Windows app.** The app was blocking them, which left an empty gap before each title. A song without a picture now shows a small placeholder so the titles line up.
+- **The Playback waveform shows for more songs.** About one song in nine, such as Been So Good, was stored under a different content number and never showed its waveform. The Library Link is now version 0.4.1, and StagePilot updates it by itself when nothing is playing. A song that really has no waveform no longer says "The Playback computer did not answer."
+- **The colored section bar spans the whole song card** in the Presenter Link and Lighting lists on the Mac app.
+- **The Lighting timeline header counts only the songs of the service on screen,** so it can no longer say "6 of 4 songs".
+
+### Changed
+
+- **The Presenter Link section folds, starts folded,** and its header says whether the songs can be imported.
+- **On the Presentation page the Refresh button sits right under the Timer box.**
 
 ## [2.44.0] - 2026-11-20
 
