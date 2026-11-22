@@ -64,9 +64,29 @@ prompt. Later updates should show none.
 
 | Prompt | Status |
 | --- | --- |
-| Login Keychain password (Planning Center secrets) | Once per new identity; reads are minimized (none when Planning Center is not configured, one per launch otherwise). |
+| Login Keychain password (saved secrets) | Once per new identity for each of the two vault items (one for the backend, one for the desktop shell); reads are minimized (none when Planning Center is not configured, one per launch otherwise). See *One keychain item per process*. |
 | Local Network access | Granted per executable; with a single executable and a stable identity it survives updates. Scan now detects and explains a refusal; see `playback-api.md`. |
 | Gatekeeper first open | Unavoidable without Developer ID. Right-click **Open** once. |
+
+### One keychain item per process
+
+On the Mac, StagePilot keeps its saved secrets in one keychain item per process instead of one per
+secret, because macOS asks again for every item the first time a new build touches it. The backend
+uses the item `vault` under the service `StagePilot` (the Planning Center secret and sign-in, the
+Playback Library Link key and the ProPresenter Link key); the desktop shell uses its own item
+`vault` under `org.stagepilot.desktop.remote` (the remote-access credentials). Each is a small
+JSON object of account to secret, read once per launch and written whole when a secret changes.
+The first time an account is needed, its old per-account item is read once (one prompt, only for
+items that exist) and copied into the vault; the copy is read back and compared before it counts.
+**The old items are left in place and never deleted automatically**, so an older StagePilot still
+finds them after a rollback. That older app sees the value the old item had when it was copied, not
+a token saved or removed later: a secret saved, replaced or removed in the new app changes the
+vault only. A secret removed in the new app stays in its old item until you delete it in Keychain
+Access, and the vault records the removal so it does not come back. A vault that cannot be read as
+JSON is never overwritten: saved secrets are still read from the old items, and saving or removing
+one fails with the usual "could not be saved" message until the item is fixed or deleted in
+Keychain Access. While a keychain prompt is open, other requests to the same item wait for it.
+Windows and Linux keep one item per account.
 
 ### While a prompt waits
 
