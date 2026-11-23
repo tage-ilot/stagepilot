@@ -39,4 +39,18 @@ describe("SongCardShell", () => {
     expect(card.tagName).toBe("DIV");
     expect(card).toHaveClass("flex-col", "items-stretch");
   });
+
+  it("a button beside the card sits in its corner over the card, so the bar still runs the whole width", async () => {
+    const onClear = vi.fn();
+    render(<ul><SongCardShell after={<button aria-label="Clear" onClick={onClear} type="button">×</button>} label="Holy Forever" look={SONG_CARD_LOOK.plain}>{body}</SongCardShell></ul>);
+    const button = screen.getByRole("button", { name: "Holy Forever" });
+    const corner = screen.getByRole("button", { name: "Clear" }).parentElement as HTMLElement;
+    expect(corner).toHaveClass("absolute", "right-0", "top-0");
+    expect(button.parentElement).toContainElement(corner);
+    expect(button).not.toContainElement(corner);
+    expect(button).toHaveClass("flex-1", "[&>span:first-child]:pr-9");
+    expect(screen.getByTestId("library-bar").parentElement).toBe(button);
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
 });

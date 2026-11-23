@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **The colored bar on the Lighting song cards runs the whole width of the card.** The × (clear cues) used to take a column of its own beside the card, so the bar stopped short of it. The × now sits in the card's top right corner, over the card, and the bar runs underneath it.
 - **Busy songs no longer replay jagged in Lightkey.** The replay sent at most 200 lighting messages a second, one UDP packet each 5 ms apart, so a busy song (a recording with many colour fades at once) got only 5 to 7 updates for a fade that should have 20 or more, and its lights moved in steps. The limit is now 2,500 messages a second (Lightkey was measured clean up to 4,900 on the rig), ramps and loops are looked at 40 times a second instead of 20, and everything one tick has due leaves at once in OSC bundles of up to 16 messages. On the three Sunday songs a fading light now gets an update about every 25 ms where it got one every 55 to 135 ms (median) before. Looks and the first look of a song also leave at once instead of over half a second.
 
 ### Changed
