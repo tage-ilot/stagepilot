@@ -113,7 +113,7 @@ export interface SongCardShellProps {
   onActivate?: () => void;
   /** The body (`SongCardBody`). */
   children: ReactNode;
-  /** Buttons beside the card's own (Lighting's x). */
+  /** Buttons in the card's top right corner (Lighting's x); the bar under the title still runs the full width. */
   after?: ReactNode;
   /** The list item's own attributes (`data-*`, `title`). */
   item?: Omit<ComponentPropsWithoutRef<"li">, "className" | "children"> & DataAttributes;
@@ -127,15 +127,17 @@ export interface SongCardShellProps {
  */
 export function SongCardShell({ look, mode = "press", selected = false, disabled = false, label, describedBy, onActivate, children, after, item, under }: SongCardShellProps) {
   const check = mode === "check";
+  // Buttons beside the card sit in its top right corner, over the card, so the colored bar under the title runs the whole width of the card instead of stopping short of them; the title row leaves room for them.
+  const room = after ? " [&>span:first-child]:pr-9" : "";
   return (
     <li className={`relative flex min-w-0 items-stretch rounded-ds-lg border text-sm ${under ? "flex-wrap " : ""}${look} ${selected ? SELECTED : ""}`} {...item}>
-      {mode === "static" ? <div className={PRESSABLE.replace(" touch-manipulation", "")} data-part="card">{children}</div> : (
+      {mode === "static" ? <div className={PRESSABLE.replace(" touch-manipulation", "") + room} data-part="card">{children}</div> : (
         <button
           aria-checked={check ? selected : undefined}
           aria-describedby={describedBy}
           aria-label={label}
           aria-pressed={check ? undefined : selected}
-          className={check ? `${PRESSABLE} disabled:cursor-not-allowed` : PRESSABLE}
+          className={(check ? `${PRESSABLE} disabled:cursor-not-allowed` : PRESSABLE) + room}
           disabled={disabled || undefined}
           onClick={onActivate}
           role={check ? "checkbox" : undefined}
@@ -144,7 +146,7 @@ export function SongCardShell({ look, mode = "press", selected = false, disabled
           {children}
         </button>
       )}
-      {after}
+      {after && <span className="absolute right-0 top-0 flex" data-part="after">{after}</span>}
       {under && <div className="min-w-0 basis-full px-2.5 pb-2" data-part="under">{under}</div>}
     </li>
   );
