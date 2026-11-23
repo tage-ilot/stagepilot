@@ -166,7 +166,7 @@ describe("cluster chip", () => {
     ];
     render(<LightingTimeline markers={markers} onMove={vi.fn()} onRemove={vi.fn()} playhead={null} songLength={300} />);
     const cluster = screen.getByTestId("lighting-cluster");
-    expect(cluster).toHaveAccessibleName(/^3 cues \(2 Captured look, 1 Lightkey cue on\), 01:40 to 01:40\.4\. Zoom in$/);
+    expect(cluster).toHaveAccessibleName(/^3 cues \(2 Captured look, 1 Lightkey cue on\), 01:40 to 01:40\.4\. Select the first$/);
     expect(within(cluster).getByTestId("lighting-cluster-glyph")).toHaveTextContent("◆");
     expect(cluster.className).toContain("bg-surface-panel");
     expect(cluster.className).not.toContain("bg-cue-");

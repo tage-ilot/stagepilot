@@ -1174,7 +1174,7 @@ Drag a marker to move it (it snaps to 0.1 s and stays inside the song), or focus
 it and press the left or right arrow to move it 0.1 s (Shift: 1 s). Click or
 press Enter to open the small editor to set an exact time or delete the cue.
 Markers for the method that is not on screen are not drawn; those cues stay
-saved. On narrow widths the bar scrolls sideways, and **Zoom** changes its scale.
+saved. The bar is always as wide as the timeline: there is no sideways scrolling and no zoom.
 
 **What the page does not say (it used to, in four sentences under the Timeline header).** Cue times are elapsed from the
 song's start. Cues for the method that is not on screen stay saved. Changes save automatically. The timeline begins only
@@ -1196,7 +1196,7 @@ follow-along. Measured numbers are in the pull request that added this.
 
 When the Playback library is on (Playback API panel), the selected song is paired with a Playback song and the Playback computer has
 given current data, the arrangement bar appears on the timeline between the time ruler and the cue track, and the song's waveform
-is drawn behind the markers. They scroll and zoom together with the cues, so a marker is always under the part of the song it plays
+is drawn behind the markers. They always line up with the cues, so a marker is always under the part of the song it plays
 in. They are for looking only: you cannot click, drag or focus anything in them, and they change no cue, no look and nothing in
 Playback.
 
@@ -1281,7 +1281,7 @@ saved loudness until then.
 While Lightkey records a song, StagePilot can also measure how loud the room is and draw it as a faint
 filled envelope behind the song's look rows in the Lighting timeline (scaled to the song's own loudest
 moment, so it shows the shape of the song, not an absolute level). Markers stay on top and the picture
-zooms and scrolls with the timeline. A text alternative reads for example "Loudness: peak at 02:10".
+is always as wide as the timeline. A text alternative reads for example "Loudness: peak at 02:10".
 
 **Privacy.** Only loudness numbers are saved: one byte per 0.25 s window, about 1,000 numbers for a four
 minute song. Sound is measured the moment it arrives and thrown away. No audio is stored, written to disk
@@ -1394,7 +1394,7 @@ tritanopia to keep the colours apart.
 - Changing a captured row marks it **edited** (`edited` in the saved cue). With Record chosen, starting a recording on a song that has edited captured looks asks "Recording replaces this song's captured looks, including your edits" first. Deleting a whole captured row counts too: the backend sets `captured_edited` on the song's cue map for it.
 - **Fewer items.** Tick two or more rows (or Shift/Ctrl-click markers, drag across the empty track, or long-press a marker on touch) and press **Merge rows**: one row at the earliest time, latest value per address; it asks first if a value would change at an earlier time. Ramps merge only with ramps of the same length that start together and move different properties, and never with instant rows (the button is disabled and says why). There is no Simplify action in the app any more: a recording is already fitted, and the backend route (`POST /api/v1/lights/lightkey/simplify`) stays for old clients. Merge and Remove fixture each have one step of Undo until the next edit.
 - **Ramps and loops.** A row with `fade_seconds` is drawn as a bar from its start to start + duration (at least 4 px), the row list shows its duration (`+3.2 s`) and edits it (0 to 60 s, ending inside the song). A song's loops are bands on lanes under the timeline (at most three) and one expandable row each; selecting one shows its period, window, fixtures with phase offsets, properties and a one-cycle sparkline. A loop is never edited: removing it asks first and sends `remove_effect_ids` with the cue-map save (the only way a save changes loops).
-- **Density.** Markers closer than 14 px collapse into one numbered cluster (click, Enter or tap zooms in); the Zoom control goes up to 120 px/s. The cue list shows 40 rows per page; picking a marker jumps to its page.
+- **Density.** Markers closer than 14 px collapse into one numbered cluster (click, Enter or tap picks its first cue; the whole song is always in view, so there is no zoom). The cue list shows 40 rows per page; picking a marker jumps to its page.
 - The Lightkey strip reads "N captured items (R ramps/steps, E loops) on this song"; there is no Detail setting (the API still accepts `detail_level` and ignores it); the old list of takes is gone.
 
 ## Clearing cues
@@ -1456,7 +1456,7 @@ Auto re-record, anything it saves without being asked). The backend counts every
 status (`GET /api/v1/lights/lightkey`, which the Lightkey strip polls) and with every settings read. A window holding an
 older number reloads the settings once, 2 seconds after the first change of a burst, never two at a time and never when
 the number is unchanged (the settings can be tens of megabytes, so no timer asks). Unchanged parts keep their identity,
-so a row being typed, the selected song, an open dialog and the timeline's zoom and scroll stay as they are. A save
+so a row being typed, the selected song, an open dialog and the timeline's height stays as it is. A save
 from a screen that has not reloaded yet still carries the old song revision and gets 409 (see "Saving a song's cue
 map"); **Clear all songs…** sends each song's revision too. The Record prompt about replacing hand edits reads what
 the screen shows, so it is only as current as the screen.
@@ -1464,14 +1464,13 @@ the screen shows, so it is only as current as the screen.
 ### Song lighting timeline section
 
 One toolbar row when wide, wrapping on narrow screens, with every control 34 px tall (44 px on touch): Song menu and
-the following-live status, Add cue, Clear song…, Merge rows, Undo, then at the right Zoom (- / Fit / +) and
-timeline **Height** (S / M / Auto). The type-filter chips are on their own compact line, right aligned. The selected
+the following-live status, Add cue, Clear song…, Merge rows, Undo, then at the right the timeline **Height** (− / S / M / Auto / +). The type-filter chips are on their own compact line, right aligned. The selected
 cue's details are one compact strip under the timeline. The **Cue board** folds away; it starts open and remembers
 how you left it on this device.
 
 ### Timeline height
 
-**Auto** (the default) sizes the timeline from the number of stacked marker labels at the current zoom and clustering:
+**Auto** (the default) sizes the timeline from the number of stacked marker labels at the width of the timeline and its clustering:
 about 200 px with one or two rows, growing by 22 px per row up to 420 px, so finer recordings and more crowded zooms
 get taller. **S** (200 px) and **M** (320 px) are fixed and kept on this device. Labels sit in the top rows. The
 loudness waveform and the playhead start below the last label row, so they never draw over a label pill. The selected

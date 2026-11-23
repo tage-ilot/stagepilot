@@ -21,20 +21,16 @@ const rowsUsed = () => 1 + Math.max(0, ...screen.queryAllByTestId("lighting-mark
 const height = () => Number.parseInt(track().style.height, 10);
 
 describe("timeline toolbar", () => {
-  it("is one wrapping toolbar: the leading controls, then zoom and height on the right, then the type filter on its own line", () => {
+  it("is one wrapping toolbar: the leading controls, then the height on the right, then the type filter on its own line", () => {
     render(<LightingTimeline {...base} markers={[marker(1)]} toolbar={<button type="button">Add cue</button>} />);
     const bar = screen.getByRole("toolbar", { name: "Timeline tools" });
     expect(bar.className).toContain("flex-wrap");
     expect(within(bar).getByRole("button", { name: "Add cue" })).toBeInTheDocument();
-    const zoom = within(bar).getByRole("group", { name: "Timeline zoom" });
-    expect(within(zoom).getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
-    // At Fit it cannot zoom out any further, and says so.
-    expect(within(zoom).getByRole("button", { name: "Zoom out" })).toBeDisabled();
-    expect(within(zoom).getByRole("button", { name: "Zoom out" })).toHaveAccessibleDescription("The whole song is already in view.");
-    expect(within(zoom).getByRole("button", { name: "Fit" })).toBeInTheDocument();
-    expect(within(zoom).getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
-    expect(within(bar).getByRole("radiogroup", { name: "Timeline height" })).toBeInTheDocument();
-    expect(zoom.closest("[data-part=\"timeline-tools-end\"]")?.className).toContain("ml-auto");
+    expect(within(bar).queryByRole("group", { name: "Timeline zoom" })).toBeNull();
+    for (const name of ["Zoom out", "Fit", "Zoom in"]) expect(within(bar).queryByRole("button", { name })).toBeNull();
+    const height = within(bar).getByRole("group", { name: "Timeline height" });
+    expect(within(height).getByRole("radiogroup", { name: "Timeline height" })).toBeInTheDocument();
+    expect(height.closest("[data-part=\"timeline-tools-end\"]")?.className).toContain("ml-auto");
     const legend = screen.getByTestId("cue-legend");
     expect(bar.contains(legend)).toBe(false);
     expect(legend.className).toContain("justify-end");
@@ -42,16 +38,7 @@ describe("timeline toolbar", () => {
 
   it("every toolbar control is 34 px (44 on touch)", () => {
     render(<LightingTimeline {...base} markers={[marker(1)]} />);
-    for (const name of ["Zoom out", "Fit", "Zoom in"]) expect(screen.getByRole("button", { name }).className).toContain("!h-[34px]");
-  });
-
-  it("Fit returns to the fitted zoom", async () => {
-    render(<LightingTimeline {...base} markers={[marker(1)]} />);
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Zoom in" }));
-    expect(screen.getByRole("button", { name: "Fit" })).toHaveAttribute("aria-pressed", "false");
-    await user.click(screen.getByRole("button", { name: "Fit" }));
-    expect(screen.getByRole("button", { name: "Fit" })).toHaveAttribute("aria-pressed", "true");
+    for (const name of ["Make the timeline shorter", "Make the timeline taller"]) expect(screen.getByRole("button", { name }).className).toContain("!h-[34px]");
   });
 });
 

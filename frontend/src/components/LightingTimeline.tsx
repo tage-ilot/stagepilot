@@ -33,12 +33,10 @@ import { CONTROL_34 } from "./compactControl";
 import { clampManual, heightFor, labelRowsFor, LABEL_ROW_PX, MANUAL_MAX_PX, MANUAL_MIN_PX, STEP_PX, useHeightMode } from "./timelineHeight";
 import { ScrollRegion } from "./ui/ScrollRegion";
 
-const ZOOMS = [0, 6, 12, 24, 60, 120] as const; // pixels per second; 0 = fit the width
 const CLUSTER_GAP_PX = 14; // markers closer than this on screen become one cluster
 const LONG_PRESS_MS = 500;
-const MIN_TRACK_REM = 36; // below this the track scrolls sideways instead of squeezing
 const UNMEASURED_TRACK_PX = 1000; // the width assumed for thinning before the track has been measured
-const MAX_DRAW_COLUMNS = 2400; // never draw more than this many bars, however far the track is zoomed
+const MAX_DRAW_COLUMNS = 2400; // never draw more than this many bars, however long the song is
 const EFFECT_LANE_PX = 24; // one line of loops under the track (44 on touch, set in the class)
 
 /**
@@ -65,7 +63,7 @@ export function LightingTimeline({
   onRemoveEffect?: (id: string) => void;
   /** Why the picked rows cannot be merged, or null. Shown beside the disabled Merge rows button. */
   mergeBlockedReason?: string | null;
-  /** The panel's own controls (Song, Add cue, Clear song, Merge, Simplify, Undo): they lead the toolbar row; zoom and height sit at its right. */
+  /** The panel's own controls (Song, Add cue, Clear song, Merge, Simplify, Undo): they lead the toolbar row; the height sits at its right. */
   toolbar?: ReactNode;
   /** Which method's cues these are; the legend lists that method's types. */
   method?: "osc" | "midi";
@@ -96,7 +94,6 @@ export function LightingTimeline({
   const ownSongMap = usePersistedFlag(SONG_MAP_KEY, true);
   const songMapOn = songMap ?? ownSongMap[0];
   const setSongMapOn = onSongMapChange ?? ownSongMap[1];
-  const [zoomIndex, setZoomIndex] = useState(0);
   const [heightMode, setHeightMode] = useHeightMode();
   const [selectedId, setSelectedIdRaw] = useState<string | null>(null);
   const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
@@ -114,7 +111,6 @@ export function LightingTimeline({
   const pressStart = useRef<{ x: number; y: number } | null>(null);
   const longPressed = useRef(false);
   const marqueeStart = useRef<number | null>(null);
-  const pendingScroll = useRef<number | null>(null);
   const picked = new Set(selectedIds);
   const setPicked = (ids: string[]) => { onSelectionChange?.(ids); if (!ids.length) setMulti(false); };
   const toggle = (id: string) => setPicked(picked.has(id) ? selectedIds.filter((item) => item !== id) : [...selectedIds, id]);
@@ -128,13 +124,8 @@ export function LightingTimeline({
     for (const effect of effects) if (effect.end_seconds > last) last = effect.end_seconds;
     return Math.max(60, last + 60);
   }, [songLength, markers, effects]);
-  const zoom = ZOOMS[zoomIndex]!;
   // A ramp has to end inside the song, so it can only be moved as far as its own length allows.
   const keepRampInside = (marker: TimelineMarker | undefined, at: number) => (marker && (marker.fade ?? 0) > 0 ? clampCueTime(clampRampStart(at, marker.fade!, length), length) : at);
-  const trackStyle = {
-    minWidth: `${MIN_TRACK_REM}rem`,
-    width: zoom === 0 ? "100%" : `${Math.max(length * zoom, 1)}px`,
-  };
   const step = rulerStep(length);
   const ticks = Array.from({ length: Math.floor(length / step) + 1 }, (_, index) => index * step);
   // The song map (the Playback library's arrangement bar and waveform): only for a song that has blocks to show.
@@ -161,16 +152,7 @@ export function LightingTimeline({
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [zoomIndex]);
-
-  useEffect(() => {
-    if (pendingScroll.current === null) return;
-    const at = pendingScroll.current;
-    pendingScroll.current = null;
-    let scroller: HTMLElement | null = trackRef.current;
-    while (scroller && scroller.scrollWidth <= scroller.clientWidth) scroller = scroller.parentElement;
-    if (scroller) scroller.scrollLeft = Math.max(0, (at / length) * (trackRef.current?.getBoundingClientRect().width ?? 0) - scroller.clientWidth / 2);
-  });
+  }, []);
 
   useEffect(() => () => clearPress(), []);
 
@@ -276,10 +258,10 @@ export function LightingTimeline({
   const labelZone = rowsUsed * LABEL_ROW_PX + 4; // the waveform and playhead start under this
   // A label never runs past the right end of the track (it would be clipped and make the timeline scroll sideways).
   const labelMaxWidth = (wanted: number, at: number) => (trackWidth > 0 ? Math.max(0, Math.min(wanted, trackWidth - (at / length) * trackWidth - 18)) : wanted);
-  const zoomInto = (at: number, count: number) => {
-    if (zoomIndex < ZOOMS.length - 1) { pendingScroll.current = at; setZoomIndex(zoomIndex + 1); }
-    else { const first = markers.find((marker) => marker.at === at); if (first) setSelectedId(first.id); }
-    void count;
+  // A cluster cannot be pulled apart (the whole song is always in view): a click picks its first cue, and the cue list lists the rest.
+  const pickFirst = (at: number) => {
+    const first = markers.find((marker) => marker.at === at);
+    if (first) setSelectedId(first.id);
   };
   const trackDown = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled || event.target !== event.currentTarget || event.button !== 0 || event.pointerType === "touch") return;
@@ -330,12 +312,6 @@ export function LightingTimeline({
       <div aria-label="Timeline tools" className="flex flex-wrap items-end gap-x-3 gap-y-2" role="toolbar">
         {toolbar}
         <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2" data-part="timeline-tools-end">
-          <div aria-label="Timeline zoom" className="flex items-center gap-1" role="group">
-            <ReasonButton aria-label="Zoom out" className={CONTROL_34} onClick={() => setZoomIndex((index) => Math.max(0, index - 1))} reason={zoomIndex === 0 ? "The whole song is already in view." : undefined} variant="tinted">−</ReasonButton>
-            <Button aria-pressed={zoomIndex === 0} className={CONTROL_34} onClick={() => setZoomIndex(0)} variant={zoomIndex === 0 ? "secondary" : "tinted"}>Fit</Button>
-            <ReasonButton aria-label="Zoom in" className={CONTROL_34} onClick={() => setZoomIndex((index) => Math.min(ZOOMS.length - 1, index + 1))} reason={zoomIndex === ZOOMS.length - 1 ? "This is the closest zoom." : undefined} variant="tinted">+</ReasonButton>
-            <span aria-live="polite" className="min-w-[3.25rem] text-type-body-sm tabular-nums text-ink-muted">{zoom === 0 ? "" : `${zoom} px/s`}</span>
-          </div>
           {hasSongMap && (
             <Button aria-pressed={songMapOn} className={CONTROL_34} onClick={() => setSongMapOn(!songMapOn)} title="The song's sections and waveform from the Playback library" variant={songMapOn ? "secondary" : "tinted"}>Song map</Button>
           )}
@@ -355,8 +331,8 @@ export function LightingTimeline({
         </div>
       </div>
       <CueTypeLegend className="justify-end" compact hidden={hidden} method={method} onShowAll={showAllTypes} onToggle={toggleType} present={presentTypes} />
-      <ScrollRegion axis="x" className="overflow-x-auto overscroll-x-contain" data-testid="lighting-timeline-scroll" frameClassName="mt-2 rounded-ds-lg" tabIndex={-1}>
-        <div className="relative px-3 pb-3" style={trackStyle}>
+      <ScrollRegion axis="x" className="overflow-x-hidden" data-testid="lighting-timeline-scroll" frameClassName="mt-2 rounded-ds-lg" tabIndex={-1}>
+        <div className="relative w-full px-3 pb-3">
           <div aria-hidden="true" className="relative mx-0 h-6 border-b border-edge-subtle" data-testid="lighting-timeline-ruler">
             {ticks.map((tick) => (
               <span className={`absolute top-0 text-type-body-sm tabular-nums text-ink-muted ${tick === 0 ? "" : tick / length > 0.97 ? "-translate-x-full" : "-translate-x-1/2"}`} key={tick} style={{ left: percent(tick) }}>{formatElapsed(tick)}</span>
@@ -440,7 +416,7 @@ export function LightingTimeline({
                 const counts = new Map<CueTypeId, number>();
                 for (const member of item.markers) counts.set(markerType(member), (counts.get(markerType(member)) ?? 0) + 1);
                 const lead = dominantType(counts);
-                const text = `${item.markers.length} cues (${describeTypeCounts(counts)}), ${formatElapsed(item.at)} to ${formatElapsed(item.to)}. Zoom in`;
+                const text = `${item.markers.length} cues (${describeTypeCounts(counts)}), ${formatElapsed(item.at)} to ${formatElapsed(item.to)}. Select the first`;
                 return (
                   <button
                     aria-label={text}
@@ -449,7 +425,7 @@ export function LightingTimeline({
                     data-testid="lighting-cluster"
                     data-types={[...counts.keys()].join(" ")}
                     key={item.id}
-                    onClick={() => zoomInto(item.at, item.markers.length)}
+                    onClick={() => pickFirst(item.at)}
                     style={{ left: percent(item.at), top: `${(labelPlacements.get(item.id)?.row ?? 0) * LABEL_ROW_PX}px` }}
                     type="button"
                   >{lead && <span aria-hidden="true" className="mr-1 text-ink-muted" data-testid="lighting-cluster-glyph">{glyphFor(lead, lead.startsWith("note-") && item.markers.every((m) => m.sharp))}</span>}<span aria-hidden="true">{item.markers.length}</span></button>
@@ -549,7 +525,7 @@ export function LightingTimeline({
       )}
       {dense && drawnMarkers.length < visibleMarkers.length && (
         <p className="mt-2 text-type-body-sm text-ink-muted" data-testid="lighting-timeline-thinned">
-          Drawing {formatCount(drawnMarkers.length)} of {formatCount(visibleMarkers.length)} cues so the timeline stays quick. Every cue is still saved and listed below; zoom in to see more of them.
+          Drawing {formatCount(drawnMarkers.length)} of {formatCount(visibleMarkers.length)} cues so the timeline stays quick. Every cue is still saved and listed below.
         </p>
       )}
       {!markers.length && !effects.length && <p className="mt-2 text-type-body-sm text-ink-muted">No cues yet. Press a pad while the song plays.</p>}
