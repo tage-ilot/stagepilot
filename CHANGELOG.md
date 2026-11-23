@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **On the Mac, StagePilot now keeps its saved secrets in one keychain item instead of several,** so an update asks for keychain access once instead of six times. Your saved logins are kept.
+
 ## [2.44.1] - 2026-11-22
 
 StagePilot 2.44.1 is a small update to 2.44.0 that fixes four things you could see and tidies two pages.
