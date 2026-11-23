@@ -482,7 +482,7 @@ export function LightingTimeline({
                   style={{ left: percent(at), top: `${(labelPlacements.get(marker.id)?.row ?? 0) * LABEL_ROW_PX}px`, height: `calc(100% - ${(labelPlacements.get(marker.id)?.row ?? 0) * LABEL_ROW_PX}px)` }}
                   type="button"
                 >
-                  <span className={`block h-full ${isSelected ? "w-2.5" : type === "cue-off" ? "w-2" : "w-1.5"} rounded-ds-full ${barClassFor(type, marker.sharp)} ${isSelected ? "outline outline-2 outline-offset-1 outline-ink" : ""}`} data-testid="lighting-marker-bar" />
+                  <span className={`block h-full ${isSelected ? "w-1" : type === "cue-off" ? "w-[3px]" : "w-0.5"} rounded-ds-full ${barClassFor(type, marker.sharp)} ${isSelected ? "outline outline-2 outline-offset-1 outline-ink" : ""}`} data-testid="lighting-marker-bar" />
                   {bar && (
                     <span
                       aria-hidden="true"
