@@ -334,7 +334,7 @@ fn a_relay_that_gave_no_state_leaves_no_start_state() {
 // ----------------------------------------------------------------------------- the replay
 
 #[test]
-fn the_first_look_of_the_real_rig_goes_out_in_well_under_a_second_at_200_packets_a_second() {
+fn the_first_look_of_the_real_rig_goes_out_at_once_in_bundles_of_at_most_16() {
     let pass = pass();
     let fitted = fit_within_caps(&pass.baseline, &pass.changes, 60.0, &Caps::default());
     let values = first_look(&fitted.capture.rows).len();
@@ -346,7 +346,18 @@ fn the_first_look_of_the_real_rig_goes_out_in_well_under_a_second_at_200_packets
     assert_eq!(
         first.len(),
         values,
-        "one packet per value of the first look"
+        "one message per value of the first look"
+    );
+    let mut per_packet: BTreeMap<usize, usize> = BTreeMap::new();
+    for p in &first {
+        *per_packet.entry(p.packet).or_default() += 1;
+    }
+    let bundles = per_packet.len();
+    assert!(per_packet.values().all(|&n| n <= 16), "{per_packet:?}");
+    // a fixture's values stay together, so a bundle may be a little short of 16
+    assert!(
+        bundles >= values.div_ceil(16) && bundles <= values / 8,
+        "{values} values in {bundles} bundles"
     );
     assert!(
         packets.iter().all(|p| p.at >= 0.0 && p.position >= 0.0),
@@ -354,25 +365,23 @@ fn the_first_look_of_the_real_rig_goes_out_in_well_under_a_second_at_200_packets
     );
     let last = first.iter().map(|p| p.at).fold(0.0, f64::max);
     println!(
-        "FIRST LOOK real rig: {values} packets, last one leaves {:.3} s after the start \
-         (simulated clock, 200 packets a second)",
+        "FIRST LOOK real rig: {values} messages in {bundles} bundles, last one leaves {:.3} s \
+         after the start (simulated clock)",
         last
     );
-    // 200 packets a second: values x 5 ms; generous bound, the budget is one second
-    assert!(last < 1.0, "first look took {last} s");
+    // all of it leaves at the first tick (it took values x 5 ms, 0.77 s, one packet at a time)
+    assert!(last < 0.05, "first look took {last} s");
     // the worst case: no fixture changes in the song, so the whole rig is stored as a static look
     let file = rig();
     let mut state = FixtureState::new();
     state.apply_all(&file.state);
     let worst = lightkey_start::start_look(&state.commands(), &HashSet::new());
     println!(
-        "FIRST LOOK worst case (nothing changes in the song): {} values = {:.3} s ({} fixtures dark and reduced)",
+        "FIRST LOOK worst case (nothing changes in the song): {} values = {} bundles ({} fixtures dark and reduced)",
         worst.commands.len(),
-        worst.commands.len() as f64 * 0.005,
+        worst.commands.len().div_ceil(16),
         worst.dark_fixtures
     );
-    assert!(worst.commands.len() as f64 * 0.005 < 1.0);
-    assert!(last >= (values as f64 - 1.0) * 0.005 - 1e-9);
 }
 
 // ------------------------------------------------------------ songs captured before this

@@ -4,7 +4,7 @@
 //! python-osc sends for every message the Python lights plugin can produce. OSC over UDP is
 //! one-shot: `open_output` only creates and resolves the socket, send errors are the only feedback.
 
-use rosc::{encoder, OscMessage, OscPacket, OscType};
+use rosc::{encoder, OscBundle, OscMessage, OscPacket, OscTime, OscType};
 use stagepilot_core::config::OscArgument;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
@@ -44,6 +44,14 @@ impl std::error::Error for OutputError {}
 pub trait OscOutput: Send + Sync {
     fn closed(&self) -> bool;
     fn send_message(&self, address: &str, args: &[OscArgument]) -> Result<(), OutputError>;
+    /// Send `messages` together as one OSC bundle (one UDP packet, immediate time tag). An
+    /// output that cannot bundle sends them one by one, in order (the default).
+    fn send_bundle(&self, messages: &[(String, Vec<OscArgument>)]) -> Result<(), OutputError> {
+        for (address, args) in messages {
+            self.send_message(address, args)?;
+        }
+        Ok(())
+    }
     fn close(&self);
 }
 
@@ -89,6 +97,33 @@ pub fn encode_message(address: &str, args: &[OscArgument]) -> Result<Vec<u8>, Ou
     .map_err(|e| OutputError::internal(format!("OSC encoding failed: {e}")))
 }
 
+/// The datagram of an OSC bundle of `messages`: `#bundle\0`, the time tag "immediately" (8
+/// bytes, value 1), then every message with its 4-byte size. Lightkey applies the messages in
+/// order as soon as the packet arrives.
+pub fn encode_bundle(messages: &[(String, Vec<OscArgument>)]) -> Result<Vec<u8>, OutputError> {
+    let content = messages
+        .iter()
+        .map(|(address, args)| {
+            let args = args
+                .iter()
+                .map(to_osc_type)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(OscPacket::Message(OscMessage {
+                addr: address.clone(),
+                args,
+            }))
+        })
+        .collect::<Result<Vec<_>, OutputError>>()?;
+    encoder::encode(&OscPacket::Bundle(OscBundle {
+        timetag: OscTime {
+            seconds: 0,
+            fractional: 1,
+        },
+        content,
+    }))
+    .map_err(|e| OutputError::internal(format!("OSC encoding failed: {e}")))
+}
+
 /// Real UDP output.
 pub struct UdpOscOutput {
     socket: Mutex<Option<UdpSocket>>,
@@ -117,6 +152,21 @@ impl OscOutput for UdpOscOutput {
             OutputError::public(format!("OSC send to {} failed: {}.", self.target_text, e))
         })?;
         Ok(())
+    }
+
+    fn send_bundle(&self, messages: &[(String, Vec<OscArgument>)]) -> Result<(), OutputError> {
+        let [(address, args)] = messages else {
+            let guard = self.socket();
+            let Some(socket) = guard.as_ref() else {
+                return Err(OutputError::public("The OSC output is closed."));
+            };
+            let packet = encode_bundle(messages)?;
+            socket.send_to(&packet, self.target).map_err(|e| {
+                OutputError::public(format!("OSC send to {} failed: {}.", self.target_text, e))
+            })?;
+            return Ok(());
+        };
+        self.send_message(address, args) // one message stays a plain message
     }
 
     fn close(&self) {
@@ -194,6 +244,18 @@ pub mod fake {
             }
             lock(&self.packets).push(encode_message(address, args)?);
             lock(&self.sent).push((address.to_string(), args.to_vec()));
+            Ok(())
+        }
+        fn send_bundle(&self, messages: &[(String, Vec<OscArgument>)]) -> Result<(), OutputError> {
+            if let [(address, args)] = messages {
+                return self.send_message(address, args);
+            }
+            if let Some(message) = lock(&self.fail_sends).clone() {
+                return Err(OutputError::public(message));
+            }
+            let packet = encode_bundle(messages)?;
+            lock(&self.packets).push(packet);
+            lock(&self.sent).extend(messages.iter().cloned());
             Ok(())
         }
         fn close(&self) {

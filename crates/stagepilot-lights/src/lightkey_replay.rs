@@ -14,39 +14,38 @@
 //!   an instant step inside an effect's cycle, the first look after a start or a take-back) are
 //!   **discrete**: sent at once whatever the budget, and the engine wakes exactly at the time of
 //!   the next one ([`Timeline::next_boundary`]).
-//! * A row ramp that is running is sent at most every [`FAST_TICK_SECONDS`] (20 Hz) and only
+//! * A row ramp that is running is sent at most every [`FAST_TICK_SECONDS`] (40 Hz) and only
 //!   when it moved by at least one DMX step of the property since the last send.
-//! * Addresses driven by an effect are looked at every `effect_interval`, normally 20 Hz.
-//! * At most [`MAX_PACKETS_PER_SECOND`] packets leave per second: a token bucket (burst 10)
-//!   fills at that rate. Discrete sends always go out (they only make the bucket negative, the
-//!   caller's pacing spaces the packets). Ramps then effects spend what is left, the largest
+//! * Addresses driven by an effect are looked at every `effect_interval`, normally 40 Hz.
+//! * At most [`MAX_MESSAGES_PER_SECOND`] messages leave per second: a token bucket (burst
+//!   50 ms of budget, 125 messages) fills at that rate. Discrete sends always go out
+//!   (they only make the bucket negative). Ramps then effects spend what is left, the largest
 //!   change first. When effect sends had to wait, the effect interval grows towards
 //!   [`SLOW_TICK_SECONDS`] (8 Hz); it shrinks back when the budget has room.
 //! * **A very busy song** (see [`ReplayLoad`]): when for more than [`BUSY_AFTER_SECONDS`] a class
 //!   (ramps or effects) is starved (served below 10% of what it asks for), the budget is shared
-//!   fairly instead of ramps first: ramps may take at most [`RAMP_SHARE`] (65%) of the packets
+//!   fairly instead of ramps first: ramps may take at most [`RAMP_SHARE`] (65%) of the messages
 //!   while effects wait, so effects get at least [`EFFECT_SHARE`] (35%), and a share one class
 //!   does not use goes to the other. Inside a class the largest change still goes first, but an
 //!   address that has waited [`SERVE_AFTER_SECONDS`] goes before the others (oldest first), so
-//!   the addresses are served in turns of about a quarter of a second and none starves. A song
-//!   that is not starved never leaves the plain rule above and plays exactly as before.
+//!   the addresses are served in turns and none starves. A song that is not starved never
+//!   leaves the plain rule above.
 //! * An idle engine (nothing moving, no effect) asks for the next wake only at the next
 //!   boundary, or not at all.
 //!
 //! # Step bursts (looks land on the beat)
 //!
-//! A look change can be 60 to 100 values at one row time. One message per address at 5 ms
-//! spacing needs `(n - 1) x 5 ms` to send them all (490 ms for 99 values): sent from the row
-//! time on, the last value of the look would arrive half a second late and no queue order can
-//! change that. The schedule is known in advance, so the engine starts such a burst **before**
+//! A look change can be 60 to 100 values at one row time, or many more on a big rig. Sent at
+//! the budget's pace (one message per [`MESSAGE_GAP_SECONDS`], 0.4 ms) `n` values take
+//! `(n - 1) x 0.4 ms`: sent from the row time on, the last value of a very big look would
+//! arrive late. The schedule is known in advance, so the engine starts such a burst **before**
 //! its row: the burst is spread so that its middle lands on the row time, i.e. it starts
-//! `min((n - 1) x 5 ms / 2, STEP_LEAD_MAX_MS)` early (150 ms for 60 values, 242 ms for 98,
-//! never more than 300 ms by default). The values are those of the row, and the fixtures are
-//! held at them until the row time (their ramp and effect values in between are superseded by
-//! the step that follows).
+//! `min((n - 1) x 0.4 ms / 2, STEP_LEAD_MAX_MS)` early. The values are those of the row, and
+//! the fixtures are held at them until the row time (their ramp and effect values in between
+//! are superseded by the step that follows).
 //!
-//! * Only a burst that would take longer than [`STEP_BURST_MIN_MS`] (40 ms, i.e. 10 or more
-//!   values) is moved; single steps and small bursts keep exact timing.
+//! * Only a burst that would take longer than [`STEP_BURST_MIN_MS`] (40 ms, i.e. more than
+//!   100 values) is moved; single steps and small bursts keep exact timing.
 //! * Inside a burst the visually important values go first, in a fixed order: dimmer, colour,
 //!   other levels and options, angles (pan, tilt, ...), and by address inside a class.
 //! * A burst never starts before the song position the tick runs at (a start at position 0 or a
@@ -70,8 +69,14 @@
 //! step is about 0.008 degrees). Lightkey truncates to the DMX resolution, so a value that is
 //! still on its way is sent half a step higher; a value at rest is sent exactly.
 //!
-//! One OSC message per address: no bundles and no pattern addresses (not shown to work with
-//! Lightkey; the rig test decides).
+//! # OSC bundles
+//!
+//! What one tick has due leaves as OSC bundles of at most [`MAX_BUNDLE_MESSAGES`] (16)
+//! messages, back to back, instead of one packet per message 5 ms apart ([`plan_bundles`]):
+//! Lightkey takes several addresses in one UDP packet (rig test, immediate time tag). A bundle
+//! never holds two values of one address and the order of the queue is kept; a fixture's
+//! messages stay together in one bundle when they fit. One message alone is sent as a plain
+//! message. No pattern addresses (not shown to work with Lightkey).
 
 use crate::lightkey_curve::Timeline;
 use crate::lightkey_fixtures::{fixture_of, FixtureArg};
@@ -82,14 +87,19 @@ use stagepilot_core::config::{LightingEffect, OscLightingCue, OscMessage};
 use std::collections::{BTreeSet, HashMap};
 use ts_rs::TS;
 
-/// Total packets per second, matching the plugin's 5 ms spacing.
-pub const MAX_PACKETS_PER_SECOND: f64 = 200.0;
-/// Tick interval while a row ramp (or an effect at full rate) is running: 20 Hz.
-pub const FAST_TICK_SECONDS: f64 = 0.05;
+/// Total OSC messages per second (the budget). Lightkey was measured clean up to 4,900
+/// messages a second on the rig (49 fixtures); this keeps a margin, and the busy songs ask for
+/// up to about 2,300 a second at the 40 Hz tick.
+pub const MAX_MESSAGES_PER_SECOND: f64 = 2500.0;
+/// Tick interval while a row ramp (or an effect at full rate) is running: 40 Hz. Lightkey's
+/// output saturates at about 45 updates a second per address, so more is only CPU.
+pub const FAST_TICK_SECONDS: f64 = 0.025;
+/// The most messages in one OSC bundle (one UDP packet).
+pub const MAX_BUNDLE_MESSAGES: usize = 16;
 /// Slowest effect tick interval when the budget is short: 8 Hz.
 pub const SLOW_TICK_SECONDS: f64 = 0.125;
-/// Spacing of two packets, seconds (the plugin's `MIN_SEND_GAP`).
-pub const PACKET_GAP_SECONDS: f64 = 1.0 / MAX_PACKETS_PER_SECOND;
+/// Spacing of two messages at the budget, seconds.
+pub const MESSAGE_GAP_SECONDS: f64 = 1.0 / MAX_MESSAGES_PER_SECOND;
 /// One DMX step of a level or colour (8 bit).
 pub const LEVEL_STEP: f64 = 1.0 / 255.0;
 /// One DMX step of an angle (16 bit over 540 degrees).
@@ -99,18 +109,16 @@ pub const ANGLE_STEP: f64 = 540.0 / 65535.0;
 pub const STEP_LEAD_MAX_MS: f64 = 300.0;
 /// A burst that would take no longer than this to send keeps its exact timing, milliseconds.
 pub const STEP_BURST_MIN_MS: f64 = 40.0;
-/// While steps wait in the pacing queue, every this-many-th slot goes to a waiting ramp value
-/// (if there is one): a step burst takes at most 3 of 4 slots, so running ramps keep a quarter of
-/// the 200 packets a second (50 a second) instead of standing still for the burst.
+/// While steps wait in the queue, every this-many-th message goes to a waiting ramp value
+/// (if there is one): a step burst takes at most 3 of 4 places, so running ramps are not left
+/// standing still behind a burst.
 pub const RAMP_SHARE_EVERY: u32 = 4;
 /// The least share of the packets that effects (loops) get on a very busy song, 35%.
 pub const EFFECT_SHARE: f64 = 0.35;
 /// The most share ramps may take while effects wait on a very busy song, 65%.
 pub const RAMP_SHARE: f64 = 1.0 - EFFECT_SHARE;
-/// On a very busy song an address that has waited this long for its next packet goes before
-/// the ones that have not, oldest first. The turns come round in about a quarter of a second
-/// (the 200 packets a second divided by the addresses with something to say), so every address
-/// is served every 250 ms or a little later; none is left out.
+/// On a very busy song an address that has waited this long for its next message goes before
+/// the ones that have not, oldest first, so every address is served in turn; none is left out.
 pub const SERVE_AFTER_SECONDS: f64 = 0.1;
 /// A class has to be starved for longer than this before the song counts as very busy (and the
 /// budget is shared by the fair rule).
@@ -125,8 +133,9 @@ const RECOVER_ABOVE: f64 = 0.85;
 const RECOVER_AFTER_SECONDS: f64 = 4.0;
 /// Requests a class needs in the average before it can count as short.
 const MIN_LOAD_ASKED: f64 = 5.0;
-const BURST_PACKETS: f64 = 10.0;
-const DEBT_PACKETS: f64 = 200.0;
+/// The token bucket holds this many seconds of budget (50 ms: 125 messages at 2,500 a second),
+/// and a burst of steps may leave it at most one second of budget in debt.
+const BURST_SECONDS: f64 = 0.05;
 const EPSILON: f64 = 1e-9;
 
 /// Order inside a step burst: the values that change the picture most go first.
@@ -267,7 +276,7 @@ pub struct Tick {
     /// `positions[i]` is the song position `messages[i]`'s value was evaluated for (the tick's
     /// position, or the row time of a step burst sent early).
     pub positions: Vec<f64>,
-    /// Effect sends were slowed down at this tick (the effect interval is above 20 Hz's).
+    /// Effect sends were slowed down at this tick (the effect interval is above the fast tick's).
     pub reduced: bool,
     /// Seconds until the next tick is needed; `None` when the engine is idle.
     pub wake_in: Option<f64>,
@@ -295,7 +304,7 @@ struct Slot {
 /// Counters of one engine (see [`ReplayEngine::stats`]).
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct EngineStats {
-    /// Running ramp values that had to wait for budget (each is up to 50 ms of a ramp not
+    /// Running ramp values that had to wait for budget (each is up to one tick of a ramp not
     /// updated).
     pub ramp_deferred: u64,
     /// Seconds (of the engine's clock) in which at least one ramp value was waiting for budget.
@@ -309,6 +318,10 @@ pub struct EngineStats {
 pub struct ReplayEngine {
     timeline: Timeline,
     slots: Vec<Slot>,
+    /// Messages a second (the budget) and the fast tick, seconds; the constants unless
+    /// [`ReplayEngine::with_budget`] says otherwise.
+    rate: f64,
+    fast_tick: f64,
     tokens: f64,
     last_now: Option<f64>,
     last_p: Option<f64>,
@@ -317,12 +330,12 @@ pub struct ReplayEngine {
     lead_max: f64,
     /// Song position up to which the steps are already sent (a burst sent early covers its row).
     sent_through: f64,
-    /// Song position at which the last early burst has left the 5 ms pacing.
+    /// Song position at which the last early burst has left (at the budget's pace).
     burst_end: f64,
     stats: EngineStats,
     ramps_waiting_since: Option<f64>,
     load: LoadTracker,
-    /// Packets ramps may still take while effects wait (the fair rule of a very busy song).
+    /// Messages ramps may still take while effects wait (the fair rule of a very busy song).
     ramp_allow: f64,
 }
 
@@ -405,7 +418,9 @@ impl ReplayEngine {
         Self {
             timeline,
             slots,
-            tokens: BURST_PACKETS,
+            rate: MAX_MESSAGES_PER_SECOND,
+            fast_tick: FAST_TICK_SECONDS,
+            tokens: MAX_MESSAGES_PER_SECOND * BURST_SECONDS,
             last_now: None,
             last_p: None,
             next_effect: None,
@@ -416,7 +431,7 @@ impl ReplayEngine {
             stats: EngineStats::default(),
             ramps_waiting_since: None,
             load: LoadTracker::default(),
-            ramp_allow: BURST_PACKETS * RAMP_SHARE,
+            ramp_allow: MAX_MESSAGES_PER_SECOND * BURST_SECONDS * RAMP_SHARE,
         }
     }
 
@@ -432,6 +447,29 @@ impl ReplayEngine {
         self
     }
 
+    /// Replay with another budget (messages a second) and fast tick (seconds) than the
+    /// defaults [`MAX_MESSAGES_PER_SECOND`] and [`FAST_TICK_SECONDS`]. The offline checks of rig
+    /// recordings made at the old 200 a second and 20 Hz use it; a setting for the budget (200 to
+    /// 4,000) would use it too.
+    pub fn with_budget(mut self, messages_per_second: f64, fast_tick_seconds: f64) -> Self {
+        self.rate = messages_per_second.max(1.0);
+        self.fast_tick = fast_tick_seconds.max(0.001);
+        self.effect_interval = self.fast_tick;
+        self.tokens = self.rate * BURST_SECONDS;
+        self.ramp_allow = self.rate * BURST_SECONDS * RAMP_SHARE;
+        self
+    }
+
+    /// Seconds between two messages at the budget.
+    fn gap(&self) -> f64 {
+        1.0 / self.rate
+    }
+
+    /// Messages the token bucket holds when full.
+    fn burst(&self) -> f64 {
+        self.rate * BURST_SECONDS
+    }
+
     /// Counters since the engine was built.
     pub fn stats(&self) -> EngineStats {
         self.stats
@@ -442,7 +480,7 @@ impl ReplayEngine {
         &self.timeline
     }
 
-    /// Seconds between two looks at effect addresses right now (20 Hz down to 8 Hz).
+    /// Seconds between two looks at effect addresses right now (40 Hz down to 8 Hz).
     pub fn effect_interval(&self) -> f64 {
         self.effect_interval
     }
@@ -550,9 +588,10 @@ impl ReplayEngine {
         let ramps_running = self.slots.iter().any(|s| {
             !self.timeline.in_effect(&s.address, p) && self.timeline.is_moving(&s.address, p)
         });
+        let gap = self.gap();
         // Seconds the pacing needs for `n` values (a quarter more while ramps take their share).
         let span_of = |n: usize| {
-            let mut span = n.saturating_sub(1) as f64 * PACKET_GAP_SECONDS;
+            let mut span = n.saturating_sub(1) as f64 * gap;
             if ramps_running {
                 span *= 1.0 + 1.0 / (RAMP_SHARE_EVERY - 1) as f64;
             }
@@ -653,15 +692,15 @@ impl ReplayEngine {
     pub fn tick(&mut self, now: f64, p: f64, yielded: &dyn Fn(&str) -> bool) -> Tick {
         let elapsed = self.last_now.map_or(0.0, |l| (now - l).max(0.0));
         self.last_now = Some(now);
-        self.tokens = (self.tokens + MAX_PACKETS_PER_SECOND * elapsed).min(BURST_PACKETS);
+        let (rate, fast, burst) = (self.rate, self.fast_tick, self.burst());
+        self.tokens = (self.tokens + rate * elapsed).min(burst);
         // A very busy song shares the budget fairly (see the module docs); any other song
         // keeps the plain rule, ramps first.
         let fair = self.load.busy;
         self.ramp_allow = if fair {
-            (self.ramp_allow + MAX_PACKETS_PER_SECOND * RAMP_SHARE * elapsed)
-                .min(BURST_PACKETS * RAMP_SHARE)
+            (self.ramp_allow + rate * RAMP_SHARE * elapsed).min(burst * RAMP_SHARE)
         } else {
-            BURST_PACKETS * RAMP_SHARE
+            burst * RAMP_SHARE
         };
         let effect_turn = self.next_effect.is_none_or(|t| now + EPSILON >= t);
         let previous_p = self.last_p.replace(p).unwrap_or(f64::NEG_INFINITY);
@@ -744,7 +783,7 @@ impl ReplayEngine {
                 let interval = if kind == Kind::Effect {
                     self.effect_interval
                 } else {
-                    FAST_TICK_SECONDS
+                    fast
                 };
                 let ahead = self
                     .timeline
@@ -775,7 +814,7 @@ impl ReplayEngine {
                     + if kind == Kind::Effect {
                         self.effect_interval
                     } else {
-                        FAST_TICK_SECONDS
+                        fast
                     };
             }
             let waited = slot.due_since.map_or(0.0, |since| (now - since).max(0.0));
@@ -811,7 +850,7 @@ impl ReplayEngine {
             }
         };
         for d in steps {
-            self.tokens = (self.tokens - 1.0).max(-DEBT_PACKETS);
+            self.tokens = (self.tokens - 1.0).max(-rate);
             take(self, d);
         }
         let by_weight = |a: &Due, b: &Due| b.weight.total_cmp(&a.weight);
@@ -832,7 +871,7 @@ impl ReplayEngine {
             // order an address that has waited 250 ms goes first, oldest first, so none starves.
             let effects_pending = !effects.is_empty();
             if !effects_pending {
-                self.ramp_allow = BURST_PACKETS * RAMP_SHARE;
+                self.ramp_allow = burst * RAMP_SHARE;
             }
             let (mut late, rest): (Vec<Due>, Vec<Due>) = ramps
                 .into_iter()
@@ -907,12 +946,12 @@ impl ReplayEngine {
         if effect_turn {
             if deferred_effects > 0 {
                 self.effect_interval = (self.effect_interval * 1.5).min(SLOW_TICK_SECONDS);
-            } else if self.tokens >= BURST_PACKETS / 2.0 {
-                self.effect_interval = (self.effect_interval / 1.5).max(FAST_TICK_SECONDS);
+            } else if self.tokens >= burst / 2.0 {
+                self.effect_interval = (self.effect_interval / 1.5).max(fast);
             }
             self.next_effect = Some(now + self.effect_interval);
         }
-        let reduced = self.effect_interval > FAST_TICK_SECONDS + EPSILON;
+        let reduced = self.effect_interval > fast + EPSILON;
         self.stats.ramp_deferred += deferred_ramps as u64;
         if let Some(since) = self.ramps_waiting_since.take() {
             self.stats.ramp_skipped_seconds += (now - since).max(0.0);
@@ -924,13 +963,14 @@ impl ReplayEngine {
         let mut wake: Option<f64> = None;
         let mut soonest = |w: f64| wake = Some(wake.map_or(w, |x: f64| x.min(w)));
         if ramp_running {
-            soonest(FAST_TICK_SECONDS);
+            soonest(fast);
         }
         if effect_active {
             soonest((self.next_effect.unwrap_or(now) - now).max(0.001));
         }
         if deferred_ramps + deferred_effects > 0 {
-            soonest(PACKET_GAP_SECONDS * 4.0);
+            // A quarter of a tick (not less than four message gaps): the bucket has refilled.
+            soonest((self.gap() * 4.0).max(fast / 4.0));
         }
         if let Some(w) = burst_wake {
             soonest(w);
@@ -971,7 +1011,7 @@ fn rank(kind: Kind) -> u8 {
     }
 }
 
-/// The queue between the engine's ticks and the 5 ms pacing. Steps leave first, then ramp
+/// The queue between the engine's ticks and the sender. Steps leave first, then ramp
 /// values, then effect values, oldest first inside a class. A ramp or effect value that is
 /// still waiting when a newer value for the same address is queued is replaced by it (only the
 /// latest value of an address matters, and a stale one is never sent after a newer one); the
@@ -1050,7 +1090,7 @@ impl PacingQueue {
     }
 
     /// Drop every waiting message `gone` says is not wanted any more (the operator took its
-    /// fixture over): it takes no 5 ms slot, the others do not wait for it.
+    /// fixture over): it is not sent, the others do not wait for it.
     pub fn drop_where(&mut self, gone: &dyn Fn(&OscMessage) -> bool) -> usize {
         let before = self.items.len();
         self.items.retain(|q| !gone(&q.message));
@@ -1086,26 +1126,66 @@ impl PacingQueue {
         Some(item)
     }
 
-    /// The earliest time a packet may leave, not before `now`.
+    /// The earliest time a message may leave when they are spaced (see [`simulate_paced`]), not
+    /// before `now`.
     pub fn next_slot(&self, now: f64) -> f64 {
         self.next_free.max(now)
     }
 
-    /// The next message when the 5 ms spacing allows one at `now`, spending that slot.
-    pub fn pop_due(&mut self, now: f64) -> Option<Queued> {
+    /// The next message when the spacing allows one at `now` (`gap` seconds after the one
+    /// before), spending that slot.
+    pub fn pop_due(&mut self, now: f64, gap: f64) -> Option<Queued> {
         if now + EPSILON < self.next_free {
             return None;
         }
         let item = self.pop()?;
-        self.next_free = now.max(self.next_free) + PACKET_GAP_SECONDS;
+        self.next_free = now.max(self.next_free) + gap;
         Some(item)
     }
 }
 
-/// One packet of a simulated replay.
+/// Split `items` (in sending order; `address` tells the OSC address of one) into OSC bundles of
+/// at most `max` items. Order is kept (the bundles in order, and the items of each in order);
+/// a bundle never holds two items of one address; the items of one fixture that follow each
+/// other stay in one bundle when they fit (a fixture's update is not split when it does not
+/// have to be). An item that is alone in its bundle is sent as a plain message by the caller.
+pub fn plan_bundles<T>(items: Vec<T>, address: impl Fn(&T) -> &str, max: usize) -> Vec<Vec<T>> {
+    let max = max.max(1);
+    let mut bundles: Vec<Vec<T>> = Vec::new();
+    let mut current: Vec<T> = Vec::new();
+    let mut items = items.into_iter().peekable();
+    while let Some(first) = items.next() {
+        // The run of items of this fixture that follow each other.
+        let fixture = fixture_of(address(&first)).map(str::to_string);
+        let mut run = vec![first];
+        if fixture.is_some() {
+            while items
+                .peek()
+                .is_some_and(|n| fixture_of(address(n)) == fixture.as_deref())
+            {
+                run.extend(items.next());
+            }
+        }
+        if !current.is_empty() && current.len() + run.len() > max {
+            bundles.push(std::mem::take(&mut current));
+        }
+        for item in run {
+            if current.len() >= max || current.iter().any(|c| address(c) == address(&item)) {
+                bundles.push(std::mem::take(&mut current));
+            }
+            current.push(item);
+        }
+    }
+    if !current.is_empty() {
+        bundles.push(current);
+    }
+    bundles
+}
+
+/// One message of a simulated replay.
 #[derive(Debug, Clone)]
 pub struct SentPacket {
-    /// When it leaves (after the 5 ms pacing), seconds.
+    /// When it leaves, seconds. The messages of one bundle leave together.
     pub at: f64,
     /// The song position its value was evaluated at.
     pub position: f64,
@@ -1113,6 +1193,9 @@ pub struct SentPacket {
     pub kind: Kind,
     /// An effect value sent while the effect rate was lowered.
     pub reduced: bool,
+    /// The UDP packet it leaves in: messages with the same number are one OSC bundle (a
+    /// message that is alone in its number is a plain message).
+    pub packet: usize,
 }
 
 /// How loaded the engine was during a simulation (see [`simulate_with_load`]).
@@ -1128,8 +1211,8 @@ pub struct LoadReport {
 
 /// Run the engine on a simulated clock from `from` to `to` (song seconds; the clock and the song
 /// position agree, the position being `lead` ahead): tick when the engine asks (on time, not
-/// after the queue has drained), send through a [`PacingQueue`] 5 ms apart like the plugin,
-/// return every packet. No sockets, no sleeping.
+/// after the queue has drained), send what a tick has due at once as bundles of at most
+/// [`MAX_BUNDLE_MESSAGES`] like the plugin, return every message. No sockets, no sleeping.
 /// `yielded(now, address)` says whether the operator has that address's fixture at `now`.
 pub fn simulate(
     engine: &mut ReplayEngine,
@@ -1149,40 +1232,9 @@ pub fn simulate_with_load(
     lead: f64,
     yielded: &dyn Fn(f64, &str) -> bool,
 ) -> (Vec<SentPacket>, LoadReport) {
-    // Send what the 5 ms spacing allows before `until` (all of it when `None`); everything
-    // waiting was queued at or before `avail`.
-    fn send_until(
-        queue: &mut PacingQueue,
-        avail: f64,
-        until: Option<f64>,
-        lead: f64,
-        yielded: &dyn Fn(f64, &str) -> bool,
-        out: &mut Vec<SentPacket>,
-    ) {
-        while !queue.is_empty() {
-            let at = queue.next_slot(avail);
-            if until.is_some_and(|t| at >= t) {
-                break;
-            }
-            queue.drop_where(&|m| yielded(at, &m.address));
-            if queue.is_empty() {
-                break;
-            }
-            let Some(item) = queue.pop_due(at) else {
-                break;
-            };
-            out.push(SentPacket {
-                at,
-                position: item.position.unwrap_or(item.queued_at + lead),
-                message: item.message,
-                kind: item.kind,
-                reduced: item.reduced,
-            });
-        }
-    }
-
     let mut out = Vec::new();
     let mut queue = PacingQueue::new();
+    let mut packets = 0usize;
     let mut now = from;
     let mut report = LoadReport {
         busy_seconds: 0.0,
@@ -1203,15 +1255,109 @@ pub fn simulate_with_load(
         }
         report.last = engine.load();
         report.min_served_percent = report.min_served_percent.min(report.last.served_percent);
+        // Everything the tick has due leaves now, in bundles.
+        queue.drop_where(&|m| yielded(now, &m.address));
+        let mut due = Vec::new();
+        while let Some(item) = queue.pop() {
+            due.push(item);
+        }
+        for bundle in plan_bundles(due, |q| &q.message.address, MAX_BUNDLE_MESSAGES) {
+            for item in bundle {
+                out.push(SentPacket {
+                    at: now,
+                    position: item.position.unwrap_or(item.queued_at + lead),
+                    message: item.message,
+                    kind: item.kind,
+                    reduced: item.reduced,
+                    packet: packets,
+                });
+            }
+            packets += 1;
+        }
         let Some(wake) = tick.wake_in else {
             break;
         };
         if report.last.busy {
             report.busy_seconds += wake.min(to - now);
         }
-        send_until(&mut queue, now, Some(now + wake), lead, yielded, &mut out);
         now += wake;
     }
-    send_until(&mut queue, now, None, lead, yielded, &mut out);
     (out, report)
+}
+
+/// [`simulate`] as the plugin sent before bundles: one packet per message, `gap` seconds apart
+/// (0.005 for the old 5 ms), the queue looked at again at every slot. For the offline checks of
+/// rig recordings that were made that way (they come with an engine built
+/// [`ReplayEngine::with_budget`] for the old settings); `packet` is the index of the message.
+pub fn simulate_paced(
+    engine: &mut ReplayEngine,
+    from: f64,
+    to: f64,
+    lead: f64,
+    gap: f64,
+    yielded: &dyn Fn(f64, &str) -> bool,
+) -> Vec<SentPacket> {
+    // Send what the spacing allows before `until` (all of it when `None`); everything waiting
+    // was queued at or before `avail`.
+    fn send_until(
+        queue: &mut PacingQueue,
+        avail: f64,
+        until: Option<f64>,
+        (lead, gap): (f64, f64),
+        yielded: &dyn Fn(f64, &str) -> bool,
+        out: &mut Vec<SentPacket>,
+    ) {
+        while !queue.is_empty() {
+            let at = queue.next_slot(avail);
+            if until.is_some_and(|t| at >= t) {
+                break;
+            }
+            queue.drop_where(&|m| yielded(at, &m.address));
+            if queue.is_empty() {
+                break;
+            }
+            let Some(item) = queue.pop_due(at, gap) else {
+                break;
+            };
+            out.push(SentPacket {
+                at,
+                position: item.position.unwrap_or(item.queued_at + lead),
+                message: item.message,
+                kind: item.kind,
+                reduced: item.reduced,
+                packet: out.len(),
+            });
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut queue = PacingQueue::new();
+    let mut now = from;
+    while now < to {
+        let tick = engine.tick(now, now + lead, &|a| yielded(now, a));
+        for ((message, kind), position) in tick
+            .messages
+            .into_iter()
+            .zip(tick.kinds)
+            .zip(tick.positions)
+        {
+            let reduced = tick.reduced && kind == Kind::Effect;
+            let early = (position - (now + lead)).abs() > EPSILON;
+            queue.push_for(message, kind, now, reduced, early.then_some(position));
+        }
+        let Some(wake) = tick.wake_in else {
+            break;
+        };
+        send_until(
+            &mut queue,
+            now,
+            Some(now + wake),
+            (lead, gap),
+            yielded,
+            &mut out,
+        );
+        now += wake;
+    }
+    send_until(&mut queue, now, None, (lead, gap), yielded, &mut out);
+    out
 }
