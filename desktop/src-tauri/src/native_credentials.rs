@@ -100,6 +100,11 @@ impl NativeCredentialBroker {
             while !thread_shutdown.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((stream, _)) => {
+                        // The listener is non-blocking (so shutdown is noticed), and on macOS an accepted socket
+                        // inherits that. A read that finds nothing yet then fails at once, the request is answered
+                        // 400 and the socket closed with the request still unread, which resets the connection.
+                        // Every request runs blocking, with the timeouts `handle` sets.
+                        let _ = stream.set_nonblocking(false);
                         // Each request on a thread of its own: one keychain call that sits on a
                         // system approval dialog must not stop the next request from being served.
                         // A few at once at most; beyond that the caller gets 503 and tries later.
@@ -466,6 +471,27 @@ mod tests {
         assert_eq!(request(&origin, &auth, "GET", &path, ""), (200, secret));
         assert_eq!(request(&origin, &auth, "DELETE", &path, "").0, 204);
         assert_eq!(request(&origin, &auth, "GET", &path, "").0, 404);
+    }
+
+    #[test]
+    fn a_request_that_arrives_late_is_still_served() {
+        // The request bytes reach the broker well after the connection was accepted (a slow client, a busy
+        // machine). The accepted socket must wait for them instead of failing the read at once.
+        let item = Item::default();
+        let broker = NativeCredentialBroker::start_with(vault(&item, &[])).unwrap();
+        let path = format!("/v1/credentials/{ACCOUNT}");
+        let address = broker.origin.trim_start_matches("http://").to_string();
+        let mut stream = TcpStream::connect(&address).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        write!(
+            stream,
+            "GET {path} HTTP/1.1\r\nHost: {address}\r\nAuthorization: Bearer {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            broker.authorization
+        )
+        .unwrap();
+        let mut response = String::new();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 404"), "{response}");
     }
 
     #[test]
