@@ -9,6 +9,7 @@
 
 ### Changed
 
+- **The timeline height starts on Auto, and − and + set it by hand.** Auto still fits the height to the cues that are showing. The − and + beside S / M / Auto change the height by 40 px from wherever it is (160 to 800 px) and show the number; S, M or Auto go back to a preset. The height you chose before this version is not kept, so every device starts on Auto once.
 - **On the Mac, StagePilot now keeps its saved secrets in one keychain item instead of several,** so an update asks for keychain access once instead of six times. Your saved logins are kept.
 
 ## [2.44.1] - 2026-11-22
