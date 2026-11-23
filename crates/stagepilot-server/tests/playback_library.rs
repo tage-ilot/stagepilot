@@ -627,7 +627,7 @@ async fn a_plan_with_no_songs_and_no_plan_ask_nothing() {
         (none.state, none.songs.len(), none.plan_date),
         (LibraryState::Ready, 0, None)
     );
-    assert!(helper.hits().is_empty(), "{:?}", helper.hits());
+    assert_eq!(waves_asked(&helper), 0, "{:?}", helper.hits());
 }
 
 #[tokio::test]
@@ -2094,6 +2094,92 @@ async fn a_redirect_is_not_followed_and_an_error_from_the_helper_is_a_503() {
         StatusCode::SERVICE_UNAVAILABLE
     );
     assert_eq!(runtime.playback_library.waveforms_held(), 0);
+}
+
+/// How many waveforms the helper was asked for, of any song.
+fn waves_asked(helper: &Helper) -> usize {
+    helper
+        .hits()
+        .iter()
+        .filter(|hit| hit.ends_with("/waveform") || hit.contains("/waveform?"))
+        .count()
+}
+
+/// What a Lightkey recording asks when a song starts: the Library Link in use, the plan, the song's Lighting key.
+async fn recording_asks(runtime: &Runtime, settings: &PlaybackLibrarySettings, key: &str) -> bool {
+    let loaded = runtime.store.snapshot().plan;
+    runtime
+        .playback_library
+        .song_has_waveform(settings, loaded.as_ref(), key)
+        .await
+}
+
+#[tokio::test]
+async fn a_recording_learns_a_songs_waveform_and_the_plan_says_so_only_once_it_is_held() {
+    let (helper, _router, runtime) = waves(Some(helper_wave(0.25, &[0.5, 1.0]))).await;
+    let settings = in_use(&stagepilot_server::playback_library::effective_settings(
+        &runtime,
+    ));
+    let loaded = runtime.store.snapshot().plan;
+    let held = |plan: &LibraryPlan| -> Vec<bool> {
+        plan.songs
+            .iter()
+            .map(|song| song.library.as_ref().is_some_and(|l| l.has_waveform))
+            .collect()
+    };
+    // Reading the plan never asks for a waveform, so nothing is known yet.
+    let before = runtime
+        .playback_library
+        .plan(&settings, loaded.as_ref(), false)
+        .await;
+    assert_eq!(held(&before), [false, false, false]);
+    assert_eq!(waves_asked(&helper), 0, "{:?}", helper.hits());
+    // The recording of song one asks: the helper has a waveform for it (item-0 is Playback's song 11).
+    assert!(recording_asks(&runtime, &settings, "item-0").await);
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
+    // Asked again, it is answered from memory.
+    assert!(recording_asks(&runtime, &settings, "item-0").await);
+    assert_eq!(helper.count("/songs/11/waveform"), 1);
+    // The plan now says it for that song alone.
+    let after = runtime
+        .playback_library
+        .plan(&settings, loaded.as_ref(), false)
+        .await;
+    assert_eq!(held(&after), [true, false, false]);
+    // A song that is not in the plan is not a question for the helper.
+    assert!(!recording_asks(&runtime, &settings, "no-such-song").await);
+    assert_eq!(waves_asked(&helper), 1, "{:?}", helper.hits());
+}
+
+#[tokio::test]
+async fn a_song_with_no_waveform_stays_a_song_with_no_waveform_for_a_recording() {
+    let (helper, _router, runtime) = waves(None).await;
+    let settings = in_use(&stagepilot_server::playback_library::effective_settings(
+        &runtime,
+    ));
+    assert!(!recording_asks(&runtime, &settings, "item-1").await);
+    assert_eq!(helper.count("/songs/12/waveform"), 1);
+    let loaded = runtime.store.snapshot().plan;
+    let plan = runtime
+        .playback_library
+        .plan(&settings, loaded.as_ref(), false)
+        .await;
+    assert!(plan
+        .songs
+        .iter()
+        .all(|song| song.library.as_ref().is_some_and(|l| !l.has_waveform)));
+}
+
+#[tokio::test]
+async fn a_recording_never_asks_a_computer_that_never_had_the_library_link() {
+    let (helper, _router, runtime) = waves(Some(helper_wave(0.25, &[0.5, 1.0]))).await;
+    // `enabled` is saved only once the helper has answered with a key: until then nothing is asked from here.
+    let settings = PlaybackLibrarySettings {
+        enabled: None,
+        ..stagepilot_server::playback_library::effective_settings(&runtime)
+    };
+    assert!(!recording_asks(&runtime, &settings, "item-0").await);
+    assert_eq!(waves_asked(&helper), 0, "{:?}", helper.hits());
 }
 
 #[tokio::test]

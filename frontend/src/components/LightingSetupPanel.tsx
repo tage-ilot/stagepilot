@@ -522,8 +522,10 @@ export function LightingSetupPanel({
     () => new Map((library?.plan?.state === "ready" ? library.plan.songs : []).flatMap((song) => { const chip = cardLibrary(song, keyClock); return chip ? [[song.key, chip] as const] : []; })),
     [library?.plan, keyClock],
   );
-  // The selected song's arrangement and waveform from the Playback library, for the timeline's song map: only a song that is paired
-  // (same key as the Songs strip) with current data. The waveform is asked for only while the song map is switched on.
+  // The selected song's arrangement and waveform from the Playback library: only a song that is paired (same key as the Songs strip)
+  // with current data. The waveform is asked for whenever the song is paired and has an arrangement, whatever the song map switch says:
+  // a song that has one shows it in the place of its room loudness (and its saved loudness is then hidden); the switch only decides
+  // whether it is drawn.
   const [songMapOn, setSongMapOn] = usePersistedFlag(SONG_MAP_KEY, true);
   const songMapLibrary = useMemo(
     () => (library?.plan?.state === "ready" ? library.plan.songs.find((song) => song.key === selectedSongKey && song.status === "matched")?.library ?? null : null),
@@ -531,15 +533,23 @@ export function LightingSetupPanel({
   );
   const songMapSections = songMapLibrary && songMapLibrary.sections.length ? songMapLibrary.sections : null;
   const waveform = useSongWaveform(
-    songMapOn && songMapSections && selectedSong && songMapLibrary?.setlist_song_id != null ? songMapLibrary.setlist_song_id : null,
+    songMapSections && selectedSong && songMapLibrary?.setlist_song_id != null ? songMapLibrary.setlist_song_id : null,
     songMapSections ? `${songMapSections.length}:${songMapSections[songMapSections.length - 1]!.end}` : "",
   );
+  // Songs Playback has a waveform for (the backend says so for those it holds, and the selected song says so as soon as it is loaded).
+  // For them the room loudness is not asked for, not shown, not counted: the waveform stands in for it.
+  const waveformKeys = useMemo(
+    () => new Set((library?.plan?.state === "ready" ? library.plan.songs : []).filter((song) => song.status === "matched" && song.library?.has_waveform).map((song) => song.key)),
+    [library?.plan],
+  );
+  const hasWaveform = (key: string | null) => key !== null && (waveformKeys.has(key) || (key === selectedSongKey && waveform !== null));
   const songChips: SongChip[] = useMemo(() => songs.map((song) => {
     const map = cueMaps?.[songKey(song)];
     const counts = countCueMap(map, method);
     const libraryChip = libraryChips.get(songKey(song)) ?? null;
-    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, loops: counts.loops ?? 0, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness), label: captureLabelOf(map), library: libraryChip };
-  }), [songs, cueMaps, method, libraryChips]);
+    const waveformSong = waveformKeys.has(songKey(song)) || (songKey(song) === selectedSongKey && waveform !== null);
+    return { key: songKey(song), title: song.title, order: song.order, looks: counts.looks, loops: counts.loops ?? 0, handmade: counts.handmade, hasLoudness: Boolean(map?.loudness) && !waveformSong, label: captureLabelOf(map), library: libraryChip };
+  }), [songs, cueMaps, method, libraryChips, waveformKeys, selectedSongKey, waveform]);
 
   const askClearLoudness = () => {
     if (!onClearLoudness || !selectedSongKey) return;
@@ -685,8 +695,12 @@ export function LightingSetupPanel({
   const currentOutputMissing = outputName
     && !lights?.outputs.some((output) => output.name === outputName);
 
+  // The microphone is for songs with no Playback waveform: when every song of the plan is known to have one there is nothing for the
+  // picker (and its live meter, which opens the input) to do.
+  const selectedHasWaveform = hasWaveform(selectedSongKey);
   const loudnessProp = {
-    present: Boolean(savedCueMap?.loudness),
+    needed: !songs.length || !songs.every((song) => hasWaveform(songKey(song))),
+    present: Boolean(savedCueMap?.loudness) && !selectedHasWaveform,
     disabled: pendingOperation !== null,
     onClear: onClearLoudness && selectedSongKey ? askClearLoudness : undefined,
   };
@@ -981,7 +995,7 @@ export function LightingSetupPanel({
                 onSelectionChange={setSelectedIds}
                 selectedIds={selectedIds}
                 playhead={elapsed}
-                loudness={savedCueMap?.loudness ?? null}
+                loudness={selectedHasWaveform ? null : savedCueMap?.loudness ?? null}
                 effects={method === "osc" ? effects : []}
                 hiddenTypes={typeFilter.hidden}
                 mergeBlockedReason={mergeBlocked}

@@ -14,7 +14,7 @@ use stagepilot_lights::audio::{
 use stagepilot_lights::lightkey::LightkeyLink as Link;
 use stagepilot_lights::lightkey_link::{
     Clock, HttpFailure, LightkeyHttp, LightkeyLink, LinkOptions, LinkSettings, LoudnessSink,
-    SongLoudnessTake,
+    SongLoudnessTake, WaveformProbe,
 };
 use stagepilot_lights::loudness::{byte_db, level_byte};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -699,4 +699,114 @@ async fn a_build_without_audio_says_why() {
     assert!(!info.available);
     assert_eq!(info.reason.as_deref(), Some("No input here."));
     assert_eq!(hub.set_meter(true).as_deref(), Some("No input here."));
+}
+
+// ------------------------------------------------------------------ the Playback waveform replaces it
+
+/// A probe that answers `has` at once and notes the Lighting key it was asked about.
+fn probe(has: bool, asked: Arc<Mutex<Vec<String>>>) -> WaveformProbe {
+    Arc::new(move |song: Song| {
+        let key = song.source_song_id.clone().unwrap_or(song.id.clone());
+        asked.lock().unwrap().push(key);
+        Box::pin(async move { has })
+    })
+}
+
+#[tokio::test]
+async fn a_song_with_a_waveform_never_opens_the_microphone_and_saves_no_loudness() {
+    let input = FakeInput::new(&["Built-in Microphone"]);
+    let rig = Rig::armed(input.clone()).await;
+    let asked: Arc<Mutex<Vec<String>>> = Arc::default();
+    rig.link.set_waveform_probe(probe(true, asked.clone()));
+    let s = song(4);
+    rig.start(&s).await;
+    assert_eq!(input.open_count(), 0, "no input for a song with a waveform");
+    assert_eq!(input.opens_returned.load(Ordering::SeqCst), 0);
+    // Even a loud room is not heard.
+    rig.hear(4.0, 0.1);
+    rig.stop(&s, 4.0).await;
+    assert!(rig.saved.lock().unwrap().is_empty(), "no loudness is saved");
+    assert_eq!(asked.lock().unwrap().as_slice(), ["song-1"]);
+    let message = rig.link.status().message.unwrap_or_default();
+    assert!(
+        !message.to_lowercase().contains("loudness"),
+        "nothing about loudness is said: {message}"
+    );
+    assert_eq!(input.opens_returned.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_song_without_a_waveform_is_measured_as_before() {
+    let input = FakeInput::new(&["Built-in Microphone"]);
+    let rig = Rig::armed(input.clone()).await;
+    let asked: Arc<Mutex<Vec<String>>> = Arc::default();
+    rig.link.set_waveform_probe(probe(false, asked.clone()));
+    let s = song(4);
+    rig.start(&s).await;
+    assert_eq!(
+        input.open_count(),
+        1,
+        "the input opens when the song starts"
+    );
+    rig.hear(4.0, 0.1);
+    rig.stop(&s, 4.0).await;
+    assert_eq!(rig.saved.lock().unwrap().len(), 1);
+    assert_eq!(asked.lock().unwrap().as_slice(), ["song-1"]);
+}
+
+#[tokio::test]
+async fn the_microphone_opens_only_for_the_songs_in_a_plan_that_need_it() {
+    let input = FakeInput::new(&["Built-in Microphone"]);
+    let rig = Rig::armed(input.clone()).await;
+    // Song one has a waveform; song two has none.
+    let probe: WaveformProbe = Arc::new(|song: Song| {
+        let has = song.source_song_id.as_deref() == Some("song-1");
+        Box::pin(async move { has })
+    });
+    rig.link.set_waveform_probe(probe);
+    let first = song(4);
+    rig.start(&first).await;
+    rig.hear(4.0, 0.1);
+    rig.stop(&first, 4.0).await;
+    assert_eq!(input.opens_returned.load(Ordering::SeqCst), 0);
+    let mut second = song(4);
+    second.id = "item-2".into();
+    second.source_song_id = Some("song-2".into());
+    second.title = "Another".into();
+    rig.start(&second).await;
+    assert_eq!(input.open_count(), 1);
+    rig.hear(4.0, 0.1);
+    rig.stop(&second, 4.0).await;
+    let saved = rig.saved.lock().unwrap().clone();
+    assert_eq!(
+        saved
+            .iter()
+            .map(|t| t.song_key.as_str())
+            .collect::<Vec<_>>(),
+        ["song-2"]
+    );
+}
+
+#[tokio::test]
+async fn an_answer_that_does_not_come_in_time_records_the_loudness_as_before() {
+    let input = FakeInput::new(&["Built-in Microphone"]);
+    let rig = Rig::armed(input.clone()).await;
+    let slow: WaveformProbe = Arc::new(|_song: Song| {
+        Box::pin(async {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            true
+        })
+    });
+    rig.link.set_waveform_probe(slow);
+    let s = song(4);
+    let started = Instant::now();
+    rig.start(&s).await;
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "the start never waits long"
+    );
+    assert_eq!(input.open_count(), 1, "no answer counts as no waveform");
+    rig.hear(4.0, 0.1);
+    rig.stop(&s, 4.0).await;
+    assert_eq!(rig.saved.lock().unwrap().len(), 1);
 }

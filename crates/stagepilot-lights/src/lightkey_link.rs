@@ -327,6 +327,15 @@ pub struct SongLoudnessTake {
 /// [`crate::loudness::merge_loudness`]) through the same serialized save path as the looks.
 pub type LoudnessSink = Arc<dyn Fn(SongLoudnessTake) -> LooksFuture + Send + Sync>;
 
+/// Says whether the Playback library has a waveform for a song (the song's own loudness picture): the room's loudness is then
+/// never recorded for it. Asked once when a recording of the song starts; `false` for a song with none, one that is not paired,
+/// or an answer that does not come in time.
+pub type WaveformProbe =
+    Arc<dyn Fn(Song) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
+
+/// How long a song start waits for the waveform answer before it records the room's loudness as it always did.
+const WAVEFORM_PROBE_WAIT: Duration = Duration::from_millis(2500);
+
 // ------------------------------------------------------------------------------------- state
 
 /// One song being recorded (`_Session`).
@@ -541,6 +550,8 @@ struct Inner {
     loudness_sink: Option<LoudnessSink>,
     captures: Option<CaptureLookup>,
     audio: Option<Arc<AudioHub>>,
+    /// Set once by the server after the Playback library exists (it is built later than the lights).
+    waveform_probe: std::sync::OnceLock<WaveformProbe>,
     http_factory: HttpFactory,
     clock: Arc<dyn Clock>,
     relay_port: u16,
@@ -639,6 +650,7 @@ impl LightkeyLink {
                 audio: options
                     .audio
                     .map(|input| Arc::new(AudioHub::new(input, options.clock.clone()))),
+                waveform_probe: std::sync::OnceLock::new(),
                 http_factory: options.http_factory,
                 clock: options.clock,
                 relay_port: options.relay_port,
@@ -700,6 +712,12 @@ impl LightkeyLink {
         tokio::spawn(async move {
             inner.sync_audio().await;
         });
+    }
+
+    /// How the link learns that a song has a Playback waveform (set once; a second call is ignored). Without it every
+    /// recording measures the room as before.
+    pub fn set_waveform_probe(&self, probe: WaveformProbe) {
+        let _ = self.inner.waveform_probe.set(probe);
     }
 
     /// The audio input hub (picker, meter), when this build can listen to an input.
@@ -1648,10 +1666,6 @@ impl Inner {
                         }
                         session.fixtures = Some(recorder);
                     }
-                    if self.audio.is_some() {
-                        session.loudness =
-                            Some(Arc::new(Mutex::new(LoudnessRecorder::new(started_at))));
-                    }
                     st.session = Some(session);
                     true
                 } else {
@@ -1662,8 +1676,9 @@ impl Inner {
                 self.say("Not recording this song: Lightkey is not connected.");
                 return;
             }
-            // The input opens now; a failure never stops the lights capture.
-            let audio_problem = self.sync_audio().await;
+            // The room's loudness is measured only for a song with no Playback waveform; the input opens now
+            // (and a failure never stops the lights capture).
+            let audio_problem = self.start_loudness(&song).await;
             let with_fixtures = self
                 .st()
                 .session
@@ -1845,6 +1860,41 @@ impl Inner {
             Some(note) => self.say(format!("{text} {note}")),
             None => text,
         }
+    }
+
+    /// Starts the room's loudness for the session of `song`, unless Playback has a waveform for the song (the waveform
+    /// replaces the loudness: nothing is recorded, saved or asked of the microphone). The session already exists, so the
+    /// lights capture loses nothing while the answer is awaited; the recorder joins with the session's clock as it stands.
+    /// `Some` is why the input could not be opened.
+    async fn start_loudness(self: &Arc<Self>, song: &Song) -> Option<String> {
+        self.audio.as_ref()?;
+        if self.song_has_waveform(song).await {
+            return None;
+        }
+        {
+            let mut st = self.st();
+            let session = st.session.as_mut()?;
+            if session.key != song_key(song) || session.loudness.is_some() {
+                return None;
+            }
+            let mut recorder = LoudnessRecorder::new(session.started_at);
+            recorder.set_running(session.running);
+            session.loudness = Some(Arc::new(Mutex::new(recorder)));
+        }
+        self.sync_audio().await
+    }
+
+    /// Whether the Playback library has a waveform for `song`. The question runs on its own task, so an answer that is slow
+    /// still fills the library's memory for the window; here it is waited for a moment and then counts as "no".
+    async fn song_has_waveform(&self, song: &Song) -> bool {
+        let Some(probe) = self.waveform_probe.get().cloned() else {
+            return false;
+        };
+        let job = tokio::spawn(probe(song.clone()));
+        matches!(
+            tokio::time::timeout(WAVEFORM_PROBE_WAIT, job).await,
+            Ok(Ok(true))
+        )
     }
 
     /// Points the audio input at the running session's recorder (none: the input closes) and at

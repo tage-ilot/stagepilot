@@ -44,7 +44,7 @@ const REF = (index: number) => String(SETLIST_ID(index));
 const librarySong = (item: (typeof SET)[number], index: number): LibrarySong => ({
   setlist_song_id: SETLIST_ID(index), content_id: item.id, position: index + 1, title: item.title, key: item.key, key_original: item.key,
   // The first song's key was changed in Playback an hour ago: its card says "(was F)".
-  key_was: index === 0 ? "F" : null, key_changed_at: index === 0 ? new Date(Date.now() - 3_600_000).toISOString() : null, bpm: 72,
+  key_was: index === 0 ? "F" : null, key_changed_at: index === 0 ? new Date(Date.now() - 3_600_000).toISOString() : null, has_waveform: false, bpm: 72,
   scan_length_s: 300, countdown_length_s: 300, length_source: "last_measure", arrangement: item.arrangement, section_count: item.sections.length,
   sections: item.sections.map((name, i) => ({ name, start: i * 20, end: i * 20 + 19 })), artwork: null, rental_expires_utc: null,
 });

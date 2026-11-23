@@ -60,6 +60,15 @@ describe("input picker and live meter", () => {
     expect(api.setLightkeyAudioMeter).toHaveBeenCalledWith(true);
   });
 
+  it("is absent when every song of the plan has a Playback waveform: no input is asked for, so the meter never opens it", async () => {
+    render(<LightkeyStrip lightingEnabled loudness={{ present: false, needed: false, onClear: vi.fn() }} />);
+    await screen.findByTestId("lightkey-headline");
+    expect(screen.queryByRole("combobox", { name: "Audio input" })).toBeNull();
+    expect(screen.queryByTestId("lightkey-loudness")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear loudness" })).toBeNull();
+    expect(api.setLightkeyAudioMeter).not.toHaveBeenCalledWith(true);
+  });
+
   it("is absent in Replay mode and never opens the meter", async () => {
     vi.mocked(api.getLightkeyStatus).mockResolvedValue(status({ recording: false, replay: true }));
     render(<LightkeyStrip lightingEnabled loudness={{ present: true, onClear: vi.fn() }} />);

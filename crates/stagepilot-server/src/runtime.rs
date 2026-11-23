@@ -268,6 +268,32 @@ impl Runtime {
             );
         }
         let playback_library = Arc::new(playback_library);
+        // A song with a Playback waveform is not measured for room loudness: a Lightkey recording asks the library
+        // (the waveform it holds, or asks the helper for) when the song starts.
+        {
+            let (library, settings_service, store) = (
+                playback_library.clone(),
+                settings_service.clone(),
+                store.clone(),
+            );
+            outputs.lights.lightkey_set_waveform_probe(Arc::new(
+                move |song: stagepilot_core::state::Song| {
+                    let (library, settings_service, store) =
+                        (library.clone(), settings_service.clone(), store.clone());
+                    Box::pin(async move {
+                        let settings = crate::playback_library::settings_from(&settings_service);
+                        let key = song
+                            .source_song_id
+                            .clone()
+                            .unwrap_or_else(|| song.id.clone());
+                        let plan = store.snapshot().plan;
+                        library
+                            .song_has_waveform(&settings, plan.as_ref(), &key)
+                            .await
+                    })
+                },
+            ));
+        }
         // The key StagePilot makes for the ProPresenter Link helper: the same choice again, under its own name.
         let link_credentials: Arc<dyn stagepilot_core::settings::CredentialStore> =
             if options.memory_tokens {

@@ -212,6 +212,10 @@ pub struct LibrarySong {
     /// (RFC 3339, UTC). Both null when no change was seen. Sent however old: the window decides how long it shows.
     pub key_was: Option<String>,
     pub key_changed_at: Option<String>,
+    /// True while StagePilot holds this song's Playback waveform (it was asked for by a lighting timeline or by a Lightkey
+    /// recording that was about to start). It is never read from the helper and never saved: the Lighting window uses it to
+    /// hide the room loudness of a song that has a waveform. False means "not known to have one", not "has none".
+    pub has_waveform: bool,
     pub bpm: Option<f64>,
     /// The start of the song's last measure, in seconds, which is where the song goes quiet (the
     /// helper's `scan_length_s`, the same number StagePilot's own scan measures). Null for a song
@@ -569,6 +573,7 @@ fn parse_song(item: &Value, index: usize) -> Option<LibrarySong> {
         key_original: key_name(item, "key_original"),
         key_was: None,
         key_changed_at: None,
+        has_waveform: false,
         bpm: number_in(item, "bpm", 1000.0),
         scan_length_s,
         countdown_length_s: resolved.map(|(seconds, _)| seconds),
@@ -1139,6 +1144,7 @@ mod tests {
             key_original: Some("G".into()),
             key_was: None,
             key_changed_at: None,
+            has_waveform: false,
             bpm: Some(72.0),
             scan_length_s: Some(300.0),
             countdown_length_s: Some(300.0),

@@ -34,7 +34,7 @@ const blocks = () => screen.queryAllByTestId("lighting-arrangement-block");
 const styleOf = (node: HTMLElement) => ({ left: node.style.left, width: node.style.width, color: node.style.getPropertyValue("--c") });
 
 describe("the song map: the Playback library's arrangement bar and waveform on the timeline", () => {
-  it("shows both rows between the ruler and the cue track, inside the same scrolling content", () => {
+  it("shows the arrangement bar between the ruler and the cue track, inside the same scrolling content, and the waveform behind the markers", () => {
     render(<LightingTimeline {...base} {...mapProps} />);
     const map = screen.getByTestId("lighting-song-map");
     const ruler = screen.getByTestId("lighting-timeline-ruler");
@@ -44,7 +44,27 @@ describe("the song map: the Playback library's arrangement bar and waveform on t
     expect(map.nextElementSibling).toBe(track);
     expect(screen.getByTestId("lighting-timeline-scroll").contains(map)).toBe(true);
     expect(within(map).getByTestId("lighting-arrangement")).toBeInTheDocument();
-    expect(within(map).getByTestId("lighting-waveform")).toBeInTheDocument();
+    // No row of its own: the waveform is in the track, where the room loudness is drawn.
+    expect(within(map).queryByTestId("lighting-waveform")).toBeNull();
+    expect(screen.queryByTestId("lighting-waveform-row")).toBeNull();
+    expect(within(track).getByTestId("lighting-waveform")).toBeInTheDocument();
+  });
+
+  it("draws the waveform in the place of the loudness, in the loudness colour: a song with a waveform never draws its saved loudness", () => {
+    render(<LightingTimeline {...base} {...mapProps} loudness={loudness} />);
+    const track = screen.getByTestId("lighting-timeline-track");
+    expect(within(track).getByTestId("lighting-waveform")).toBeInTheDocument();
+    expect(screen.queryByTestId("lighting-loudness")).toBeNull();
+    const svg = screen.getByTestId("lighting-waveform");
+    expect(svg.getAttribute("class")).toContain("text-ink-muted");
+    expect(svg.getAttribute("class")).toContain("opacity-25");
+    expect(svg.getAttribute("class")).not.toContain("text-integration-playback");
+  });
+
+  it("draws the saved loudness as before when the song has no waveform to show", () => {
+    render(<LightingTimeline {...base} {...mapProps} loudness={loudness} waveform={null} />);
+    expect(screen.getByTestId("lighting-loudness")).toBeInTheDocument();
+    expect(screen.queryByTestId("lighting-waveform")).toBeNull();
   });
 
   it("puts nothing on the timeline for a song that is not paired, has no data, or has no usable section", () => {
@@ -79,12 +99,12 @@ describe("the song map: the Playback library's arrangement bar and waveform on t
     ]);
   });
 
-  it("leaves everything else as it was when the rows are there: the cue track, the recorded loudness and the markers", () => {
+  it("leaves everything else as it was when the bar is there (no waveform): the cue track, the recorded loudness and the markers", () => {
     const loudnessProps = { loudness, markers: [marker(1), marker(2), marker(3)] };
     const plain = render(<LightingTimeline {...base} {...loudnessProps} />);
     const track = plain.getByTestId("lighting-timeline-track").outerHTML;
     plain.unmount();
-    render(<LightingTimeline {...base} {...loudnessProps} {...mapProps} />);
+    render(<LightingTimeline {...base} {...loudnessProps} {...mapProps} waveform={null} />);
     expect(screen.getByTestId("lighting-timeline-track").outerHTML).toBe(track);
     expect(screen.getByTestId("lighting-loudness")).toBeInTheDocument();
     expect(screen.getAllByTestId("lighting-marker")).toHaveLength(3);
@@ -125,17 +145,19 @@ describe("the song map: the Playback library's arrangement bar and waveform on t
     expect(blocks().map((block) => block.textContent)).toEqual(["", "", "", "B1"]);
   });
 
-  it("names the bar for a screen reader as one picture, and the waveform is decoration", () => {
+  it("names the bar for a screen reader as one picture, and the waveform as another (\"Waveform: ...\")", () => {
     render(<LightingTimeline {...base} {...mapProps} />);
     const bar = screen.getByTestId("lighting-arrangement");
     expect(bar).toHaveAttribute("role", "img");
     expect(bar).toHaveAttribute("aria-label", arrangementLabel(sections));
     expect(screen.getByRole("img", { name: /^Arrangement: Count Off, Verse 1/ })).toBe(bar);
-    expect(screen.getByTestId("lighting-waveform")).toHaveAttribute("aria-hidden", "true");
-    expect(screen.getByTestId("lighting-waveform").getAttribute("role")).toBeNull();
+    const wave = screen.getByTestId("lighting-waveform");
+    expect(wave).toHaveAttribute("role", "img");
+    expect(wave).not.toHaveAttribute("aria-hidden");
+    expect(wave.getAttribute("aria-label")).toMatch(/^Waveform: loudest at \d+:\d{2}$/);
   });
 
-  it("draws the waveform as ONE path in a fixed 2400 x 100 box stretched over the whole timeline, in the Playback color at about 55 %", () => {
+  it("draws the waveform as ONE path in a fixed 2400 x 100 box stretched over the whole timeline, faint like the loudness", () => {
     render(<LightingTimeline {...base} {...mapProps} />);
     const svg = screen.getByTestId("lighting-waveform");
     expect(svg).toHaveAttribute("viewBox", "0 0 2400 100");
@@ -143,9 +165,7 @@ describe("the song map: the Playback library's arrangement bar and waveform on t
     expect(svg.querySelectorAll("path")).toHaveLength(1);
     expect(svg.querySelector("path")!.getAttribute("d")).toMatch(/^M0,\d/);
     expect(svg.querySelector("path")).toHaveAttribute("fill", "currentColor");
-    expect(svg.getAttribute("class")).toContain("text-integration-playback");
-    expect(svg.getAttribute("class")).toContain("opacity-[0.55]");
-    expect(screen.getByTestId("lighting-waveform-row")).toHaveStyle({ height: "44px" });
+    expect(svg.getAttribute("class")).toContain("opacity-25");
     expect(screen.getByTestId("lighting-arrangement")).toHaveStyle({ height: "26px" });
   });
 
@@ -155,6 +175,12 @@ describe("the song map: the Playback library's arrangement bar and waveform on t
     expect(screen.queryByTestId("lighting-waveform")).toBeNull();
     expect(screen.queryByTestId("lighting-waveform-row")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("follows the Song map switch: off, neither the bar nor the waveform is drawn", () => {
+    render(<LightingTimeline {...base} {...mapProps} songMap={false} />);
+    expect(screen.queryByTestId("lighting-arrangement")).toBeNull();
+    expect(screen.queryByTestId("lighting-waveform")).toBeNull();
   });
 
   it("is not a way to the keyboard: the rows hold nothing focusable and the Tab order is the same plus the Song map switch", () => {

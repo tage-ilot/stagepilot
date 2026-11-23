@@ -1178,9 +1178,10 @@ follow-along. Measured numbers are in the pull request that added this.
 ### Song map: the song's sections and waveform (from the Playback library)
 
 When the Playback library is on (Playback API panel), the selected song is paired with a Playback song and the Playback computer has
-given current data, two rows appear on the timeline between the time ruler and the cue track. They scroll and zoom together with the
-cues, so a marker is always under the part of the song it plays in. They are for looking only: you cannot click, drag or focus anything
-in them, and they change no cue, no look and nothing in Playback.
+given current data, the arrangement bar appears on the timeline between the time ruler and the cue track, and the song's waveform
+is drawn behind the markers. They scroll and zoom together with the cues, so a marker is always under the part of the song it plays
+in. They are for looking only: you cannot click, drag or focus anything in them, and they change no cue, no look and nothing in
+Playback.
 
 - **Arrangement bar (26 px).** One block per section, in playing order and as wide as the time the section plays; a repeated
   section is another block. The blocks are tinted the way Playback tints them (30 % of the section's color over the panel, a 3 px line
@@ -1188,19 +1189,21 @@ in them, and they change no cue, no look and nothing in Playback.
   otherwise it stays blank. Hover a block (or press and hold it on a touch screen) for the full name and times, such as
   `Chorus · 0:47–1:16`. The arrangement can run a few seconds past where StagePilot counts the song down to; what runs past is cut
   off, so the timeline is never made longer for it. A screen reader reads the bar as one picture ("Arrangement: Count Off, Intro, ...").
-- **Waveform (44 px).** The song's waveform as a mirrored shape around a center line, in the Playback color, drawn against the
-  loudest point of the song itself. Playback has not said whether its numbers are linear or decibels, so the shape is drawn as given
-  and nothing about it is labelled in a unit. It is decoration (hidden from a screen reader). The loudness recorded in the room (the
-  faint shape inside the cue track) is a different thing and stays exactly as it was.
+- **Waveform.** The song's waveform as a mirrored shape around a center line, drawn against the loudest point of the song itself.
+  It is not a row of its own: it is the faint shape behind the markers in the cue track, **where the room loudness is drawn for a
+  song that has none** (same color and opacity, so the markers stay readable; see "Room loudness behind the timeline"). Playback
+  has not said whether its numbers are linear or decibels, so the shape is drawn as given and nothing about it is labelled in a
+  unit. A screen reader reads it as one picture ("Waveform: loudest at 02:10").
 - **No cover picture** is shown on the timeline.
-- **Song map** (toolbar button, next to Height) shows or hides both rows. It is on by default and is remembered in this browser. Turn
-  it off if you are short of screen height: while it is off the waveform is not even asked for. The button is there only when the song
-  has a bar to show.
+- **Song map** (toolbar button, next to Height) shows or hides the bar and the waveform. It is on by default and is remembered in this
+  browser. Turn it off if you are short of screen height. The waveform is still asked for while it is off (it decides what the room
+  loudness does, see below); it is only not drawn. The button is there only when the song has a bar to show.
 
 When the song is not paired, Playback has no current data for it, the library is off, or the Song map is off, the timeline looks
-exactly as it did before: no rows, no empty space, no message. If only the waveform is missing (Playback holds none for the song, or
-did not answer in time), the arrangement bar shows alone. The window never talks to the Playback computer: the waveform comes through
-StagePilot (see "Playback library (optional)" in `playback-api.md`), and only while that song's timeline is on screen.
+exactly as it did before: no bar, no empty space, no message. If only the waveform is missing (Playback holds none for the song, or
+did not answer in time), the arrangement bar shows alone and the song keeps its room loudness. The window never talks to the Playback
+computer: the waveform comes through StagePilot (see "Playback library (optional)" in `playback-api.md`), and only while that song's
+timeline is on screen or a Lightkey recording of the song is about to start.
 
 ### Saving and restarts
 
@@ -1243,6 +1246,20 @@ before it is saved, and again when the settings file is read.
   these rows; the read-only Live status view does not.
 
 ## Room loudness behind the timeline
+
+**A song that has a Playback waveform does not use room loudness at all.** When the Playback library has a waveform for the song,
+the waveform takes the place of the room loudness: it is drawn behind the markers instead (see "Song map" above), the song's
+recording never opens or reads the microphone and saves no loudness, no microphone choice or permission prompt is made on its
+account, and there is no note chip on its song card and no **Clear loudness** for it. If every song of the plan has a waveform the
+**Audio input** list is not shown at all. Loudness already saved on such a song is only ignored and hidden, never deleted: it comes back
+if Playback ever has no waveform for the song. Everything below is for a song **without** a Playback waveform (Playback has none for
+it, it is not paired, or the Playback computer is off).
+
+*How the recording knows.* When a song starts recording, StagePilot asks its Playback library (the waveform it already holds, else
+the Playback computer, for up to 2.5 s) whether the paired song has a waveform. That asks only a Library Link that has been in use. No
+answer in time counts as "no waveform": the song is measured as before. The song cards and the audio input list know a song has a
+waveform once StagePilot holds it (its timeline was shown, or a recording of it started), so a song nobody has opened yet still shows a
+saved loudness until then.
 
 While Lightkey records a song, StagePilot can also measure how loud the room is and draw it as a faint
 filled envelope behind the song's look rows in the Lighting timeline (scaled to the song's own loudest
@@ -1368,7 +1385,7 @@ tritanopia to keep the colours apart.
 **Clear song…** (the selected song, in the timeline toolbar), **Clear all songs…** and the **x** on a song chip (see
 "Lighting screen layout" below), and **Clear loudness**, all ask first in an in-app
 dialog. It says the cues will be **permanently erased** and cannot be undone, names the song (or "every song in
-<plan>"), and counts what goes: looks and hand-made cues (loudness for Clear loudness). The focus starts on **Keep
+<plan>"), and counts what goes: looks and hand-made cues (loudness for Clear loudness, which a song with a Playback waveform does not offer). The focus starts on **Keep
 cues**; **Erase permanently** is the only button that erases. Esc, a click outside the dialog and **Keep cues** leave
 everything as it was.
 
@@ -1408,7 +1425,7 @@ the timeline section. It behaves as before. Its **OSC address** field is the cue
 
 Above the timeline, **Songs in this service - N of M captured** shows one chip per plan song, in plan order, with
 **Clear all songs…** at the right. A captured song is a small coloured box with its title, its look count (or cue
-count in MIDI mode), a note glyph when it has loudness, and an **x** that opens the permanent-erase dialog for that song
+count in MIDI mode), a note glyph when it has room loudness (never for a song with a Playback waveform), and an **x** that opens the permanent-erase dialog for that song
 only. A plan song with nothing saved is greyed with a dashed outline and says "not captured". Clicking a chip selects
 that song in the timeline exactly like the **Song** menu (a hand pick; **Follow live** returns). The song that is
 playing has a green dot, the selected chip an outline. The chips look small but their buttons are 44 px tall, and the

@@ -37,7 +37,7 @@
 //!   song of the current paired plan, at most 2 MB, JPEG or PNG by type and by first bytes, held in
 //!   memory only (64 pictures, 8 MB, oldest out first), never written to disk, a log or the plan.
 //! * A song's waveform comes through here too, and only when the window shows that song's lighting
-//!   timeline: a song of the current paired plan, at most 20,000 numbers in 0..=1, 6 s and 600,000
+//!   timeline or a Lightkey recording of that song is about to start (`song_has_waveform`): a song of the current paired plan, at most 20,000 numbers in 0..=1, 6 s and 600,000
 //!   bytes at most, cut to whole numbers 0..=255 (nothing else of the answer is passed on), held in
 //!   memory only (16 songs, by `library_revision`; 10 minutes for a helper that sends none).
 //! * Every failure is one short plain sentence.
@@ -67,8 +67,8 @@ use stagepilot_playback::helper_assets::BUNDLED_HELPER_VERSION;
 use stagepilot_playback::library::{
     apply_detail, health_words, helper_state_for, helper_words, match_plan, match_setlist,
     parse_health, parse_setlist, parse_setlist_list, HelperState, HelperStatus, LibraryArtwork,
-    LibraryPlan, LibrarySection, LibrarySetlist, LibraryState, LibraryStatus, ParsedSetlist,
-    PlanMatch, PlanTitle, MAX_ARTWORK_BYTES, MAX_SETLISTS,
+    LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySetlist, LibraryState, LibraryStatus,
+    ParsedSetlist, PlanMatch, PlanTitle, MAX_ARTWORK_BYTES, MAX_SETLISTS,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -960,6 +960,7 @@ impl PlaybackLibrary {
             key_original: None,
             key_was: None,
             key_changed_at: None,
+            has_waveform: false,
             bpm: None,
             scan_length_s: None,
             countdown_length_s: None,
@@ -1325,7 +1326,8 @@ impl PlaybackLibrary {
             };
         match fetched {
             Fetched::Setlist(parsed, others) => {
-                let matched = match_setlist(&titles, &parsed.songs);
+                let mut matched = match_setlist(&titles, &parsed.songs);
+                self.mark_held_waveforms(&base, &mut matched.songs).await;
                 finish(
                     LibraryState::Ready,
                     stale_note,
@@ -1657,6 +1659,56 @@ impl PlaybackLibrary {
             _ => false,
         };
         fresh.then(|| entry.wave.clone())
+    }
+
+    /// Says on each paired song whether its waveform is held right now (never asks the helper).
+    async fn mark_held_waveforms(&self, base: &str, songs: &mut [LibraryPlanSong]) {
+        let revision = self.read_revision().await;
+        for song in songs.iter_mut() {
+            if song.status != PlanMatch::Matched {
+                continue;
+            }
+            let Some(library) = song.library.as_mut() else {
+                continue;
+            };
+            let Some(id) = library.setlist_song_id.and_then(|n| u64::try_from(n).ok()) else {
+                continue;
+            };
+            library.has_waveform = self
+                .held_waveform(&(base.to_string(), id), revision.as_ref())
+                .is_some();
+        }
+    }
+
+    /// Whether the plan song with this Lighting key (`source_song_id`, else `id`) is paired with a Playback song that has a
+    /// waveform: held already, or asked of the helper now (at most `WAVEFORM_TIMEOUT`). False for anything else (no pairing,
+    /// no Library Link, no waveform, no answer): the caller then does what it did before the waveform existed.
+    pub async fn song_has_waveform(
+        &self,
+        settings: &PlaybackLibrarySettings,
+        plan: Option<&ServicePlan>,
+        song_key: &str,
+    ) -> bool {
+        // Only a Library Link that has been in use is asked from here (never an unprompted look at a computer that may
+        // never have had one).
+        if settings.enabled != Some(true) {
+            return false;
+        }
+        let current = self.plan(settings, plan, false).await;
+        if current.state != LibraryState::Ready {
+            return false;
+        }
+        let id = current
+            .songs
+            .iter()
+            .find(|song| song.key == song_key && song.status == PlanMatch::Matched)
+            .and_then(|song| song.library.as_ref())
+            .and_then(|library| library.setlist_song_id)
+            .and_then(|n| u64::try_from(n).ok());
+        match id {
+            Some(id) => self.waveform(settings, id).await.is_ok(),
+            None => false,
+        }
     }
 
     /// The waveform of one song of the current paired plan (the route has checked that). Held in

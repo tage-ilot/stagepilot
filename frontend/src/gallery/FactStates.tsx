@@ -44,7 +44,9 @@ const NOW = Date.now();
 const PLAN: LibraryPlan = setlistOf(4);
 const cardOf = (index: number) => cardLibrary(PLAN.songs[index], NOW);
 const lightingChips: SongChip[] = [
-  { key: "s1", title: "Holy Forever", order: 1, looks: 12, handmade: 0, hasLoudness: true, label: "fully_captured", library: cardOf(0) },
+  // Holy Forever has a Playback waveform: it stands in for the room loudness, so the song has no note chip even if a loudness was saved earlier.
+  { key: "s1", title: "Holy Forever (has a waveform)", order: 1, looks: 12, handmade: 0, hasLoudness: false, label: "fully_captured", library: cardOf(0) },
+  { key: "s1b", title: "Hosanna (no waveform, room loudness)", order: 7, looks: 12, handmade: 0, hasLoudness: true, label: "fully_captured", library: cardOf(1) },
   { key: "s2", title: "Battle Belongs", order: 2, looks: 4, handmade: 0, hasLoudness: false, label: "incomplete", library: cardOf(1) },
   { key: "s3", title: "Gratitude", order: 3, looks: 0, handmade: 3, hasLoudness: false, label: "manually_cued", library: cardOf(2) },
   { key: "s4", title: "Firm Foundation", order: 4, looks: 0, handmade: 0, hasLoudness: false, label: "not_captured", library: cardOf(3) },
@@ -86,7 +88,7 @@ const coverSlot = (
 
 export const factTemplates: SampleState[] = [
   { id: "chips", label: "Fact chips: by themselves", look: "One square chip per fact (the look the Presenter Link's key used to have), a small gap, no dot or bullet between; a tone only where the words said it; a long fact is cut inside its chip; the box on the dashed line is one card wide.", render: () => chipsByThemselves },
-  { id: "lighting", label: "Lighting's songs", look: "Under each title: the capture words, a note chip when it has loudness, and the tempo, each its own chip. A song Playback does not have shows only its capture words.", render: () => <SongsStrip chips={lightingChips} liveKey="s2" noun="looks" onClear={none} onSelect={none} selectedKey="s1" /> },
+  { id: "lighting", label: "Lighting's songs", look: "Under each title: the capture words, a note chip when it has room loudness (never for a song that has a Playback waveform), and the tempo, each its own chip. A song Playback does not have shows only its capture words.", render: () => <SongsStrip chips={lightingChips} liveKey="s2" noun="looks" onClear={none} onSelect={none} selectedKey="s1" /> },
   {
     id: "playback", label: "Playback's songs (config)", look: "Under each title: the key (with (was F) for a key changed today) and the length, one chip each. A song Playback does not have or cannot tell apart keeps its words, not chips.",
     render: () => {

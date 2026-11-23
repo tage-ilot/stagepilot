@@ -995,7 +995,7 @@ describe("Lighting hold-until-saved conformance (guard)", () => {
 
 describe("the song map on the panel's timeline (the Playback library's arrangement and waveform)", () => {
   const libSong = (over: Record<string, unknown> = {}) => ({
-    setlist_song_id: 2000001, content_id: null, position: 1, title: "Holy Forever", key: "Ab", key_original: "Ab", key_was: null, key_changed_at: null, bpm: 65, scan_length_s: 330, countdown_length_s: 330,
+    setlist_song_id: 2000001, content_id: null, position: 1, title: "Holy Forever", key: "Ab", key_original: "Ab", key_was: null, key_changed_at: null, has_waveform: false, bpm: 65, scan_length_s: 330, countdown_length_s: 330,
     length_source: "last_measure", arrangement: "Default", section_count: 3,
     sections: [{ name: "Count Off", start: 0, end: 4 }, { name: "Verse 1", start: 4, end: 100 }, { name: "Chorus", start: 100, end: 335 }],
     artwork: null, rental_expires_utc: null, ...over,
@@ -1044,7 +1044,7 @@ describe("the song map on the panel's timeline (the Playback library's arrangeme
     const fetchMock = wire(() => json({ step_s: 0.125, peak: [0, 100, 255, 100] }));
     mountWith(libraryOf([planSong()]));
     expect(screen.getByTestId("lighting-arrangement")).toBeInTheDocument();
-    expect(await screen.findByTestId("lighting-waveform")).toHaveAttribute("aria-hidden", "true");
+    expect(await screen.findByTestId("lighting-waveform")).toHaveAttribute("role", "img");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const url = String(fetchMock.mock.calls[0]![0]);
     expect(url).toContain("/api/v1/playback-library/songs/2000001/waveform");
@@ -1081,15 +1081,83 @@ describe("the song map on the panel's timeline (the Playback library's arrangeme
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("with the Song map switched off nothing is drawn and the waveform is not even asked for; switching it on asks once", async () => {
+  it("with the Song map switched off nothing is drawn, though the waveform is asked for (it decides what the loudness does); switching it on draws it without asking again", async () => {
     window.localStorage.setItem("stagepilot.lighting.songMap", "false");
     const fetchMock = wire(() => json({ step_s: 0.5, peak: [10, 200, 30] }));
     mountWith(libraryOf([planSong()]));
     expect(screen.queryByTestId("lighting-song-map")).toBeNull();
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(fetchMock).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("lighting-waveform")).toBeNull();
     await userEvent.setup().click(screen.getByRole("button", { name: "Song map" }));
     expect(await screen.findByTestId("lighting-waveform")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the Playback waveform replaces the room loudness", () => {
+  const loudness = { step_seconds: 1, values: Array.from({ length: 336 }, (_, i) => (i % 9) * 20 + 10), takes: 1 };
+  const libSong = (id: number, over: Record<string, unknown> = {}) => ({
+    setlist_song_id: id, content_id: null, position: id - 2000000, title: "Song", key: "Ab", key_original: "Ab", key_was: null, key_changed_at: null, has_waveform: false, bpm: 65, scan_length_s: 330, countdown_length_s: 330,
+    length_source: "last_measure", arrangement: "Default", section_count: 2,
+    sections: [{ name: "Verse 1", start: 0, end: 100 }, { name: "Chorus", start: 100, end: 335 }],
+    artwork: null, rental_expires_utc: null, ...over,
+  });
+  const planOf = (songs: unknown[]) => ({
+    target: "10.0.0.5", address: "", status: null, error: null, pending: null, saveAddress: vi.fn(), check: vi.fn(), watch: vi.fn(),
+    plan: { enabled: true, state: "ready", message: null, plan_date: "2026-07-19", setlist: null, newest: null, stale: false, checked_at: null, songs },
+  }) as never;
+  const pair = (key: string, id: number, over: Record<string, unknown> = {}) => ({ key, title: key, plan_position: id - 2000000, plan_seconds: 336, status: "matched", library: libSong(id, over) });
+  const twoSongs: Song[] = [song, { ...song, id: "item-2", source_song_id: "song-2", title: "Second Song", order: 2 }];
+  const withLoudness = (keys: string[]) => ({
+    ...settings,
+    settings: {
+      ...settings.settings,
+      lights: {
+        ...settings.settings.lights,
+        cue_maps: Object.fromEntries(keys.map((key) => [key, { song_key: key, song_title: key, cues: [], osc_cues: [], loudness }])),
+      },
+    },
+  }) as SettingsResponse;
+  const mountPlan = (library: never, keys: string[]) => render(
+    <LightingSetupPanel error={null} library={library} lights={lights} message={null} onRefresh={vi.fn()} onSaveCues={vi.fn()} onSaveSettings={vi.fn()} onTest={vi.fn()} pendingOperation={null} settings={withLoudness(keys)} state={{ ...state, plan: { ...state.plan!, songs: twoSongs } }} />,
+  );
+  const answer = (body: unknown, status = 200) => vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }))));
+  beforeEach(() => window.localStorage.clear());
+  afterEach(() => { vi.unstubAllGlobals(); window.localStorage.clear(); });
+
+  it("a song with a waveform draws the waveform where the loudness was, and no loudness, loudness chip or Clear loudness", async () => {
+    answer({ step_s: 0.5, peak: [10, 200, 30, 90] });
+    mountPlan(planOf([pair("song-1", 2000001)]), ["song-1"]);
+    const wave = await screen.findByTestId("lighting-waveform");
+    expect(within(screen.getByTestId("lighting-timeline-track")).getByTestId("lighting-waveform")).toBe(wave);
+    expect(wave.getAttribute("aria-label")).toMatch(/^Waveform: /);
+    expect(screen.queryByTestId("lighting-loudness")).toBeNull();
+    expect(screen.queryByTestId("lighting-waveform-row")).toBeNull();
+    expect(screen.queryByTestId("song-chip-loudness")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear loudness" })).toBeNull();
+  });
+
+  it("a song the plan says has a waveform shows no loudness chip, even before its own waveform is loaded; one that does not keeps it", async () => {
+    answer({ detail: "No waveform." }, 404);
+    mountPlan(planOf([pair("song-1", 2000001, { has_waveform: true }), pair("song-2", 2000002)]), ["song-1", "song-2"]);
+    const chips = await screen.findAllByTestId("song-chip-loudness");
+    expect(chips).toHaveLength(1);
+    expect(chips[0]!.closest("li")!.textContent).toContain("Second Song");
+  });
+
+  it("a song without a waveform keeps its loudness: the picture, the chip, and what it was before", async () => {
+    answer({ detail: "No waveform." }, 404);
+    mountPlan(planOf([pair("song-1", 2000001)]), ["song-1"]);
+    expect(await screen.findByTestId("lighting-loudness")).toBeInTheDocument();
+    expect(screen.getByTestId("song-chip-loudness")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(screen.queryByTestId("lighting-waveform")).toBeNull();
+  });
+
+  it("with no Playback pairing at all the loudness is shown as before", () => {
+    answer({ step_s: 1, peak: [1] });
+    mountPlan(planOf([]), ["song-1"]);
+    expect(screen.getByTestId("lighting-loudness")).toBeInTheDocument();
+    expect(screen.getByTestId("song-chip-loudness")).toBeInTheDocument();
   });
 });

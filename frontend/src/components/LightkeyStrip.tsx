@@ -164,7 +164,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
   onStatus?: (status: LightkeyStatus) => void;
   looks?: SongLooks;
   /** The selected song's loudness: whether it has any, and how to clear it. */
-  loudness?: { present: boolean; onClear?: () => void; disabled?: boolean };
+  loudness?: { present: boolean; onClear?: () => void; disabled?: boolean; /** False when every song of the plan has a Playback waveform: the audio input is then not asked for at all. */ needed?: boolean };
   connection?: LiveLinkConnection;
   /** The test cue's fields: opened from "Send a test cue" in the strip under the fields. */
   testCue?: ReactNode;
@@ -517,7 +517,7 @@ export function LightkeyStrip({ lightingEnabled, looks, loudness, connection, te
             <SectionNotice className="mt-2" quiet role="status" size="xs" testId="lightkey-read-result" tone={readResult.ok ? "info" : "danger"} variant="line">{readResult.message}</SectionNotice>
           )}
 
-          {status.recording && (
+          {status.recording && loudness?.needed !== false && (
             <LoudnessPicker disabled={loudness?.disabled} hasLoudness={Boolean(loudness?.present)} onClear={loudness?.onClear} />
           )}
         </>

@@ -1,4 +1,5 @@
 import type { LibrarySection, SongWaveform } from "../types";
+import { formatElapsed } from "./lightingOsc";
 import { SECTION_ABBREVIATIONS, sectionColor } from "./sectionColors";
 
 /**
@@ -12,8 +13,6 @@ import { SECTION_ABBREVIATIONS, sectionColor } from "./sectionColors";
 
 /** The bar's height in px. */
 export const BAR_HEIGHT_PX = 26;
-/** The waveform's height in px. */
-export const WAVEFORM_HEIGHT_PX = 44;
 /** Space a block keeps around its label, in px (the label must fit the block's width plus this). */
 export const LABEL_PADDING_PX = 8;
 /** The gap between two blocks, in px. */
@@ -127,6 +126,14 @@ export function waveformPath(waveform: SongWaveform, length: number): string | n
     `L${point(first, firstHalf, -1)}`,
     "Z",
   ].join(" ");
+}
+
+/** The text alternative of the waveform picture. */
+export function waveformAltText(waveform: SongWaveform): string {
+  let at = -1;
+  let loudest = 0;
+  waveform.peak.forEach((value, index) => { if (Number.isFinite(value) && value > loudest) { loudest = value; at = index; } });
+  return at < 0 ? "Waveform: nothing to show" : `Waveform: loudest at ${formatElapsed(Math.round(at * waveform.step_s * 100) / 100)}`;
 }
 
 /** Where the "Song map" switch is remembered (this browser, like the timeline height). */
