@@ -21,7 +21,7 @@ import {
   type TimelineMarker,
 } from "./lightingTimelineMath";
 import { loudnessAltText, loudnessPath } from "./loudness";
-import { arrangementBlocks, BAR_HEIGHT_PX, BLOCK_GAP_PX, blockLabel, canvasMeasure, SONG_MAP_KEY, WAVEFORM_HEIGHT_PX, waveformPath } from "./lightingSongMap";
+import { arrangementBlocks, BAR_HEIGHT_PX, BLOCK_GAP_PX, blockLabel, canvasMeasure, SONG_MAP_KEY, waveformAltText, waveformPath } from "./lightingSongMap";
 import { arrangementLabel } from "./playbackLibrary";
 import { EffectDetail } from "./LightingEffectDetail";
 import { assignEffectLanes, clampRampStart, effectLabel, formatFade, rampGeometry } from "./lightingSmooth";
@@ -52,7 +52,7 @@ export function LightingTimeline({
 }: {
   /** The song's arrangement from the Playback library (view-only): drawn as a bar of tinted section blocks above the cues. Nothing is drawn, and no switch shown, without it. */
   arrangement?: readonly LibrarySection[] | null;
-  /** The song's waveform from the Playback library (view-only), drawn under the arrangement bar. Without it the bar shows alone. */
+  /** The song's waveform from the Playback library (view-only). It is drawn behind the markers where the room loudness would be, and when a song has one its saved loudness is not drawn. */
   waveform?: SongWaveform | null;
   /** Whether the song map (bar and waveform) is shown; when not given the timeline keeps its own choice in this browser. */
   songMap?: boolean;
@@ -73,7 +73,7 @@ export function LightingTimeline({
   hiddenTypes?: ReadonlySet<CueTypeId>;
   onToggleType?: (type: CueTypeId) => void;
   onShowAllTypes?: () => void;
-  /** The song's recorded room loudness, drawn as a faint envelope behind the markers. */
+  /** The song's recorded room loudness, drawn as a faint envelope behind the markers (not when the song has a waveform). */
   loudness?: SongLoudness | null;
   /** Called when a single marker is picked, so the cue list can show its row. */
   onSelect?: (id: string) => void;
@@ -136,13 +136,14 @@ export function LightingTimeline({
     width: zoom === 0 ? "100%" : `${Math.max(length * zoom, 1)}px`,
   };
   const step = rulerStep(length);
-  const loudnessShape = loudness ? loudnessPath(loudness, length) : null;
   const ticks = Array.from({ length: Math.floor(length / step) + 1 }, (_, index) => index * step);
   // The song map (the Playback library's arrangement bar and waveform): only for a song that has blocks to show.
   const blocks = useMemo(() => arrangementBlocks(arrangement ?? [], length), [arrangement, length]);
   const hasSongMap = blocks.length > 0;
   const showSongMap = hasSongMap && songMapOn;
   const waveShape = useMemo(() => (showSongMap && waveform ? waveformPath(waveform, length) : null), [showSongMap, waveform, length]);
+  // The waveform stands where the room loudness would be: a song that shows its waveform does not draw its saved loudness.
+  const loudnessShape = loudness && !waveShape ? loudnessPath(loudness, length) : null;
   const barRef = useRef<HTMLDivElement>(null);
   const [labelFont, setLabelFont] = useState("11px sans-serif");
   useEffect(() => {
@@ -381,20 +382,6 @@ export function LightingTimeline({
                   );
                 })}
               </div>
-              {waveShape && (
-                <div className="relative mt-1" data-testid="lighting-waveform-row" style={{ height: `${WAVEFORM_HEIGHT_PX}px` }}>
-                  <div aria-hidden="true" className="absolute inset-x-0 top-1/2 h-px bg-edge-subtle" />
-                  <svg
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 h-full w-full text-integration-playback opacity-[0.55]"
-                    data-testid="lighting-waveform"
-                    preserveAspectRatio="none"
-                    viewBox="0 0 2400 100"
-                  >
-                    <path d={waveShape} fill="currentColor" />
-                  </svg>
-                </div>
-              )}
             </div>
           )}
           <div
@@ -408,6 +395,19 @@ export function LightingTimeline({
             role="group"
             style={{ height: `${trackHeight}px` }}
           >
+            {waveform && waveShape && (
+              <svg
+                aria-label={waveformAltText(waveform)}
+                className="pointer-events-none absolute inset-x-0 w-full text-ink-muted opacity-25"
+                data-testid="lighting-waveform"
+                preserveAspectRatio="none"
+                role="img"
+                style={{ top: `${labelZone}px`, height: `calc(100% - ${labelZone}px)` }}
+                viewBox="0 0 2400 100"
+              >
+                <path d={waveShape} fill="currentColor" />
+              </svg>
+            )}
             {loudness && loudnessShape && (
               <svg
                 aria-label={loudnessAltText(loudness)}

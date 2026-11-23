@@ -54,6 +54,7 @@ fn lib_song(
         key_original: Some("C".to_string()),
         key_was: None,
         key_changed_at: None,
+        has_waveform: false,
         bpm: Some(70.0),
         scan_length_s: None,
         countdown_length_s: None,

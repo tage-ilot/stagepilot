@@ -492,6 +492,11 @@ impl LightsPlugin {
         self.link().audio()
     }
 
+    /// Tells the Lightkey link how to learn that a song has a Playback waveform (see `lightkey_link::WaveformProbe`).
+    pub fn lightkey_set_waveform_probe(&self, probe: crate::lightkey_link::WaveformProbe) {
+        self.link().set_waveform_probe(probe);
+    }
+
     pub async fn lightkey_set_recording(&self, on: bool) -> String {
         let message = self.link().set_recording(on).await;
         // Arming the recorder switches replay off: give back what the timeline was holding.

@@ -67,6 +67,7 @@ fn lib_song(
         key_original: None,
         key_was: None,
         key_changed_at: None,
+        has_waveform: false,
         bpm: None,
         scan_length_s: None,
         countdown_length_s: None,

@@ -1,6 +1,6 @@
 import { HOST_LABEL } from "../components/lightingHost";
 import { lightkeyDown, lightkeyOf } from "./fixtures";
-import { Lighting } from "./LightingSample";
+import { Lighting, LightingTimelineSample } from "./LightingSample";
 import { Scripted } from "./Scripted";
 import type { SampleState } from "./StateCard";
 
@@ -21,5 +21,7 @@ export const lightingStates: SampleState[] = [
   { id: "update-by-hand", label: "Update available (needs the command)", look: "The Lighting Link is behind: the Details open with Update the Lighting Link and the quiet note above them.", render: () => <Lighting status={lightkeyOf({ helper: { version: "0.4.0", outdated: true } })} /> },
   { id: "update-by-itself", label: "Update available (StagePilot does it)", look: "Details closed; the quiet line inside says what StagePilot does.", render: () => <Lighting status={lightkeyOf({ helper: { version: "0.6.0", outdated: false, updater: true, update: { mode: "automatic", version: "0.7.0", message: "A newer version is ready." } } })} /> },
   { id: "replay-off", label: "Replay is off", look: "The warning that saved lights will not play, with its button, stays in view.", render: () => <Lighting status={lightkeyOf({ replay: false })} /> },
+  { id: "timeline-waveform", label: "Timeline: the song has a Playback waveform", look: "The song's waveform is the faint shape behind the markers, where the room loudness used to be. No waveform row under the arrangement bar, no loudness shape, no note chip on the song, no Clear loudness, no audio input.", render: () => <LightingTimelineSample kind="waveform" /> },
+  { id: "timeline-loudness", label: "Timeline: the song has no waveform", look: "As before: the room loudness recorded with the microphone is the faint shape behind the markers (the song has a note chip, and Clear loudness and the audio input are in Record mode).", render: () => <LightingTimelineSample kind="loudness" /> },
   { id: "off", label: "Off", look: "Lighting is off: sACN: Off and DMX: \u2014 (both grey) and no Details button (nothing to set up yet).", render: () => <Lighting status={lightkeyDown({ link: "off", detail: "Lighting is off." })} /> },
 ];
