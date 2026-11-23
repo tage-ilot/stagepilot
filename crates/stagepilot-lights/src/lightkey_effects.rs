@@ -790,6 +790,25 @@ fn trim(eval: &Eval, start: f64, period: f64) -> Option<(f64, f64)> {
     (t1 - t0 >= MIN_CYCLES * period).then_some((t0, t1))
 }
 
+/// Seconds at the start of an evaluated window before the first matching cycle: the effect is
+/// dark (or still, or only partly started) before the chase begins. The first cycle matches at
+/// the first moment that is reproduced and starts a stretch of one period in which
+/// [`ACCEPT_SHARE`] of the moments are. 0 when the window starts matching.
+fn lead_in_seconds(eval: &Eval, period: f64) -> f64 {
+    let per_cycle = ((period / CHECK_STEP).round() as usize).max(1);
+    let good: Vec<bool> = eval.good.iter().map(|g| *g >= GOOD_MOMENT).collect();
+    let mut prefix = Vec::with_capacity(good.len() + 1);
+    prefix.push(0usize);
+    for g in &good {
+        prefix.push(prefix.last().copied().unwrap_or(0) + usize::from(*g));
+    }
+    (0..good.len().saturating_sub(per_cycle - 1))
+        .find(|&a| {
+            good[a] && (prefix[a + per_cycle] - prefix[a]) as f64 >= ACCEPT_SHARE * per_cycle as f64
+        })
+        .map_or(0.0, |a| a as f64 * CHECK_STEP)
+}
+
 /// Ramp segments the members need as plain rows inside `[start, end]`.
 fn plain_segments(
     cluster: &Cluster,
@@ -965,6 +984,16 @@ pub fn detect(series: &[&Series], end: f64, scale: f64) -> Detected {
                 .map(|(i, _)| i)
                 .collect();
             if failing.is_empty() {
+                // the loop starts at its first matching cycle; the lead-in stays plain rows
+                // (members keep their phase: the window start and their offsets move together)
+                let lead = lead_in_seconds(&eval, period);
+                if lead > 0.25 && end_t - (start + lead) >= MIN_CYCLES * period {
+                    start += lead;
+                    for m in members.iter_mut() {
+                        m.1 = (m.1 - lead).rem_euclid(period);
+                    }
+                    continue;
+                }
                 let plain = plain_segments(&cluster, series, start, end_t, scale);
                 if steps as f64 > MAX_STEP_SHARE * plain as f64 {
                     reject(

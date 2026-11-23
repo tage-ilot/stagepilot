@@ -140,6 +140,174 @@ pub struct SmoothCapture {
     pub steps: usize,
 }
 
+// ------------------------------------------------------------------------- cleaning the capture
+
+/// Grid of the capture clean-up, seconds: one frame of the 40 Hz replay.
+pub const CLEAN_BIN_SECONDS: f64 = 0.025;
+/// A cleaned change is kept only when the value moved by more than this share of the tolerance
+/// since the last kept one (the final value always stays). Below one 8-bit step (1/255 of the
+/// range), so the capture's own quantisation is never cut.
+const CLEAN_MIN_MOVE_SHARE: f64 = 0.1;
+/// Property-name parts that mark a discrete control (a wheel slot, a shutter mode, a macro):
+/// never cleaned, even when the value arrives as a float.
+const DISCRETE_NAMES: [&str; 9] = [
+    "gobo", "shutter", "strobe", "macro", "prism", "wheel", "mode", "preset", "select",
+];
+
+/// Whether the address is a continuous property (a level, a colour, an angle, zoom, focus, frost,
+/// iris) that may be cleaned; options, text, bools and gobo/shutter/macro-like floats are not.
+pub fn is_continuous(address: &str, dim: usize) -> bool {
+    let p = property_of(address).to_lowercase();
+    if DISCRETE_NAMES.iter().any(|k| p.contains(k)) {
+        return false;
+    }
+    match property_class(address, dim) {
+        "other level" => ["zoom", "focus", "frost", "iris"]
+            .iter()
+            .any(|k| p.contains(k)),
+        _ => true,
+    }
+}
+
+/// Median of three, per channel.
+fn median3(a: &[f64], b: &[f64], c: &[f64]) -> Vec<f64> {
+    (0..a.len())
+        .map(|k| {
+            let (x, y, z) = (a[k], b[k], c[k]);
+            x.max(y).min(x.min(y).max(z))
+        })
+        .collect()
+}
+
+/// Clean the capture before it is fitted: the arrival times of a recorded change are smeared
+/// (about half of the events of a 40 Hz stream arrive a few milliseconds after the previous one
+/// of the same address) and some values flash back for a moment, so a chase that repeats
+/// exactly never looks the same twice and no loop matches. Per CONTINUOUS address (see
+/// [`is_continuous`]; every other address passes through untouched):
+///
+/// 1. the changes become one value per [`CLEAN_BIN_SECONDS`] bin: the last one in the bin, at
+///    its own time (times are never moved, so a clean recording is not shifted),
+/// 2. each bin takes the median of itself and its two neighbours (a bin without a change holds
+///    the value before), per channel: a flash of one frame goes, a pulse of two frames or more
+///    stays, a step stays,
+/// 3. a change is kept only when the value moved by more than [`CLEAN_MIN_MOVE_SHARE`] of the
+///    tolerance since the last one kept.
+///
+/// The first value of the address and the final value always stay; changes at or before 0
+/// (the start state) and after `duration` are not touched. The input is not changed: the raw
+/// recording stays raw, and a fit of it cleans the same way.
+pub fn clean_changes(
+    changes: &[(f64, FixtureCommand)],
+    duration: f64,
+) -> Vec<(f64, FixtureCommand)> {
+    // per address: indexes of the changes, in time order
+    let mut order: Vec<&str> = Vec::new();
+    let mut by_address: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, (_, c)) in changes.iter().enumerate() {
+        by_address
+            .entry(&c.a)
+            .or_insert_with(|| {
+                order.push(&c.a);
+                Vec::new()
+            })
+            .push(i);
+    }
+    let mut keep: Vec<bool> = vec![true; changes.len()];
+    let mut replace: HashMap<usize, Vec<FixtureArg>> = HashMap::new();
+    for address in order {
+        let list = &by_address[address];
+        let numeric = |i: usize| -> Option<Vec<f64>> {
+            let v = &changes[i].1.v;
+            if v.is_empty() {
+                return None;
+            }
+            v.iter()
+                .map(|a| match a {
+                    FixtureArg::Float(f) if f.is_finite() && changes[i].0.is_finite() => Some(*f),
+                    _ => None,
+                })
+                .collect()
+        };
+        let Some(first) = numeric(list[0]) else {
+            continue;
+        };
+        let dim = first.len();
+        if !is_continuous(address, dim)
+            || list
+                .iter()
+                .any(|&i| numeric(i).map(|v| v.len()) != Some(dim))
+        {
+            continue;
+        }
+        // the changes the clean-up looks at: after 0, up to the end of the song
+        let mut inside: Vec<usize> = list
+            .iter()
+            .copied()
+            .filter(|&i| changes[i].0 > 0.0 && (duration <= 0.0 || changes[i].0 <= duration))
+            .collect();
+        inside.sort_by(|&a, &b| changes[a].0.total_cmp(&changes[b].0));
+        if inside.is_empty() {
+            continue;
+        }
+        // one entry per bin: (bin, index of its last change, its value)
+        let mut bins: Vec<(i64, usize, Vec<f64>)> = Vec::new();
+        for &i in &inside {
+            let bin = (changes[i].0 / CLEAN_BIN_SECONDS + 1e-6).floor() as i64;
+            let value = numeric(i).expect("checked");
+            match bins.last_mut() {
+                Some(last) if last.0 == bin => {
+                    last.1 = i;
+                    last.2 = value;
+                }
+                _ => bins.push((bin, i, value)),
+            }
+        }
+        let tol = tolerance_for(address, 1.0);
+        let min_move = CLEAN_MIN_MOVE_SHARE * tol;
+        let mut kept_value: Option<Vec<f64>> = None;
+        let mut kept: Vec<(usize, Vec<f64>)> = Vec::new();
+        for k in 0..bins.len() {
+            let prev = if k == 0 { &bins[0].2 } else { &bins[k - 1].2 };
+            let next = match bins.get(k + 1) {
+                Some(n) if n.0 == bins[k].0 + 1 => &n.2,
+                _ => &bins[k].2,
+            };
+            let last = k + 1 == bins.len();
+            // the first and the final value of the address stay as recorded
+            let value = if k == 0 || last {
+                bins[k].2.clone()
+            } else {
+                median3(prev, &bins[k].2, next)
+            };
+            let moved = kept_value
+                .as_ref()
+                .is_none_or(|v| max_diff(v, &value) > min_move);
+            if moved || last {
+                kept_value = Some(value.clone());
+                kept.push((bins[k].1, value));
+            }
+        }
+        let kept_indexes: HashSet<usize> = kept.iter().map(|(i, _)| *i).collect();
+        for &i in &inside {
+            if !kept_indexes.contains(&i) {
+                keep[i] = false;
+            }
+        }
+        for (i, value) in kept {
+            replace.insert(i, value.into_iter().map(FixtureArg::Float).collect());
+        }
+    }
+    changes
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| keep[*i])
+        .map(|(i, (at, c))| match replace.remove(&i) {
+            Some(v) => (*at, FixtureCommand::new(c.a.clone(), v)),
+            None => (*at, c.clone()),
+        })
+        .collect()
+}
+
 // ------------------------------------------------------------------------- recorded series
 
 /// All samples of one address, after the start state and the end are settled.

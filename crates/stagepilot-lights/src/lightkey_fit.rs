@@ -1,9 +1,13 @@
 //! Fitting a recording inside the per-song caps, with a guaranteed end. Pure: no I/O, no clock
 //! (the elapsed time it reports is the only thing it reads).
 //!
-//! A recording is first fitted exactly ([`crate::lightkey_smooth::fit`], tolerance x1). When the
-//! result is over the caps ([`Caps`]) it goes down this ladder and stops at the first stage that
-//! fits:
+//! The capture is cleaned first ([`crate::lightkey_smooth::clean_changes`]: 25 ms bins, a 3-bin
+//! median, continuous properties only), so a chase whose events arrive smeared and flashing still
+//! repeats exactly and becomes a loop.
+//!
+//! The cleaned recording is then fitted exactly ([`crate::lightkey_smooth::fit`], tolerance x1).
+//! When the result is over the caps ([`Caps`]) it goes down this ladder and stops at the first
+//! stage that fits:
 //!
 //! 1. **Exact** fit, tolerance x1: the normal case.
 //! 2. **Looser** tolerance x2..x32. Ramps get fewer; steps (options, text, bools, values more than
@@ -246,6 +250,10 @@ pub fn fit_within_caps_budgeted(
 ) -> Fitted {
     let started = Instant::now();
     let over_budget = || started.elapsed().as_millis() > budget_ms;
+    // Capture noise is cleaned once, before any fit (the caller's recording stays raw).
+    let raw_changes = changes.len();
+    let cleaned = lightkey_smooth::clean_changes(changes, duration);
+    let changes = cleaned.as_slice();
     let mut attempts = Vec::new();
     let mut best = attempt(
         baseline,
@@ -275,7 +283,7 @@ pub fn fit_within_caps_budgeted(
             scale: best.scale,
             thin_seconds: best.thin,
             trimmed,
-            raw_changes: changes.len(),
+            raw_changes,
             exact_items,
             fits,
             fit_ms: started.elapsed().as_millis(),

@@ -10,6 +10,7 @@
 ### Changed
 
 - **A song with a Playback waveform no longer uses the room's loudness.** The waveform takes its place: it is drawn behind the markers on the Lighting timeline (the separate waveform row is gone), the Lightkey recording of that song does not open or read the microphone and saves no loudness, and the song has no note chip, no Clear loudness and no microphone prompt on its account (with every song of the plan on a waveform the Audio input list is not shown). Loudness already saved on such a song is hidden, not deleted. A song without a Playback waveform works as before. The waveform is now asked for whenever the song is paired, even with the Song map off (it only draws when the map is on).
+- **A chase on a busy song is now saved as a loop.** The capture of a song is cleaned before it is fitted (one value per 25 ms, a median of three, levels, colours and angles only), because the rig delivers its changes with smeared arrival times that kept a chase from ever looking the same twice. A 7-minute song with 16 fixtures chasing a 4-second pulse used to come to 42,993 rows and no loop; it is now one loop and a few dozen rows. A loop also starts where the chase starts, with the lead-in before it kept as normal rows. The raw recording on disk is unchanged.
 - **On the Mac, StagePilot now keeps its saved secrets in one keychain item instead of several,** so an update asks for keychain access once instead of six times. Your saved logins are kept.
 
 ## [2.44.1] - 2026-11-22
