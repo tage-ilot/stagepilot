@@ -228,10 +228,11 @@ stored with all its appearance properties above.
 For the real 66-fixture rig (the 31 house/front lights static, 35 other fixtures changing every
 property once) the first look holds **154 values on all 66 fixtures**: 49 values from the 31
 static fixtures (15 of them dark and reduced to their dimmer or colour) and 105 from the 35 that
-change. If nothing changed in a song the whole rig would be 102 values. At the 200 packets a
-second budget (5 ms a packet) the first look of the 154-value pass leaves in **0.77 s** on the
-simulated clock of the tests (nothing is sent before song position 0); it is held to under 1 s
-by a test, and the dark-fixture rule above is what keeps it there. The capture line shows
+change. If nothing changed in a song the whole rig would be 102 values. The first look of the
+154-value pass leaves at once, in 11 OSC bundles of at most 16 values, on the simulated clock
+of the tests (nothing is sent before song position 0); it took 0.77 s at one packet per value
+5 ms apart (the old 200 packets a second), and the dark-fixture rule above is what kept it
+under a second then. The capture line shows
 `Starting look of 66 lights saved.`; the capture records the count in the optional
 `capture.start_lights` (an older build ignores the key).
 
@@ -465,7 +466,7 @@ captured rows AND the captured effects (rows and effects added by hand stay). Ro
 their `fade_seconds` through every save; editing a row's time moves where its ramp starts
 and leaves the fade alone.
 
-### Smooth replay: ramps, effects and the packet budget
+### Smooth replay: ramps, effects and the message budget
 
 Replay plays a song's rows and effects with the same evaluator the capture report uses
 (`lightkey_curve::Timeline`): the value of every fixture property at song position `p` is a
@@ -477,7 +478,7 @@ last sent, and carry on. Pause, stop, reset and the end of the song stop the eng
 **Which songs.** A song with at least one row with a `fade_seconds` above 0, or with an
 effect, is played by the engine. A song captured before smooth capture (no fades, no
 effects) is played exactly as before: one packet per row message at the row's time less
-45 ms, paced, nothing in between (a test with an old-style map pins this).
+45 ms, paced 5 ms apart, nothing in between (a test with an old-style map pins this).
 
 **One scheduler tick** drives everything. There is no task per fixture. While nothing moves
 the engine sleeps until the next row, ramp end, effect start or end or instant step of an
@@ -486,28 +487,50 @@ effect (it does not tick at all when none is left). Per tick, for every address:
 - A **step** (an instant row, the end of a ramp, the first look after a start, seek or
   take-back, an effect starting or ending, an instant step inside an effect's cycle) is sent
   at once, at its exact time (the same 45 ms lead as a look row), whatever the budget.
-- A running **ramp** is looked at every 50 ms (20 Hz) and sent only when its value moved by
-  at least **one DMX step of its property** since the last send: 1/255 for levels and
-  colours (8 bit), 540/65535 degrees (about 0.008) for angles (16 bit). A 60 s dimmer ramp
-  from 0 to 1 is therefore about 240 packets, not 1,200.
-- An address driven by an **effect** is looked at every `effect interval` (50 ms, up to
+- A running **ramp** is looked at every 25 ms (40 Hz, `FAST_TICK_SECONDS`; it was 50 ms) and
+  sent only when its value moved by at least **one DMX step of its property** since the last
+  send: 1/255 for levels and colours (8 bit), 540/65535 degrees (about 0.008) for angles (16
+  bit). A 60 s dimmer ramp from 0 to 1 is therefore about 240 messages, not 2,400. Lightkey's
+  output saturates at about 45 updates a second per address, so 40 Hz shows everything it can.
+- An address driven by an **effect** is looked at every `effect interval` (25 ms, up to
   125 ms = 8 Hz), with the same one-step rule.
 - A value that is still moving is sent as it will be half a tick later (the middle of the
   time it will be held), and **half a DMX step higher**, because Lightkey truncates to the
   DMX resolution. A value at rest is sent exactly.
 
-**Budget.** At most **200 packets per second** leave (the existing 5 ms pacing). A token
-bucket (200 per second, burst 10) decides what a tick may send: steps always go out (they
-only use the bucket up, and the pacing spaces them), then ramps, then effect values, the
-largest change first. When effect values had to wait, the effect interval grows towards
-125 ms (8 Hz) and shrinks back when the budget has room; ramps keep 20 Hz. Beyond that a
-busy second simply sends the biggest changes first.
+**Budget.** At most **2,500 messages per second** leave (`MAX_MESSAGES_PER_SECOND`; it was 200
+packets a second, one message per packet 5 ms apart, and busy songs ask for 1,000 to 2,300).
+A token bucket (2,500 per second, burst 125 = 50 ms) decides what a tick may send: steps
+always go out (they only use the bucket up), then ramps, then effect values, the largest
+change first. When effect values had to wait, the effect interval grows towards 125 ms (8 Hz)
+and shrinks back when the budget has room; ramps keep 40 Hz. Beyond that a busy second simply
+sends the biggest changes first. The number comes from the rig (49 fixtures, from the iMac
+over the network and on the Lighting Mac): Lightkey followed 200, 400, 800 and 1,600
+messages a second to one fixture without lag, and with 49 fixtures all driven at once it
+stayed clean up to **4,900 messages a second**, saturated its output at about 45 updates a
+second per address, and broke near 9,800 (a delay of 390 ms). 2,500 keeps a margin, and the
+Sunday songs' demand with the 40 Hz tick is a 99th percentile of 1,166 to 1,552 a second and
+a maximum of 2,288. It is a named constant (an engine can be given another budget and tick
+with `ReplayEngine::with_budget`; no setting and no UI yet).
 
-**A very busy song (shared budget).** The 200 a second is a fact of the replay (whether
-Lightkey takes more is not known and needs a rig; the limit has not been raised). When a song
-asks for more than that, the plain rule above lets the ramps (colour rows) have all of it and
-the loops get nothing: on the saved busy song (6,999 rows, 7 loops, 36 loop addresses; 20 s to
-80 s) it was 11,998 packets, 326 steps, 11,672 ramp and **0** loop values. So the engine
+**OSC bundles.** What one tick has due leaves **at once, as OSC bundles of at most 16
+messages** (`MAX_BUNDLE_MESSAGES`, `plan_bundles`), not one packet per message 5 ms apart: a
+bundle is `#bundle`, the time tag "immediately", then every message with its size; Lightkey
+applies the messages as the packet arrives (rig test: 2 and 4 fixtures per bundle, 400 bundles
+a second). The order of the queue is kept (steps first, as before), a bundle **never holds two
+values of one address**, the consecutive messages of one fixture stay in one bundle when they
+fit, and one message alone is sent as a plain message. 16 messages of a colour are about 1 KB,
+one UDP packet. A failed bundle is retried once, like a message, and every address of it is
+sent again at the next tick if the retry fails. Rows that are not part of the engine (the old
+row-by-row path, a re-sync, the clears of a release) still go one message per packet, 5 ms
+apart (`MIN_SEND_GAP`).
+
+**A very busy song (shared budget).** When a song asks for more than the budget, the plain
+rule above lets the ramps (colour rows) have all of it and the loops get nothing: on a saved
+busy song (6,999 rows, 7 loops, 36 loop addresses; 20 s to 80 s) at the old 200 a second it
+was 11,998 packets, 326 steps, 11,672 ramp and **0** loop values. The three Sunday songs fit
+under 2,500 a second now (see the numbers below), so this rule only matters for a song that
+asks for more still (a bigger rig, or a lower budget). So the engine
 watches how much each class (ramps, loops) gets of what it asks for (a due value counts as one
 request per 50 ms, or per effect interval for a loop). When a class gets less than a tenth of
 what it asks for **for more than 2 seconds**, the song is *very busy* and the budget is shared
@@ -518,10 +541,10 @@ instead of ramps first:
   everything. Steps (and the first look) still always go out first.
 - **Nobody is left out.** Inside the shared budget an address that has waited 100 ms goes
   before the others, oldest first, and the biggest change still goes first among the ones that
-  have not. The turns come round in about a quarter of a second: on the saved busy song, over
-  55 s, every one of the 36 loop addresses was sent 3.4 to 4.0 times a second (it was 0) and
-  each of the 16 colour ramps 4.0 to 4.1 times a second (it was 12 to 13), 64% of the packets
-  went to the loops and 33% to the ramps.
+  have not. At the old 200 a second the turns came round in about a quarter of a second: on
+  the saved busy song, over 55 s, every one of the 36 loop addresses was sent 3.4 to 4.0 times
+  a second (it was 0) and each of the 16 colour ramps 4.0 to 4.1 times a second (it was 12 to
+  13), 64% of the packets went to the loops and 33% to the ramps.
 - **The song is simplified evenly** (every light updates less often than recorded) and
   `GET /api/v1/lights` says so: `replay_load` is `{ "busy": bool, "served_percent": number }`.
   `busy` is true from the moment the song has been very busy for more than 2 s until the load
@@ -529,31 +552,32 @@ instead of ramps first:
   packets sent over the packets asked for in the last second or so (ramps and loops together),
   rounded. The Lighting panel shows one line while it is busy: *This song is very busy: some
   lights update less often than recorded.* The field is left out while nothing is being replayed.
-- **A song that fits plays exactly as before.** The shared rule starts only after those 2
-  seconds. The two real Sunday songs (Ever Be, 11,075 packets in 320 s; Elohim, 14,822 in 450 s)
-  never reach it, and a test (`replay_budget`) replays both and compares every count and the
-  order of every packet with the engine before this change.
+- **A song that fits never leaves the plain rule.** The shared rule starts only after those 2
+  seconds. The two real songs of the 2026-11-08 service (Ever Be, 23,922 messages in 320 s;
+  Elohim, 29,771 in 450 s; they were 11,075 and 14,822 at 200 a second, with 1,854 and 1,399
+  effect values slowed down, and none is slowed now) never reach it, and a test
+  (`replay_budget`) replays both and compares every count and the order of every message.
 
-**Pacing queue.** Between the ticks and the 5 ms spacing sits one priority queue: **steps
+**Pacing queue.** Between the ticks and the sender sits one priority queue: **steps
 leave first, then ramp values, then effect values, oldest first inside a class**. A ramp or
 effect value that is still waiting when a newer value for the same address is queued is
 **replaced** by it (only the latest value of an address matters and a stale value is never
 sent after a newer one; the replacement keeps the place of the value it replaces). Two steps
-of one address are both kept, in order. The tick runs on time and does not wait for the queue
-to drain, and the sender looks at the queue again at every 5 ms slot, so a step that arrives
-behind a long run of effect values goes out in the next slot. What the queue cannot remove is
-the spacing among steps themselves: a look change that touches 98 values takes 98 slots,
-485 ms, however it is ordered (the `replay_budget` report prints the burst sizes and the wait
-the queue adds beyond that floor: at most 6 / 20 ms on the two real takes). One OSC message per address: **no OSC
-bundles and no pattern addresses** (`P{1,3,5}`), because neither is shown to work with
-Lightkey's fixture overrides; the rig test (S4) decides.
+of one address are both kept, in order. The tick runs on time and the sender empties the
+queue into bundles as soon as it has been filled (it waits only while a paced row or re-sync
+is still leaving), so a step that arrives behind a long run of effect values goes out in the
+same instant, first. A look change that touches 98 values is 7 bundles, no longer 98 slots of
+5 ms (485 ms). **No pattern addresses** (`P{1,3,5}`): not shown to work with Lightkey's
+fixture overrides.
 
-**Step bursts start before their row.** A look change can be 60 to 100 values at one row
-time, and `(n - 1) x 5 ms` (490 ms for 99 values) is a floor no queue order lowers. The
-schedule is known in advance, so a burst that would take **longer than 40 ms** (10 or more
-values; `STEP_BURST_MIN_MS`) is **started early and spread so that its middle lands on the row
-time**: it starts `(n - 1) x 5 ms / 2` before the row (122 ms for 50 values, 242 ms for 98),
-never more than `STEP_LEAD_MAX_MS` = **300 ms** (an engine can be given another value with
+**Step bursts start before their row.** (This was the answer to one packet per message 5 ms
+apart, where a look of 99 values took 490 ms. With 2,500 messages a second and bundles it
+only applies to a very big look.) The schedule is known in advance, so a burst that would take
+**longer than 40 ms at the budget's pace** (more than 100 values, `(n - 1) x 0.4 ms`;
+`STEP_BURST_MIN_MS`) is **started early so that its middle lands on the row time**: it starts
+`(n - 1) x 0.4 ms / 2` before the row (30 ms for 154 values, 60 ms for 300), never more than
+`STEP_LEAD_MAX_MS` = **300 ms**, and, since the values leave together in bundles, the whole look
+leaves that much early (an engine can be given another value with
 `with_step_lead_max_ms`, 0 = off; a per-song setting is meant to use that later; no UI).
 Single steps and small bursts keep exact timing. Rules:
 - *Order inside a burst* (fixed): dimmer / intensity, then colour, then other levels and
@@ -569,20 +593,17 @@ Single steps and small bursts keep exact timing. Rules:
   ramp and effect values in between are superseded by the step that follows. A fixture the
   operator takes over while its value waits is skipped (it takes no slot, nobody waits for it).
 - *Budget*: a burst's steps are not charged to the token bucket, and while steps drain,
-  **every 4th slot goes to a waiting ramp value** (a burst takes at most 3 of 4 slots, so ramps
-  keep 50 packets a second instead of standing still; a burst next to running ramps is planned
-  a third longer for that). Ramps also compete **by their distance in tolerances, not DMX steps**
+  **every 4th message goes to a waiting ramp value** (a burst takes at most 3 of 4 places, so
+  ramps are not left standing still; a burst next to running ramps is planned a third longer
+  for that). Ramps also compete **by their distance in tolerances, not DMX steps**
   (an angle has 184 DMX steps per tolerance, a level 8): in a busy second the angles no longer
   take the whole budget from the dimmers.
 
-*Why earliness up to a few hundred milliseconds is acceptable:* a look change is read by the
-eye over 100 ms or more, a fixture's own dimmer and the haze take longer than that to show it,
-and only part of a big look is early: the first values of the burst (the dimmers and colours
-by the order above) lead by at most the lead, the last ones trail by the same amount. *The
-price:* during a big look change some fixtures change slightly before the beat and others
-slightly after it, spread symmetrically around it; with `STEP_LEAD_MAX_MS` = 0 all of them
-trail it by up to 490 ms. The first look of a song (position 0) cannot start early: nothing
-exists before position 0.
+*Why earliness is acceptable:* a look change is read by the eye over 100 ms or more, and a
+fixture's own dimmer and the haze take longer than that to show it. *The price:* a very big
+look (more than 100 values) changes up to its lead (at most 300 ms, 30 ms for the 154-value
+first look of the real rig) before the beat. The first look of a song (position 0) cannot
+start early: nothing exists before position 0.
 
 **Effects** play from the cycle template. A member sees the cycle at phase
 `(p - start - offset) mod period`, computed from `p` directly each time (exact period
@@ -606,9 +627,10 @@ operator change the engine forgets what it last sent to that fixture and its nex
 the **interpolated value for that moment**, then carries on with the ramp or effect. While
 the song is paused it waits for the resume or seek, as before.
 
-**Packet budget report.** `cargo run --release -p stagepilot-lights --example replay_budget
--- <takes.json> [song]` replays a take on a simulated clock (no sockets) and prints packets
-per second (mean, 99th percentile, max, seconds above 150 per second), the split into steps,
+**Packet budget report.** (Its tables below were measured at the old 200 packets a second and
+20 Hz; the engine's new numbers are in the next section.) `cargo run --release -p
+stagepilot-lights --example replay_budget -- <takes.json> [song]` replays a take on a
+simulated clock (no sockets) and prints packets per second (mean, 99th percentile, max, seconds above 150 per second), the split into steps,
 ramp and effect values, the share sent at the lowered effect rate, how long a step waits in
 the pacing queue, the **lateness of every step value against its row** (negative = early:
 median / p99 / max, the share later than 25 ms, the share earlier than 100 ms, with and
@@ -648,6 +670,26 @@ The large "outside effects" angle maximum of Able is one grid point at the start
 55 degree zoom ramp: 20 Hz cannot follow a ramp that short. Inside effects the deviation
 is the price of the budget: Unstoppable God holds 20 fixtures' colour pulses plus pan sweeps
 at 8 Hz for most of the song.
+
+**Messages sent on the rig's three Sunday songs** (the saved cue maps of 2026-11-22, replayed
+offline on the simulated clock; "before" is the engine with `with_budget(200, 0.05)` and one
+packet per message 5 ms apart, "after" is 2,500 a second, 40 Hz, bundles of 16). Messages a
+second are counted per whole second; "gap" is the time between two sends of one PN fixture's
+dimmer while it moves (a fade or an effect).
+
+| | How Awesome (480 s) | Faithfulness (278 s) | TGIF (299 s) |
+|---|---|---|---|
+| Messages a second, before: p99 / max | 199 / 200 | 200 / 200 | 200 / 200 |
+| Seconds at the 200 cap, before | 36 | 39 | 159 |
+| Messages a second, after: p99 / max | 1,071 / 2,489 | 1,536 / 2,036 | 1,264 / 1,694 |
+| Seconds over the 2,500 budget, after | 0 | 0 | 0 |
+| PN dimmer gap while moving, before: median / p90 | 55 / 319 ms | 124 / 645 ms | 135 / 745 ms |
+| PN dimmer gap while moving, after: median / p90 | 25 / 50 ms | 25 / 50 ms | 25 / 25 ms |
+| Messages / UDP packets, after | 89,962 / 13,224 | 66,658 / 7,967 | 154,762 / 18,229 |
+| Lowest "served" the engine reports, after; seconds "very busy" | 98% / 0 | 95% / 0 | 91% / 0 |
+
+Nothing is starved: only one second of How Awesome gets near the budget (ramps only, nothing
+waiting), and the engine never calls any of the three songs very busy.
 
 ### Simplify this song (backend)
 
