@@ -31,7 +31,7 @@ use stagepilot_core::config::OscArgument;
 use stagepilot_lights::lightkey_fixtures::{FixtureArg, FixtureCommand, FixtureState};
 use stagepilot_lights::lightkey_looks::LookRecorder;
 use stagepilot_lights::lightkey_replay::{
-    simulate, Kind, ReplayEngine, SentPacket, FAST_TICK_SECONDS, PACKET_GAP_SECONDS,
+    simulate, Kind, ReplayEngine, SentPacket, FAST_TICK_SECONDS, MESSAGE_GAP_SECONDS,
 };
 use stagepilot_lights::lightkey_smooth::{
     prepare, property_class, smooth_rows, tolerance_for, Series, SmoothParams, CHECK_STEP_SECONDS,
@@ -553,7 +553,7 @@ fn main() {
             percentile(&bursts, 0.5),
             percentile(&bursts, 0.99),
             bursts.last().copied().unwrap_or(0.0),
-            (bursts.last().copied().unwrap_or(1.0) - 1.0) * PACKET_GAP_SECONDS * 1000.0
+            (bursts.last().copied().unwrap_or(1.0) - 1.0) * MESSAGE_GAP_SECONDS * 1000.0
         );
         // What the queue itself adds: the wait minus the 5 ms each earlier step of the same tick
         // takes. Zero means no ramp, effect or older step was ahead.
@@ -568,7 +568,7 @@ fn main() {
                     let n = seen.entry((p.position * 1e6) as u64).or_default();
                     let ahead = *n as f64;
                     *n += 1;
-                    ((p.at - (p.position - LOOK_LEAD_SECONDS)) - ahead * PACKET_GAP_SECONDS)
+                    ((p.at - (p.position - LOOK_LEAD_SECONDS)) - ahead * MESSAGE_GAP_SECONDS)
                         * 1000.0
                 })
                 .collect()

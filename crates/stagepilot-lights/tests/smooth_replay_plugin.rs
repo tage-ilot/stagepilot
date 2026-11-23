@@ -37,8 +37,24 @@ impl OscOutput for TimedOutput {
             .push((Instant::now(), address.into(), args.to_vec()));
         Ok(())
     }
+    /// One entry `("#bundle", [Int(n)])` for the packet, then its messages, all at the same time.
+    fn send_bundle(&self, messages: &[(String, Vec<OscArgument>)]) -> Result<(), OutputError> {
+        let now = Instant::now();
+        let mut log = self.0.lock().unwrap();
+        log.push((
+            now,
+            BUNDLE_MARK.into(),
+            vec![OscArgument::Int(messages.len() as i64)],
+        ));
+        for (address, args) in messages {
+            log.push((now, address.clone(), args.clone()));
+        }
+        Ok(())
+    }
     fn close(&self) {}
 }
+/// The log entry that tells one OSC bundle of that many messages left.
+const BUNDLE_MARK: &str = "#bundle";
 struct TimedBackend(Log);
 impl OscBackend for TimedBackend {
     fn open_output(&self, _: &str, _: u16) -> Result<Arc<dyn OscOutput>, OutputError> {
@@ -201,6 +217,7 @@ impl Rig {
             .lock()
             .unwrap()
             .iter()
+            .filter(|(_, a, _)| a != BUNDLE_MARK)
             .map(|(t, a, v)| {
                 (
                     (*t - self.t0).as_secs_f64(),
@@ -512,7 +529,7 @@ fn big_look_song() -> Vec<OscLightingCue> {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_98_value_look_leaves_centred_on_its_row_through_the_scheduler() {
+async fn a_98_value_look_leaves_on_its_row_in_bundles_of_at_most_16() {
     let mut r = rig(settings(big_look_song(), vec![])).await;
     r.start().await;
     run_for(12.0).await;
@@ -522,25 +539,45 @@ async fn a_98_value_look_leaves_centred_on_its_row_through_the_scheduler() {
         .filter(|(t, a, v)| *t > 5.0 && *v == 1.0 && a.contains("/F"))
         .collect();
     assert_eq!(burst.len(), 98);
+    // all of it at the row's time less the look lead: no 5 ms spacing (it took 485 ms before)
     let (first, last) = (burst[0].0, burst[97].0);
-    let centre = (first + last) / 2.0;
     assert!(
-        (centre - (10.0 - LOOK_LEAD_SECONDS)).abs() < 0.02,
-        "centre {centre}"
+        (first - (10.0 - LOOK_LEAD_SECONDS)).abs() < 0.02,
+        "first {first}"
     );
-    assert!((last - first - 0.485).abs() < 0.03, "span {}", last - first);
-    // the values go in the documented order: by address inside the class
+    assert!(last - first < 0.005, "span {}", last - first);
+    // by address, in order
     let names: Vec<&String> = burst.iter().map(|b| &b.1).collect();
     let mut sorted = names.clone();
     sorted.sort();
     assert_eq!(names, sorted);
+    // in OSC bundles of at most 16 messages
+    let bundles: Vec<usize> = r
+        .log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(t, a, _)| a == BUNDLE_MARK && (*t - r.t0).as_secs_f64() > 5.0)
+        .map(|(_, _, v)| match v[0] {
+            OscArgument::Int(n) => n as usize,
+            _ => 0,
+        })
+        .collect();
+    assert!(
+        bundles.iter().all(|&n| (2..=16).contains(&n)),
+        "{bundles:?}"
+    );
+    assert!(
+        bundles.iter().sum::<usize>() >= 98 && bundles.len() <= 12,
+        "98 values in {bundles:?}"
+    );
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_fixture_the_operator_takes_mid_burst_is_skipped_and_the_rest_still_go() {
+async fn a_fixture_the_operator_takes_before_the_look_is_skipped_and_the_rest_still_go() {
     let mut r = rig(settings(big_look_song(), vec![])).await;
     r.start().await;
-    // the burst runs from about 9.71 s to 10.2 s; fixture F90 is still waiting at 9.8 s
+    // the look leaves at about 9.955 s; fixture F90 is taken at 9.8 s
     run_for(9.8).await;
     r.plugin
         .lightkey_fixture_changes(vec![dmx(&dim("F90"), 0.3)], false);
@@ -555,12 +592,6 @@ async fn a_fixture_the_operator_takes_mid_burst_is_skipped_and_the_rest_still_go
         "F90 is the operator's now"
     );
     assert_eq!(burst.len(), 97);
-    // the skipped value took no slot: no 10 ms hole where it would have gone
-    let widest = burst
-        .windows(2)
-        .map(|w| w[1].0 - w[0].0)
-        .fold(0.0, f64::max);
-    assert!(widest < 0.0075, "a gap of {widest} s inside the burst");
 }
 
 // ------------------------------------------------- F-H2: the first look and a hand-set head

@@ -56,6 +56,8 @@ const SONG_END_TOLERANCE_SECONDS: f64 = 2.0;
 const SONG_END_GRACE_SECONDS: f64 = 5.0;
 /// How long a shutdown waits for an unfinished recording to be saved before it gives up.
 const SHUTDOWN_SAVE_WAIT: Duration = Duration::from_secs(3);
+// Spacing of the paced packets of rows, re-syncs and clears. The smooth replay engine does not
+// use it: a tick leaves at once in OSC bundles.
 pub const MIN_SEND_GAP: Duration = Duration::from_millis(5);
 pub const POLL_SECONDS: f64 = 0.25;
 /// How often the helper's `GET /health` is read (and at once on every connect).

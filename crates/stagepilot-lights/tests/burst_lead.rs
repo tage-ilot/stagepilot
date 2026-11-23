@@ -1,12 +1,14 @@
-//! Step bursts start before their row so that a big look lands on the beat: the middle of the
-//! burst is on the row time, the important values go first, bursts keep their order, nothing is
-//! sent for the past or before position 0, an operator take-over skips a value without delaying
-//! the others, and the ramps next to a burst are not starved. Fake clock only.
+//! A very big look (more than 100 values, which at the 2,500 messages a second budget take more
+//! than 40 ms) starts before its row, by half the time the budget needs for it; its values leave
+//! together, the important ones first, bursts keep their order, nothing is sent for the past or
+//! before position 0, an operator take-over skips a value without delaying the others, and the
+//! ramps next to a burst are not starved. Looks of up to 100 values keep their exact timing.
+//! Fake clock only.
 
 use stagepilot_core::config::{OscArgument, OscCueSource, OscLightingCue, OscMessage};
 use stagepilot_lights::lightkey_replay::{
-    simulate, Kind, ReplayEngine, SentPacket, FAST_TICK_SECONDS, PACKET_GAP_SECONDS,
-    STEP_LEAD_MAX_MS,
+    simulate, Kind, ReplayEngine, SentPacket, FAST_TICK_SECONDS, MAX_MESSAGES_PER_SECOND,
+    MESSAGE_GAP_SECONDS, STEP_LEAD_MAX_MS,
 };
 use uuid::Uuid;
 
@@ -78,40 +80,33 @@ fn lateness(p: &SentPacket, row_time: f64) -> f64 {
 }
 
 #[test]
-fn a_98_value_burst_lands_centred_on_the_row_time() {
-    let rows = vec![look(0.0, 98, 0.0), look(2.0, 98, 1.0)];
+fn a_big_look_starts_half_its_budget_time_early_and_leaves_together() {
+    let n = 300;
+    let rows = vec![look(0.0, n, 0.0), look(2.0, n, 1.0)];
     let packets = run(&rows, 0.0, 4.0);
     let burst = steps_at_row(&packets, 2.0);
-    assert_eq!(burst.len(), 98);
-    let late: Vec<f64> = burst.iter().map(|p| lateness(p, 2.0)).collect();
-    let (first, last) = (late[0], late[97]);
-    // spread over (98 - 1) x 5 ms = 485 ms, the middle on the row time
-    assert!(
-        (last - first - 0.485).abs() < 0.002,
-        "span {}",
-        last - first
-    );
-    assert!(
-        ((first + last) / 2.0).abs() < 0.003,
-        "centre {} s off",
-        (first + last) / 2.0
-    );
-    // 242 ms early at most, 243 late at most (half of the span each side)
-    assert!((-0.2445..=-0.2405).contains(&first), "{first}");
-    assert!(last <= 0.2425 + 0.002);
-    // spacing never below 5 ms
-    for pair in burst.windows(2) {
-        assert!(pair[1].at - pair[0].at >= PACKET_GAP_SECONDS - 1e-9);
+    assert_eq!(burst.len(), n);
+    // (300 - 1) x 0.4 ms / 2 = 60 ms early; everything leaves at once (in bundles)
+    let first = lateness(burst[0], 2.0);
+    let expected = -((n - 1) as f64 * MESSAGE_GAP_SECONDS) / 2.0;
+    assert!((first - expected).abs() < 0.002, "{first} vs {expected}");
+    assert!(burst.iter().all(|p| (p.at - burst[0].at).abs() < 1e-9));
+    // in bundles of at most 16 messages
+    let mut sizes = std::collections::BTreeMap::new();
+    for p in &burst {
+        *sizes.entry(p.packet).or_insert(0usize) += 1;
     }
+    assert!(sizes.values().all(|&c| c <= 16));
+    assert_eq!(sizes.len(), n.div_ceil(16));
 }
 
 #[test]
 fn the_lead_is_capped_at_step_lead_max() {
-    // 300 values: (300 - 1) x 5 ms / 2 = 747 ms would be the centred lead
-    let rows = vec![look(0.0, 300, 0.0), look(5.0, 300, 1.0)];
+    // 3,000 values: (3000 - 1) x 0.4 ms / 2 = 600 ms would be the centred lead
+    let rows = vec![look(0.0, 3000, 0.0), look(5.0, 3000, 1.0)];
     let packets = run(&rows, 0.0, 9.0);
     let burst = steps_at_row(&packets, 5.0);
-    assert_eq!(burst.len(), 300);
+    assert_eq!(burst.len(), 3000);
     let earliest = burst
         .iter()
         .map(|p| lateness(p, 5.0))
@@ -125,7 +120,7 @@ fn the_lead_is_capped_at_step_lead_max() {
 
 #[test]
 fn the_lead_can_be_turned_off_and_changed_per_engine() {
-    let rows = vec![look(0.0, 98, 0.0), look(2.0, 98, 1.0)];
+    let rows = vec![look(0.0, 300, 0.0), look(2.0, 300, 1.0)];
     let mut off = ReplayEngine::new(&rows, &[]).with_step_lead_max_ms(0.0);
     let packets = simulate(&mut off, 0.0, 4.0, LEAD, &no_one);
     let first = steps_at_row(&packets, 2.0)
@@ -133,19 +128,25 @@ fn the_lead_can_be_turned_off_and_changed_per_engine() {
         .map(|p| lateness(p, 2.0))
         .fold(f64::INFINITY, f64::min);
     assert!(first >= -0.001, "no lead: first value at {first}");
-    let mut short = ReplayEngine::new(&rows, &[]).with_step_lead_max_ms(100.0);
+    let mut short = ReplayEngine::new(&rows, &[]).with_step_lead_max_ms(30.0);
     let packets = simulate(&mut short, 0.0, 4.0, LEAD, &no_one);
     let first = steps_at_row(&packets, 2.0)
         .iter()
         .map(|p| lateness(p, 2.0))
         .fold(f64::INFINITY, f64::min);
-    assert!((first + 0.1).abs() < 0.002, "100 ms lead: first at {first}");
+    assert!((first + 0.03).abs() < 0.002, "30 ms lead: first at {first}");
 }
 
 #[test]
-fn a_burst_of_up_to_40_ms_keeps_its_exact_timing_and_a_longer_one_is_moved() {
-    // 9 values take 8 x 5 = 40 ms: exact. 10 values take 45 ms: moved.
-    for (n, moved) in [(1usize, false), (5, false), (9, false), (10, true)] {
+fn a_look_of_up_to_100_values_keeps_its_exact_timing_and_a_bigger_one_is_moved() {
+    // 100 values take 99 x 0.4 ms = 39.6 ms: exact. 150 values take 59.6 ms: moved.
+    for (n, moved) in [
+        (1usize, false),
+        (9, false),
+        (98, false),
+        (100, false),
+        (150, true),
+    ] {
         let rows = vec![look(0.0, n, 0.0), look(2.0, n, 1.0)];
         let packets = run(&rows, 0.0, 4.0);
         let burst = steps_at_row(&packets, 2.0);
@@ -178,7 +179,7 @@ fn the_small_burst_is_the_same_as_without_the_lead() {
 #[test]
 fn dimmer_and_colour_go_before_other_levels_and_angles_in_a_fixed_order() {
     let mut messages = Vec::new();
-    for i in 0..4 {
+    for i in 0..40 {
         messages.push(OscMessage {
             address: format!("/fixture/F{i}/overrides/pan"),
             args: vec![OscArgument::Float(10.0 + i as f64)],
@@ -207,7 +208,7 @@ fn dimmer_and_colour_go_before_other_levels_and_angles_in_a_fixed_order() {
     let rows = vec![row(0.0, 0.0, base), row(2.0, 0.0, messages)];
     let packets = run(&rows, 0.0, 4.0);
     let burst = steps_at_row(&packets, 2.0);
-    assert_eq!(burst.len(), 16);
+    assert_eq!(burst.len(), 160);
     let class = |p: &SentPacket| {
         let a = &p.message.address;
         if a.ends_with("dimmer") {
@@ -236,19 +237,20 @@ fn dimmer_and_colour_go_before_other_levels_and_angles_in_a_fixed_order() {
 
 #[test]
 fn two_bursts_close_together_keep_their_order() {
-    // 60 values each, 0.2 s apart: each takes 295 ms, so they cannot both be centred
+    // 250 values each, 50 ms apart: each takes about 100 ms of budget, so they cannot both be
+    // centred
     let rows = vec![
-        look(0.0, 60, 0.0),
-        look(2.0, 60, 1.0),
-        look(2.2, 60, 0.5),
-        look(2.4, 60, 0.25),
+        look(0.0, 250, 0.0),
+        look(2.0, 250, 1.0),
+        look(2.05, 250, 0.5),
+        look(2.1, 250, 0.25),
     ];
     let packets = run(&rows, 0.0, 5.0);
     let steps: Vec<&SentPacket> = packets
         .iter()
         .filter(|p| p.kind == Kind::Step && p.position > 1.0)
         .collect();
-    assert_eq!(steps.len(), 180);
+    assert_eq!(steps.len(), 750);
     // sent in row order: all values of row 1, then row 2, then row 3
     let rows_seen: Vec<f64> = steps.iter().map(|p| p.position).collect();
     let mut sorted = rows_seen.clone();
@@ -257,12 +259,7 @@ fn two_bursts_close_together_keep_their_order() {
         rows_seen, sorted,
         "a later row never overtakes an earlier one"
     );
-    // 5 ms apart at least, all through
-    for pair in steps.windows(2) {
-        assert!(pair[1].at - pair[0].at >= PACKET_GAP_SECONDS - 1e-9);
-    }
-    // each fixture ends on the last row's value, and every value is sent at most as late as the
-    // queue demands: the first row is centred, the later ones follow it
+    // each fixture ends on the last row's value
     let last_value = |i: usize| {
         steps
             .iter()
@@ -270,15 +267,14 @@ fn two_bursts_close_together_keep_their_order() {
             .find(|p| p.message.address == dim(i))
             .map(|p| value(p))
     };
-    for i in 0..60 {
+    for i in 0..250 {
         assert_eq!(last_value(i), Some(0.25));
     }
-    let first_row: Vec<f64> = steps_at_row(&packets, 2.0)
-        .iter()
-        .map(|p| lateness(p, 2.0))
-        .collect();
-    let centre = (first_row[0] + first_row[59]) / 2.0;
-    assert!(centre.abs() < 0.004, "the first burst is centred: {centre}");
+    // the first burst starts half its budget time before the row
+    let first_row = steps_at_row(&packets, 2.0);
+    let first = lateness(first_row[0], 2.0);
+    let expected = -(249.0 * MESSAGE_GAP_SECONDS) / 2.0;
+    assert!((first - expected).abs() < 0.004, "{first} vs {expected}");
 }
 
 #[test]
@@ -314,7 +310,7 @@ fn a_seek_or_resume_never_sends_values_for_rows_in_the_past() {
 
 #[test]
 fn a_position_that_goes_back_forgets_what_was_sent_early() {
-    let rows = vec![look(0.0, 60, 0.0), look(2.0, 60, 1.0)];
+    let rows = vec![look(0.0, 300, 0.0), look(2.0, 300, 1.0)];
     let mut engine = ReplayEngine::new(&rows, &[]);
     let none = |_: &str| false;
     // forward to just before the burst's start: the burst goes out early, fixtures held
@@ -328,7 +324,7 @@ fn a_position_that_goes_back_forgets_what_was_sent_early() {
     assert!(sent_early, "the burst for 2.0 started before 1.9");
     // seek back to 0.5: the engine must send the values at 0.5 (0.0), not hold the burst's
     let t = engine.tick(now + 0.01, 0.5, &none);
-    assert_eq!(t.messages.len(), 60, "the look at the new position");
+    assert_eq!(t.messages.len(), 300, "the look at the new position");
     assert!(t
         .messages
         .iter()
@@ -338,32 +334,32 @@ fn a_position_that_goes_back_forgets_what_was_sent_early() {
 
 #[test]
 fn an_early_burst_never_starts_before_position_zero() {
-    // the row is at 0.1 s: centred it would start 142 ms before the song
-    let rows = vec![look(0.0, 3, 0.0), look(0.1, 98, 1.0)];
+    // the row is at 0.1 s: a 300 ms lead would start 200 ms before the song
+    let rows = vec![look(0.0, 3, 0.0), look(0.1, 3000, 1.0)];
     let packets = run(&rows, 0.0, 2.0);
     assert!(packets.iter().all(|p| p.at >= 0.0));
     assert!(packets
         .iter()
         .all(|p| p.position >= LEAD - 1e-9 || p.position == 0.1));
     let burst = steps_at_row(&packets, 0.1);
-    assert_eq!(burst.len(), 98);
+    assert_eq!(burst.len(), 3000);
     assert!(burst[0].at >= 0.0);
 }
 
 #[test]
 fn a_fixture_taken_over_mid_burst_is_skipped_and_the_others_do_not_wait_for_it() {
-    let rows = vec![look(0.0, 98, 0.0), look(2.0, 98, 1.0)];
+    let rows = vec![look(0.0, 300, 0.0), look(2.0, 300, 1.0)];
     let free = run(&rows, 0.0, 4.0);
-    // fixture 50 is taken over 100 ms before the row time: its value was still waiting
+    // fixture 50 is taken over 150 ms before the row time: its value was still waiting
     let taken = dim(50);
     let mut engine = ReplayEngine::new(&rows, &[]);
     let with = simulate(&mut engine, 0.0, 4.0, LEAD, &|now, a| {
-        now >= 1.9 && a == taken
+        now >= 1.85 && a == taken
     });
     let sent_after = |packets: &[SentPacket]| {
         packets
             .iter()
-            .filter(|p| p.message.address == taken && p.at >= 1.9)
+            .filter(|p| p.message.address == taken && p.at >= 1.85)
             .count()
     };
     assert!(sent_after(&free) > 0, "without the take-over it would go");
@@ -378,24 +374,25 @@ fn a_fixture_taken_over_mid_burst_is_skipped_and_the_others_do_not_wait_for_it()
             .iter()
             .find(|q| q.message == p.message && (q.position - p.position).abs() < 1e-9)
             .expect("still sent");
-        assert!(q.at <= p.at + 1e-9, "delayed: {} vs {}", q.at, p.at);
+        // (the burst starts a fraction of a millisecond apart: one value fewer to send)
+        assert!(q.at <= p.at + 1e-3, "delayed: {} vs {}", q.at, p.at);
     }
     // and the ones behind the skipped value move up
     let behind_free = free.iter().find(|p| p.message.address == dim(60)).unwrap();
     let behind = with.iter().find(|p| p.message.address == dim(60)).unwrap();
-    assert!(behind.at <= behind_free.at + 1e-9);
+    assert!(behind.at <= behind_free.at + 1e-3);
 }
 
 #[test]
 fn ramps_next_to_a_burst_are_not_starved() {
-    // ten ramps run for 8 s while a 98 value look changes at 4 s
-    let mut rows = vec![look(0.0, 98, 0.0)];
+    // ten ramps run for 8 s while a 300 value look changes at 4 s
+    let mut rows = vec![look(0.0, 300, 0.0)];
     let ramp_addresses: Vec<String> = (200..210).map(dim).collect();
     for a in &ramp_addresses {
         rows.push(row(0.0, 0.0, vec![msg(a, 0.0)]));
         rows.push(ramp(1.0, 8.0, a, 1.0));
     }
-    rows.push(look(4.0, 98, 1.0));
+    rows.push(look(4.0, 300, 1.0));
     rows.sort_by(|a, b| a.at_seconds.total_cmp(&b.at_seconds));
     let with = run(&rows, 0.0, 10.0);
     let mut off = ReplayEngine::new(&rows, &[]).with_step_lead_max_ms(0.0);
@@ -426,7 +423,7 @@ fn ramps_next_to_a_burst_are_not_starved() {
         g_with <= 0.5,
         "no ramp is starved for more than half a second: {g_with:.3}"
     );
-    // the 200 packets a second cap holds with the lead on
+    // the budget holds with the lead on
     let busiest = |packets: &[SentPacket]| {
         (0..10)
             .map(|s| {
@@ -438,14 +435,14 @@ fn ramps_next_to_a_burst_are_not_starved() {
             .max()
             .unwrap()
     };
-    assert!(busiest(&with) <= 200);
+    assert!(busiest(&with) as f64 <= MAX_MESSAGES_PER_SECOND);
     let _ = FAST_TICK_SECONDS;
 }
 
 #[test]
 fn a_dimmer_ramp_is_not_starved_by_fast_angle_ramps() {
     // 30 pans move 40 degrees in 2 s (about 1000 DMX steps a second each) next to a slow dimmer
-    // ramp: the budget cannot carry all of them at 20 Hz. Ramps are served by their distance in
+    // ramp: the budget cannot carry all of them at 40 Hz. Ramps are served by their distance in
     // tolerances, so the dimmer (8 DMX steps of tolerance) is not left behind by the angles (184
     // DMX steps of tolerance): it gets a value every few hundred ms, not none
     let pan = |i: usize| format!("/fixture/P{i:02}/overrides/panAngle");

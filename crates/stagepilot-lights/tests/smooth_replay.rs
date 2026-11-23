@@ -8,7 +8,7 @@ use stagepilot_core::config::{
 use stagepilot_lights::lightkey_curve::Timeline;
 use stagepilot_lights::lightkey_fixtures::FixtureArg;
 use stagepilot_lights::lightkey_replay::{
-    is_smooth, simulate, ReplayEngine, SentPacket, FAST_TICK_SECONDS, MAX_PACKETS_PER_SECOND,
+    is_smooth, simulate, ReplayEngine, SentPacket, FAST_TICK_SECONDS, MAX_MESSAGES_PER_SECOND,
     SLOW_TICK_SECONDS,
 };
 use uuid::Uuid;
@@ -152,7 +152,8 @@ fn a_sixty_second_ramp_sends_one_dmx_step_at_a_time_and_ends_exactly() {
     let last = packets.last().unwrap();
     assert_eq!(num(&last.message), 1.0, "the end of the ramp is exact");
     assert!(
-        (last.at - (70.0 - LEAD)).abs() < 0.1,
+        // the last DMX step of a 60 s ramp (255 steps) takes 0.235 s
+        (last.at - (70.0 - LEAD)).abs() < 0.25,
         "the last packet is at the end of the ramp, not later: {}",
         last.at
     );
@@ -226,6 +227,49 @@ fn a_fixture_the_operator_has_is_not_driven_and_comes_back_at_the_current_value(
     assert!(back.position > 40.0 && num(&back.message) > 0.6);
 }
 
+#[test]
+fn a_one_second_fade_of_three_colour_components_gets_at_least_35_updates() {
+    // Hunter's jagged replay: a 1 s fade used to get 5 to 7 updates on a busy song. On its own it
+    // gets one every 25 ms (40 Hz), each with all three components.
+    let colour = "/fixture/PN1/overrides/color";
+    let rows = vec![
+        row(
+            0.0,
+            0.0,
+            colour,
+            vec![
+                OscArgument::Float(0.0),
+                OscArgument::Float(0.0),
+                OscArgument::Float(0.0),
+            ],
+        ),
+        row(
+            5.0,
+            1.0,
+            colour,
+            vec![
+                OscArgument::Float(1.0),
+                OscArgument::Float(0.8),
+                OscArgument::Float(0.6),
+            ],
+        ),
+    ];
+    let mut engine = ReplayEngine::new(&rows, &[]);
+    let packets = simulate(&mut engine, 0.0, 8.0, LEAD, &no_one);
+    let fade: Vec<&SentPacket> = of(&packets, colour)
+        .into_iter()
+        .filter(|p| p.position > 5.0 - LEAD && p.position < 6.0 + LEAD)
+        .collect();
+    assert!(fade.len() >= 35, "{} updates in a 1 s fade", fade.len());
+    assert!(fade.iter().all(|p| p.message.args.len() == 3));
+    // evenly: no gap above 3 ticks
+    let worst = fade
+        .windows(2)
+        .map(|w| w[1].at - w[0].at)
+        .fold(0.0, f64::max);
+    assert!(worst <= 3.0 * FAST_TICK_SECONDS, "a gap of {worst} s");
+}
+
 // ---------------------------------------------------------------------------------- effects
 
 #[test]
@@ -254,8 +298,8 @@ fn an_effect_plays_from_its_cycle_with_member_offsets_and_never_drifts() {
                 p.position
             );
         }
-        // every address stays below the fast rate
-        assert!(busiest_second(&mine.iter().map(|p| (*p).clone()).collect::<Vec<_>>()) <= 21);
+        // every address stays below the fast rate (40 Hz)
+        assert!(busiest_second(&mine.iter().map(|p| (*p).clone()).collect::<Vec<_>>()) <= 41);
     }
     // the three members play the same shape 1 s apart
     let a = value(&timeline, "/fixture/A/overrides/dimmer", 1710.0);
@@ -281,7 +325,7 @@ fn too_many_effect_addresses_lower_the_effect_rate_and_never_delay_a_step() {
     let mut engine = ReplayEngine::new(&rows, std::slice::from_ref(&effect));
     let packets = simulate(&mut engine, 100.0, 110.0, LEAD, &no_one);
     assert!(
-        busiest_second(&packets) as f64 <= MAX_PACKETS_PER_SECOND + 1.0,
+        busiest_second(&packets) as f64 <= MAX_MESSAGES_PER_SECOND + 1.0,
         "{} in the busiest second",
         busiest_second(&packets)
     );

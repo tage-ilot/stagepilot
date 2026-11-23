@@ -5,7 +5,7 @@
 
 use crate::lightkey_fixtures::{fixture_of, FixtureCommand};
 use crate::lightkey_operator::{normalise_fixture, EchoRules, OperatorTracker, ECHO_WINDOW};
-use crate::lightkey_replay::{simulate, ReplayEngine};
+use crate::lightkey_replay::{simulate_paced, ReplayEngine};
 use crate::plugin::LOOK_LEAD_SECONDS;
 use stagepilot_core::config::{LightingEffect, OscArgument, OscLightingCue};
 use std::collections::BTreeSet;
@@ -115,8 +115,15 @@ pub fn run(
     .into_iter()
     .enumerate()
     {
-        let mut engine = ReplayEngine::new(rows, effects);
-        for p in simulate(&mut engine, from, to, LOOK_LEAD_SECONDS, &|_, _| false) {
+        let mut engine = ReplayEngine::new(rows, effects).with_budget(RECORDED_RATE, RECORDED_TICK);
+        for p in simulate_paced(
+            &mut engine,
+            from,
+            to,
+            LOOK_LEAD_SECONDS,
+            RECORDED_GAP,
+            &|_, _| false,
+        ) {
             if p.message.address.starts_with("/fixture/") {
                 report.pass_packets[n] += 1;
                 report.sent.push(Sent {
@@ -236,6 +243,15 @@ pub struct StartCase {
     pub rules: EchoRules,
 }
 
+/// What the engine sent when the rig runs that recorded the relay events were made: 200 messages
+/// a second, ramps and effects looked at 20 Hz, one packet per message 5 ms apart (the plugin now
+/// sends 2,500 a second at 40 Hz, a tick's messages together as OSC bundles, which those
+/// recordings do not show). The recorded DMX changes only line up with sends made the way they
+/// were sent then, so the harness replays them that way.
+const RECORDED_RATE: f64 = 200.0;
+const RECORDED_TICK: f64 = 0.05;
+const RECORDED_GAP: f64 = 0.005;
+
 /// Replay `rows`/`effects` from `case.from_s` and judge every event of `relay` (wall time in
 /// epoch ms, DMX time stamp) against the sends. Events before the first send of a property only
 /// teach the tracker where the fixture is.
@@ -246,11 +262,16 @@ pub fn run_start(
     case: &StartCase,
 ) -> Report {
     let mut report = Report::default();
-    let mut engine = ReplayEngine::new(rows, effects);
+    let mut engine = ReplayEngine::new(rows, effects).with_budget(RECORDED_RATE, RECORDED_TICK);
     let to = case.from_s + case.length_s;
-    for p in simulate(&mut engine, case.from_s, to, LOOK_LEAD_SECONDS, &|_, _| {
-        false
-    }) {
+    for p in simulate_paced(
+        &mut engine,
+        case.from_s,
+        to,
+        LOOK_LEAD_SECONDS,
+        RECORDED_GAP,
+        &|_, _| false,
+    ) {
         if p.message.address.starts_with("/fixture/") {
             report.pass_packets[0] += 1;
             report.sent.push(Sent {

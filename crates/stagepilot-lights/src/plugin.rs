@@ -6,7 +6,9 @@ use crate::lightkey_discovery::{
 use crate::lightkey_fixtures::{clear_address, fixture_of, FixtureCommand};
 use crate::lightkey_link::{FixtureEvent, LightkeyLink, LinkOptions, MIN_SEND_GAP};
 use crate::lightkey_operator::OperatorTracker;
-use crate::lightkey_replay::{is_smooth, Kind, PacingQueue, ReplayEngine, ReplayLoad};
+use crate::lightkey_replay::{
+    is_smooth, plan_bundles, Kind, PacingQueue, ReplayEngine, ReplayLoad, MAX_BUNDLE_MESSAGES,
+};
 use crate::models::{LightingOutputResponse, LightsStatusResponse};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -1459,12 +1461,12 @@ impl Inner {
     }
 
     /// The smooth replay's one scheduler tick: ask the engine what changed at the song position
-    /// (a little ahead, like a look row), send it paced, sleep until the engine needs the next
-    /// tick. It runs until the song's end; pause, stop and seek cancel it, nothing is cleared.
+    /// (a little ahead, like a look row), send it at once as OSC bundles of at most 16 messages,
+    /// sleep until the engine needs the next tick. It runs until the song's end; pause, stop and seek cancel it, nothing is cleared.
     async fn run_engine(self: Arc<Self>, start: f64, remaining: f64) -> Result<(), (String, bool)> {
         let base = Instant::now();
         let mut failed = false;
-        // Between the ticks and the 5 ms pacing: steps first, then ramps, then effects, and a
+        // Between the ticks and the sender: steps first, then ramps, then effects, and a
         // waiting ramp or effect value is replaced by a newer one for its address.
         let mut queue = PacingQueue::new();
         // When the next tick is due; `None` = nothing to look at until the song's end.
@@ -1503,8 +1505,9 @@ impl Inner {
                 next_tick = tick.wake_in.map(|w| now + w);
             }
             if !queue.is_empty() {
-                // Wait for the next 5 ms slot, but not past the next tick: a step it brings
-                // goes out before the older ramp and effect values still waiting.
+                // Wait while a paced row or re-sync (5 ms slots) is still leaving, but not past
+                // the next tick: a step it brings goes out before the older ramp and effect
+                // values still waiting.
                 let slot = self.peek_slot();
                 let tick_at = next_tick.map(|t| base + Duration::from_secs_f64(t.min(remaining)));
                 if slot > tokio::time::Instant::now() {
@@ -1523,50 +1526,54 @@ impl Inner {
                         fixture_of(&m.address).is_some_and(|name| st.operator.is_yielded(name))
                     });
                 }
-                let Some(item) = queue.pop() else {
-                    continue;
-                };
-                self.reserve_slots(1);
-                let message = item.message;
-                // One failed send is retried once, never the end of the show (S-02).
-                let mut result = self.send_message(&message).await;
-                if result.is_err() {
-                    tokio::time::sleep(SEND_RETRY_DELAY).await;
-                    result = self.send_message(&message).await;
+                // Everything waiting leaves now, in bundles (no spacing between them).
+                let mut due = Vec::new();
+                while let Some(item) = queue.pop() {
+                    due.push(item.message);
                 }
-                match result {
-                    Ok(()) => {
-                        if failed {
-                            failed = false;
-                            {
-                                let mut st = self.st();
-                                st.status = PluginStatus::Running;
-                                st.last_error = None;
-                            }
-                            self.set_connection(
-                                ConnectionStatus::Connected,
-                                "Lighting cues are going out again.",
-                            )
-                            .await;
-                        }
+                for bundle in plan_bundles(due, |m| &m.address, MAX_BUNDLE_MESSAGES) {
+                    // One failed send is retried once, never the end of the show (S-02).
+                    let mut result = self.send_messages(&bundle).await;
+                    if result.is_err() {
+                        tokio::time::sleep(SEND_RETRY_DELAY).await;
+                        result = self.send_messages(&bundle).await;
                     }
-                    Err(error) => {
-                        tracing::warn!(error = %error.message, "lighting_timeline_send_failed");
-                        failed = true;
-                        if let Some(engine) = self.st().engine.as_mut() {
-                            engine.mark_unsent(&message.address);
-                        }
-                        self.record_error_text(if error.public {
-                            error.message.clone()
-                        } else {
-                            "A lighting cue could not be sent.".into()
-                        })
-                        .await;
-                        if !self.output_ready() {
-                            if let Some(link) = self.lightkey.get() {
-                                link.set_replaying(None);
+                    match result {
+                        Ok(()) => {
+                            if failed {
+                                failed = false;
+                                {
+                                    let mut st = self.st();
+                                    st.status = PluginStatus::Running;
+                                    st.last_error = None;
+                                }
+                                self.set_connection(
+                                    ConnectionStatus::Connected,
+                                    "Lighting cues are going out again.",
+                                )
+                                .await;
                             }
-                            return Ok(());
+                        }
+                        Err(error) => {
+                            tracing::warn!(error = %error.message, "lighting_timeline_send_failed");
+                            failed = true;
+                            if let Some(engine) = self.st().engine.as_mut() {
+                                for message in &bundle {
+                                    engine.mark_unsent(&message.address);
+                                }
+                            }
+                            self.record_error_text(if error.public {
+                                error.message.clone()
+                            } else {
+                                "A lighting cue could not be sent.".into()
+                            })
+                            .await;
+                            if !self.output_ready() {
+                                if let Some(link) = self.lightkey.get() {
+                                    link.set_replaying(None);
+                                }
+                                return Ok(());
+                            }
                         }
                     }
                 }
@@ -1868,9 +1875,35 @@ impl Inner {
     /// One timeline message. A fixture-override message is dropped unless replay is allowed;
     /// when it goes out its fixture is held until a release (`overrides/clear` releases it).
     async fn send_message(&self, message: &OscMessage) -> Result<(), OutputError> {
+        if !self.admit_message(message) {
+            return Ok(());
+        }
+        self.send_osc(&message.address, &message.args).await
+    }
+
+    /// Several timeline messages as one OSC bundle (a single one goes as a plain message). Each
+    /// is admitted as `send_message` would; the order is kept.
+    async fn send_messages(&self, messages: &[OscMessage]) -> Result<(), OutputError> {
+        let mut batch: Vec<(String, Vec<OscArgument>)> = Vec::with_capacity(messages.len());
+        for message in messages {
+            if self.admit_message(message) {
+                batch.push((message.address.clone(), message.args.clone()));
+            }
+        }
+        match batch.as_slice() {
+            [] => Ok(()),
+            [(address, args)] => self.send_osc(address, args).await,
+            _ => self.send_osc_bundle(batch).await,
+        }
+    }
+
+    /// Whether a timeline message is to go out, with the hold bookkeeping of a fixture override:
+    /// dropped unless replay is allowed (or the operator has the fixture); when it goes out its
+    /// fixture is held until a release (`overrides/clear` releases it).
+    fn admit_message(&self, message: &OscMessage) -> bool {
         if let Some((name, property)) = fixture_override(&message.address) {
             if !self.replay_allowed() {
-                return Ok(());
+                return false;
             }
             // The first send to a property has no earlier sent value: the relay's last value
             // for it is where the fixture is.
@@ -1886,7 +1919,7 @@ impl Inner {
             if property == "clear" {
                 st.held_fixtures.remove(name);
             } else if st.operator.is_yielded(name) {
-                return Ok(()); // the operator has this fixture
+                return false; // the operator has this fixture
             } else {
                 if let Some(value) = baseline {
                     st.operator.seed_observed(&message.address, value);
@@ -1896,7 +1929,7 @@ impl Inner {
                     .note_send(&message.address, &message.args, Instant::now());
             }
         }
-        self.send_osc(&message.address, &message.args).await
+        true
     }
 
     // ---- sending ------------------------------------------------------------------------------
@@ -1940,6 +1973,35 @@ impl Inner {
         };
         let (sent_address, sent_args) = (address.to_string(), args.to_vec());
         tokio::task::spawn_blocking(move || output.send_message(&sent_address, &sent_args))
+            .await
+            .map_err(|_| OutputError::internal("OSC send task failed."))??;
+        let now = Utc::now();
+        {
+            let mut st = self.st();
+            st.last_cue_at = Some(now);
+            st.last_activity_at = Some(now);
+        }
+        Ok(())
+    }
+
+    /// Two or more messages as one OSC bundle through the saved output.
+    async fn send_osc_bundle(
+        &self,
+        messages: Vec<(String, Vec<OscArgument>)>,
+    ) -> Result<(), OutputError> {
+        let output = {
+            let st = self.st();
+            if st.settings.method != LightingMethod::Osc {
+                return Ok(()); // never send OSC while MIDI is the saved method
+            }
+            st.osc_output.clone()
+        };
+        let Some(output) = output.filter(|o| !o.closed()) else {
+            return Err(OutputError::public(
+                "Disconnected. The OSC output closed before a cue was sent.",
+            ));
+        };
+        tokio::task::spawn_blocking(move || output.send_bundle(&messages))
             .await
             .map_err(|_| OutputError::internal("OSC send task failed."))??;
         let now = Utc::now();

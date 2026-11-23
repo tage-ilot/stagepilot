@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Busy songs no longer replay jagged in Lightkey.** The replay sent at most 200 lighting messages a second, one UDP packet each 5 ms apart, so a busy song (a recording with many colour fades at once) got only 5 to 7 updates for a fade that should have 20 or more, and its lights moved in steps. The limit is now 2,500 messages a second (Lightkey was measured clean up to 4,900 on the rig), ramps and loops are looked at 40 times a second instead of 20, and everything one tick has due leaves at once in OSC bundles of up to 16 messages. On the three Sunday songs a fading light now gets an update about every 25 ms where it got one every 55 to 135 ms (median) before. Looks and the first look of a song also leave at once instead of over half a second.
+
 ### Changed
 
 - **On the Mac, StagePilot now keeps its saved secrets in one keychain item instead of several,** so an update asks for keychain access once instead of six times. Your saved logins are kept.
