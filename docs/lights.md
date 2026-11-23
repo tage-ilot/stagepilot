@@ -286,6 +286,21 @@ continues from where that ramp is (no jump). Rows at the same time apply instant
 first, then ramps. Row times and fades are stored to the millisecond (hand-made instant
 rows stay on the 0.1 s grid).
 
+**The capture is cleaned before it is fitted.** A rig delivers a fade as a 40 Hz stream, but the
+arrival times are smeared (about half of the events of an address arrive 0-5 ms after the
+previous one) and now and then an older value flashes back for a moment. A chase that repeats
+exactly then never looks the same twice, no loop matches, and a 7-minute song of 16 chasing
+fixtures came to over 40,000 rows. So the fit first cleans every CONTINUOUS address (dimmer,
+colour, pan/tilt and other angles, zoom, focus, frost, iris): one value per 25 ms (the last
+change in each 25 ms, at its own time), then the median of each value and its two neighbours,
+and a change is kept only when the value moved by more than a tenth of the tolerance since the
+last one kept (0.003 of a level, 0.15 degrees: below one 8-bit step). A step, a fade and a
+pulse of two frames (50 ms) or more survive; a flash of one frame goes. The first and the final
+value of every address stay. Options, text, bools, a changed argument count and gobo, shutter,
+strobe, macro, prism and wheel-like values are never touched. The raw recording on disk stays
+raw: `refit_recording` reads the raw file and cleans it the same way, and the reconstruction
+metric below compares with the raw samples.
+
 **The ramp fit.** Per address (`/fixture/<name>/overrides/<property>`), the samples are fitted
 with a greedy piecewise-linear line through the samples:
 
@@ -348,7 +363,9 @@ Detection (`lightkey_effects.rs`):
    not the loop) and tried again; members that still do not fit leave and are tried on
    their own; the stretches cut off are tried again as windows of their own. An effect must
    also be worth it: its cycle steps must be at most 60 % of the ramp segments the same
-   window needs as plain rows.
+   window needs as plain rows. A window that starts before the chase does (the effect is dark
+   or still for a while) starts at its first matching cycle instead: the lead-in before it
+   stays plain rows, and the members keep their phase.
 5. Whatever is not accepted stays plain ramps for that window, so the rest of the fit is
    exact (see below).
 
