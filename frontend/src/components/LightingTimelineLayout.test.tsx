@@ -82,6 +82,26 @@ describe("timeline height", () => {
     expect(height()).toBe(320);
   });
 
+  it("− and + change the height by hand, from wherever it is, and the choice is kept", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => marker(i + 1));
+    const { unmount } = render(<LightingTimeline {...base} markers={many} />);
+    const user = userEvent.setup();
+    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+    const auto = height();
+    await user.click(screen.getByRole("button", { name: "Make the timeline taller" }));
+    expect(height()).toBe(auto + 40);
+    expect(screen.getByRole("radio", { name: "Auto" })).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Make the timeline shorter" }));
+    await user.click(screen.getByRole("button", { name: "Make the timeline shorter" }));
+    expect(height()).toBe(auto - 40);
+    expect(window.localStorage.getItem(HEIGHT_MODE_KEY)).toBe(String(auto - 40));
+    unmount();
+    render(<LightingTimeline {...base} markers={many} />);
+    expect(height()).toBe(auto - 40);
+    await user.click(screen.getByRole("radio", { name: "Auto" }));
+    expect(height()).toBe(auto);
+  });
+
   it("the waveform and the playhead start under the label rows, never above a label", () => {
     const loudness = { values: [10, 40, 80, 40], step_seconds: 50, scale: 1 } as never;
     render(<LightingTimeline {...base} loudness={loudness} markers={Array.from({ length: 8 }, (_, i) => marker(i + 1))} playhead={60} />);

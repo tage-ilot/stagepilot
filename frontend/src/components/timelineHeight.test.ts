@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AUTO_MAX_PX, AUTO_MIN_PX, autoTimelineHeight, heightFor, labelRowsFor, readHeightMode } from "./timelineHeight";
+import { AUTO_MAX_PX, AUTO_MIN_PX, autoTimelineHeight, clampManual, heightFor, labelRowsFor, MANUAL_MAX_PX, MANUAL_MIN_PX, readHeightMode } from "./timelineHeight";
 
 describe("autoTimelineHeight", () => {
   it.each([[0, 200], [1, 200], [2, 220], [4, 264], [6, 308], [8, 352], [12, 420], [30, 420]])("%i label rows -> %i px", (rows, px) => {
@@ -31,7 +31,22 @@ describe("heightFor / labelRowsFor", () => {
   });
 });
 
+describe("a height set by hand", () => {
+  it("is used as it is, inside the limits", () => {
+    expect(heightFor(360, 9)).toBe(360);
+    expect(heightFor(5000, 0)).toBe(MANUAL_MAX_PX);
+    expect(clampManual(10)).toBe(MANUAL_MIN_PX);
+  });
+  it("leaves room for the waveform under the label rows", () => {
+    expect(labelRowsFor(320)).toBe(labelRowsFor("m"));
+    expect(labelRowsFor(MANUAL_MIN_PX)).toBe(4);
+  });
+});
+
 describe("readHeightMode", () => {
+  it.each([["320", 320], ["999", 800], ["120", 160]])("a saved height %s", (saved, mode) => {
+    expect(readHeightMode(saved)).toBe(mode);
+  });
   it.each([["s", "s"], ["m", "m"], ["auto", "auto"], ["tall", "auto"], [null, "auto"]])("%s", (saved, mode) => {
     expect(readHeightMode(saved)).toBe(mode);
   });

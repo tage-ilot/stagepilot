@@ -30,7 +30,7 @@ import { ReasonButton } from "./sections";
 import { Input } from "./ui/Input";
 import { ConnectionMethod } from "./ui/ConnectionMethod";
 import { CONTROL_34 } from "./compactControl";
-import { heightFor, labelRowsFor, LABEL_ROW_PX, useHeightMode, type HeightMode } from "./timelineHeight";
+import { clampManual, heightFor, labelRowsFor, LABEL_ROW_PX, MANUAL_MAX_PX, MANUAL_MIN_PX, STEP_PX, useHeightMode } from "./timelineHeight";
 import { ScrollRegion } from "./ui/ScrollRegion";
 
 const ZOOMS = [0, 6, 12, 24, 60, 120] as const; // pixels per second; 0 = fit the width
@@ -338,15 +338,18 @@ export function LightingTimeline({
           {hasSongMap && (
             <Button aria-pressed={songMapOn} className={CONTROL_34} onClick={() => setSongMapOn(!songMapOn)} title="The song's sections and waveform from the Playback library" variant={songMapOn ? "secondary" : "tinted"}>Song map</Button>
           )}
-          <div className="flex items-center gap-2">
-            <span aria-hidden="true" className="text-type-body-sm text-ink-muted">Height</span>
-            <ConnectionMethod<HeightMode>
+          <div aria-label="Timeline height" className="flex items-center gap-1" role="group">
+            <span aria-hidden="true" className="mr-1 text-type-body-sm text-ink-muted">Height</span>
+            <ReasonButton aria-label="Make the timeline shorter" className={CONTROL_34} onClick={() => setHeightMode(clampManual(trackHeight - STEP_PX))} reason={trackHeight <= MANUAL_MIN_PX ? "This is the shortest height." : undefined} variant="tinted">−</ReasonButton>
+            <ConnectionMethod<string>
               compact
               label="Timeline height"
-              onChange={setHeightMode}
+              onChange={(value) => setHeightMode(value as "s" | "m" | "auto")}
               options={[{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "auto", label: "Auto" }]}
-              value={heightMode}
+              value={typeof heightMode === "number" ? "custom" : heightMode}
             />
+            <ReasonButton aria-label="Make the timeline taller" className={CONTROL_34} onClick={() => setHeightMode(clampManual(trackHeight + STEP_PX))} reason={trackHeight >= MANUAL_MAX_PX ? "This is the tallest height." : undefined} variant="tinted">+</ReasonButton>
+            <span aria-live="polite" className="min-w-[3.25rem] text-type-body-sm tabular-nums text-ink-muted">{typeof heightMode === "number" ? `${trackHeight} px` : ""}</span>
           </div>
         </div>
       </div>
