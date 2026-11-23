@@ -165,12 +165,9 @@ describe("loudness behind the timeline", () => {
     expect(loudPath!.includes(",0 ")).toBe(true);
   });
 
-  it("is on the same track as the markers, so zoom and scroll move them together", async () => {
+  it("is on the same track as the markers, so they always line up", () => {
     render(<LightingTimeline {...base} loudness={loudness} />);
     const track = screen.getByTestId("lighting-timeline-track");
-    const before = track.parentElement!.getAttribute("style");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Zoom in" }));
-    expect(track.parentElement!.getAttribute("style")).not.toBe(before);
     expect(track).toContainElement(screen.getByTestId("lighting-loudness"));
   });
 

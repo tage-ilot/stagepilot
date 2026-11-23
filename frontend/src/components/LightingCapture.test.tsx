@@ -258,10 +258,13 @@ describe("LightingTimeline", () => {
     expect(onRemove).toHaveBeenCalledWith("a");
   });
 
-  it("stays scrollable on narrow widths instead of clipping", () => {
-    render(<LightingTimeline markers={markers} onMove={vi.fn()} onRemove={vi.fn()} playhead={null} songLength={200} />);
+  it("always fits the width: no sideways scrolling however long the song is", () => {
+    render(<LightingTimeline markers={markers} onMove={vi.fn()} onRemove={vi.fn()} playhead={null} songLength={2000} />);
     const scroll = screen.getByTestId("lighting-timeline-scroll");
-    expect(scroll.className).toContain("overflow-x-auto");
+    expect(scroll.className).toContain("overflow-x-hidden");
+    expect(scroll.className).not.toContain("overflow-x-auto");
+    expect(screen.getByTestId("lighting-timeline-track").parentElement?.className).toContain("w-full");
+    expect(screen.getByTestId("lighting-timeline-track").parentElement?.getAttribute("style")).toBeNull();
     // The scrolling box is drawn as an obvious bordered region with an edge glow (owner, 2026-10-15).
     // The frame carries the border; the scroller sits inside it with an edge fade overlay on top (owner, 2026-10-15).
     expect(scroll.parentElement).toHaveClass("scroll-region");

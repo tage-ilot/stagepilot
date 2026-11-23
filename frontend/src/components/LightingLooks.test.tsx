@@ -215,7 +215,7 @@ describe("timeline clustering and touch", () => {
 
   const Zoomable = ({ markers = many }: { markers?: TimelineMarker[] }) => <LightingTimeline markers={markers} onMove={vi.fn()} onRemove={vi.fn()} playhead={null} songLength={300} />;
 
-  it("clusters close markers at Fit, shows counts, and click zooms in so they separate", async () => {
+  it("clusters close markers across the whole song, shows counts, and a click picks the cluster's first cue", async () => {
     width(1000);
     render(<Zoomable />);
     const clusters = screen.getAllByTestId("lighting-cluster");
@@ -223,13 +223,12 @@ describe("timeline clustering and touch", () => {
     expect(screen.queryAllByTestId("lighting-marker").length + clusters.length).toBeLessThan(400);
     const total = clusters.reduce((n, c) => n + Number(c.getAttribute("data-count")), 0) + screen.queryAllByTestId("lighting-marker").length;
     expect(total).toBe(400);
-    const before = clusters.length;
-    await userEvent.setup().click(screen.getByRole("button", { name: "Zoom in" }));
-    await userEvent.setup().click(clusters[0]!.isConnected ? screen.getAllByTestId("lighting-cluster")[0]! : screen.getAllByTestId("lighting-marker")[0]!);
-    expect(screen.queryAllByTestId("lighting-cluster").length).toBeLessThanOrEqual(before);
+    expect(screen.queryByRole("button", { name: "Zoom in" })).toBeNull();
+    await userEvent.setup().click(clusters[0]!);
+    expect(screen.getByTestId("lighting-marker-popover")).toBeInTheDocument();
   });
 
-  it("stops clustering once zoomed in far enough", async () => {
+  it("does not cluster when the cues are far apart", async () => {
     width(36000);
     render(<Zoomable markers={many.slice(0, 20)} />);
     expect(screen.queryAllByTestId("lighting-cluster")).toHaveLength(0);
@@ -241,9 +240,8 @@ describe("timeline clustering and touch", () => {
     render(<Zoomable />);
     const cluster = screen.getAllByTestId("lighting-cluster")[0]!;
     cluster.focus();
-    const zoomBefore = screen.getByText(/Fit|px\/s/).textContent;
     await userEvent.keyboard("{Enter}");
-    expect(screen.getByText(/px\/s/).textContent).not.toBe(zoomBefore);
+    expect(screen.getByTestId("lighting-marker-popover")).toBeInTheDocument();
   });
 
   it("shift-click multi-selects and offers Merge rows", () => {

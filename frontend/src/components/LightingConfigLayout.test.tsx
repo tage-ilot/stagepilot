@@ -177,14 +177,15 @@ describe("songs strip in the panel", () => {
 });
 
 describe("song lighting timeline toolbar", () => {
-  it("is one wrapping toolbar with Song, Add cue, Clear song, Merge, zoom and height (no Simplify); no old bottom Clear buttons", async () => {
+  it("is one wrapping toolbar with Song, Add cue, Clear song, Merge and height (no Simplify); no old bottom Clear buttons", async () => {
     mount();
     const bar = screen.getByRole("toolbar", { name: "Timeline tools" });
     expect(bar.className).toContain("flex-wrap");
     expect(within(bar).getByLabelText("Song")).toBeInTheDocument();
-    for (const name of ["Add cue", "Clear song…", "Merge rows", "Zoom out", "Fit", "Zoom in"]) {
+    for (const name of ["Add cue", "Clear song…", "Merge rows"]) {
       expect(within(bar).getByRole("button", { name })).toBeInTheDocument();
     }
+    for (const name of ["Zoom out", "Fit", "Zoom in"]) expect(within(bar).queryByRole("button", { name })).toBeNull();
     expect(within(bar).getByRole("radiogroup", { name: "Timeline height" })).toBeInTheDocument();
     expect(within(bar).getByRole("button", { name: "Add cue" }).className).toContain("!h-[34px]");
     expect(screen.queryByRole("button", { name: "Clear all" })).toBeNull();
