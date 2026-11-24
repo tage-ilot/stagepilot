@@ -301,6 +301,27 @@ strobe, macro, prism and wheel-like values are never touched. The raw recording 
 raw: `refit_recording` reads the raw file and cleans it the same way, and the reconstruction
 metric below compares with the raw samples.
 
+**Clean up glitches (a song that is already saved).** Songs captured before the capture was
+cleaned carry brief flashes in their rows (a value goes back to an older value for a frame or
+two and returns); a replay plays them faithfully, so they show as jerks, and the raw recording
+of an old song is gone. **Clean up glitches...** (Lighting timeline toolbar, only for a song with
+captured rows, OSC) repairs the saved rows instead. It plays the rows on the 25 ms grid, per
+continuous address, and finds the flashes outside the windows of loops: an excursion of one to
+three frames (75 ms) that leaves the value, or the line the value is on, by more than 0.05 (2.5
+degrees) and comes back to it, unless two or three frames are level with each other (a pulse of
+that length stays, a step stays). Only the addresses that have a flash are changed: their flash
+frames are put on the line between the frames around them and their rows are fitted again
+(tighter than a capture, at half the tolerance, so the song stays within one tolerance of the
+original away from the flashes; an address that would not is left as it was). Every other
+message of every row is kept as it was, **loops are never changed** (the repair is only the
+rows layer), and `manual` and `edited` rows, and every address they name, are never touched.
+It asks first ("Found 312 flashes on 16 lights in <song>. Remove them? You can Undo."; nothing
+runs by itself), saves the result as a normal new revision and says what it did ("Removed 312
+flashes; 8,420 rows became 6,100."); the toolbar's one step of **Undo clean-up** puts the old
+rows back, with the song's "changed by hand" flag as it was (the cue-map PUT takes an optional
+`captured_edited` for that). Backend: `POST /api/v1/lights/lightkey/clean-glitches`
+`{song_key, apply?}` (a count without `apply`); logic in `lightkey_repair.rs`.
+
 **The ramp fit.** Per address (`/fixture/<name>/overrides/<property>`), the samples are fitted
 with a greedy piecewise-linear line through the samples:
 
@@ -1472,7 +1493,7 @@ the screen shows, so it is only as current as the screen.
 ### Song lighting timeline section
 
 One toolbar row when wide, wrapping on narrow screens, with every control 34 px tall (44 px on touch): Song menu and
-the following-live status, Add cue, Clear song…, Merge rows, Undo, then at the right the timeline **Height** (− / S / M / Auto / +). The type-filter chips are on their own compact line, right aligned. The selected
+the following-live status, Add cue, Clear song…, Merge rows, Clean up glitches… (a song with captured rows), Undo, then at the right the timeline **Height** (− / S / M / Auto / +). The type-filter chips are on their own compact line, right aligned. The selected
 cue's details are one compact strip under the timeline. The **Cue board** folds away; it starts open and remembers
 how you left it on this device.
 

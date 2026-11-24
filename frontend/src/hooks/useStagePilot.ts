@@ -27,6 +27,7 @@ import {
   captureLightingPad,
   undoLightingCapture,
   clearLightingLoudness,
+  cleanLightingGlitches,
   updateLightingPads,
   testOscLightingCue,
   testPlanningCenter,
@@ -45,6 +46,7 @@ import type {
   ConnectionStatus,
   HealthResponse,
   LightingCaptureResponse,
+  LightkeyCleanGlitchesResponse,
   LightingCue,
   LightingPad,
   LightsSettingsInput,
@@ -982,7 +984,7 @@ export function useStagePilot() {
     song: Song,
     cues: LightingCue[] | OscLightingCue[],
     method: LightingMethod = "midi",
-    options?: { removeEffectIds?: string[] },
+    options?: { removeEffectIds?: string[]; capturedEdited?: boolean },
   ) => {
     if (!canConfigure) return;
     if (!claim("lights")) return;
@@ -1000,6 +1002,7 @@ export function useStagePilot() {
       osc_cues: method === "osc" ? (cues as OscLightingCue[]) : [],
       ...(settingsRef.current ? { revision: revision ?? 0 } : {}),
       ...(method === "osc" && options?.removeEffectIds?.length ? { remove_effect_ids: options.removeEffectIds } : {}),
+      ...(method === "osc" && options?.capturedEdited !== undefined ? { captured_edited: options.capturedEdited } : {}),
     };
     try {
       const response = await updateLightingCueMap(cueMap);
@@ -1091,6 +1094,25 @@ export function useStagePilot() {
       release("lights-loudness");
     }
   }, [claim, release, canOperate]);
+
+  /** Clean up glitches: counts the brief flashes in a song's rows (`apply` false) or removes them. Null when nothing could be asked. */
+  const cleanLightingGlitches_ = useCallback(async (songKey: string, apply: boolean): Promise<LightkeyCleanGlitchesResponse | null> => {
+    if (!canConfigure) return null;
+    if (!claim("lights-clean")) return null;
+    setLightingError(null);
+    try {
+      const response = await cleanLightingGlitches(songKey, apply);
+      if (apply && response.applied) setSettings(await readSettings(settingsReads));
+      // The dialog says what a preview found; every other answer is said here.
+      if (apply || response.flashes === 0) setLightingMessage(response.message);
+      return response;
+    } catch (cause) {
+      setLightingError(describeError(cause, "Clean up glitches failed."));
+      return null;
+    } finally {
+      release("lights-clean");
+    }
+  }, [claim, release, canConfigure]);
 
   const clearAllLightingCues = useCallback(async (songs: Song[], method: LightingMethod = "midi") => {
     if (!canConfigure) return;
@@ -1257,6 +1279,7 @@ export function useStagePilot() {
     pressLightingPad,
     undoLightingCapture: undoLightingCapture_,
     clearLightingLoudness: clearLightingLoudness_,
+    cleanLightingGlitches: cleanLightingGlitches_,
     clearAllLightingCues,
     activateConfiguredServices,
     noteSettingsRevision,

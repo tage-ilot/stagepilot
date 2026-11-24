@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Clean up glitches... repairs songs that are already saved.** Songs captured before 2.44.2 have brief flashes baked into their rows (a value goes back to an older value for a frame or two and returns), so a replay jerks even though it is faithful. The new button in the Lighting timeline toolbar (a song with captured rows) asks first how many flashes it found and on how many lights, removes them from the saved rows, and says what it did. The song keeps its looks and its loops (loops are never changed), rows you edited or made by hand are not touched, and **Undo clean-up** puts the old song back. Nothing runs by itself.
+
 ### Fixed
 
 - **The Lighting computer's helper timestamps every frame when it arrives, so recordings and the live view are no longer smeared.** The helper (now 0.6.1; StagePilot updates it by itself when nothing is playing) used to stamp a Lightkey frame only after it had read it and while it decoded the one before, so about half of a busy song's events arrived bunched a few milliseconds apart and tens of milliseconds late. One thread now only reads and stamps, another decodes in order. `/health` also says `dmx_dropped`.

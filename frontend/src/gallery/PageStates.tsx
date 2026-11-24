@@ -3,7 +3,7 @@ import { LightingSetupPanel } from "../components/LightingSetupPanel";
 import { MidiSetupPanel } from "../components/MidiSetupPanel";
 import { PlanningCenterSetupPanel } from "../components/PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "../components/ProPresenterSetupPanel";
-import type { ProPresenterStatusResponse } from "../types";
+import type { LightkeyCleanGlitchesResponse, OscLightingCue, ProPresenterStatusResponse, Song } from "../types";
 import { libraryController, libraryOf, linkController, linkOf, playbackController, playbackOf, presenterApi } from "./fixtures";
 import { madeUpHealth, madeUpLights, madeUpMidi, madeUpPlanningCenter, madeUpServiceTypes, madeUpSettings, madeUpState } from "./panelFixtures";
 import { PresenterApiContext } from "../hooks/presenterApi";
@@ -156,10 +156,41 @@ const lighting = (method: "osc" | "midi", pending: "refresh" | null = null) => (
   />
 );
 
+// Clean up glitches: a song with captured rows, and a made-up answer from the backend (312 flashes on 16 lights; 8,420 rows become 6,100).
+const cleanSong: Song = { id: "item-1", source_song_id: "song-1", title: "Holy Forever", duration_seconds: 240, order: 1, is_generic: false };
+const cleanRows: OscLightingCue[] = [4, 30, 60, 90].map((at, i) => ({
+  id: `row-${i}`, at_seconds: at, address: "", args: [], label: `Look - ${i + 1} fixture${i ? "s" : ""}`, source: "captured",
+  messages: [{ address: `/fixture/P${i + 1}/overrides/dimmer`, args: [{ type: "float", value: 0.5 }] }],
+}));
+const cleanAnswer = (over: Partial<LightkeyCleanGlitchesResponse>): LightkeyCleanGlitchesResponse => ({
+  accepted: true, applied: false, message: "", flashes: 312, lights: 16, flashes_after: 3, rows_before: 8420, rows_after: 6100, messages_before: 9800, messages_after: 7000, loops: 3, ...over,
+});
+const cleaning = (message: string | null = null) => (
+  // The dialog covers the sample, not the whole page: a transformed box is the containing block of its fixed children.
+  <div className="relative min-h-[34rem]" style={{ transform: "translateZ(0)" }}>
+    <LightingSetupPanel
+      error={null}
+      lights={madeUpLights({ method: "osc" })}
+      message={message}
+      onCleanGlitches={async (_songKey, apply) => cleanAnswer(apply ? { applied: true } : {})}
+      onRefresh={nothing}
+      onSaveCues={nothing}
+      onSaveSettings={nothing}
+      onTest={nothing}
+      pendingOperation={null}
+      settings={madeUpSettings({ lights: { method: "osc", osc_host: "192.0.2.10", osc_port: 21600, cue_maps: { "song-1": { song_key: "song-1", song_title: "Holy Forever", cues: [], osc_cues: cleanRows } } } })}
+      state={madeUpState({ plan: { id: "p", title: "Sunday", songs: [cleanSong] } as never, current_song: cleanSong })}
+    />
+  </div>
+);
+
 export const lightingPages: SampleState[] = [
   { id: "osc", label: "Lighting: OSC", look: "The Live Link block first, then the songs, the Song lighting timeline (a feature section, remembered), the Save bar.", render: () => page([], lighting("osc")) },
   { id: "midi", label: "Lighting: MIDI", look: "Output, channel and note length on one line (lead column), the note, Refresh outputs, the Send a test cue section, then the same timeline.", render: () => page([], lighting("midi")) },
   { id: "midi-held", label: "Lighting: MIDI, held and error", look: "'Not saved yet' on the channel; the error sentence on the note length after a Save.", render: () => page([{ pick: ["MIDI channel", "5"] }, { type: ["Note length", "5"] }, { press: "Save configuration" }], lighting("midi")) },
   { id: "midi-busy", label: "Lighting: MIDI, Refresh running", look: "The Refresh button says Refreshing….", render: () => page([], lighting("midi", "refresh")) },
+  { id: "clean-button", label: "Lighting: a song with captured rows has Clean up glitches", look: "ONE tinted button, Clean up glitches…, in the timeline toolbar after Clear song… (and after Merge rows): only a song that has captured rows shows it. Nothing runs by itself.", render: () => page([], cleaning()) },
+  { id: "clean-ask", label: "Lighting: Clean up glitches asks first", look: "The in-app dialog after the button is pressed: Clean up glitches?, what it found (312 flashes on 16 lights in this song), Remove them? You can Undo. Keep as is has the focus; Remove flashes does the repair.", render: () => <Fresh><Scripted patient steps={[{ press: "Clean up glitches" }]}>{cleaning()}</Scripted></Fresh> },
+  { id: "clean-done", label: "Lighting: after Clean up glitches", look: "The line says what it did (Removed 312 flashes; 8,420 rows became 6,100.) and the toolbar has one Undo clean-up button, which puts the old song back.", render: () => <Fresh><Scripted patient steps={[{ press: "Clean up glitches" }, { press: "Remove flashes" }]}>{cleaning("Removed 312 flashes; 8,420 rows became 6,100.")}</Scripted></Fresh> },
   { id: "timeline-closed", label: "Lighting: timeline closed (remembered)", look: "The feature section folds to its two-line header; its detail line stays.", render: () => page([{ press: "Song lighting timeline" }], lighting("midi")) },
 ];

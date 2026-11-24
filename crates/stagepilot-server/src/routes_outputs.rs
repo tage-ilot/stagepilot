@@ -94,6 +94,10 @@ pub fn routes() -> Router<Rt> {
         .route("/api/v1/lights/lightkey/settings", put(lightkey_settings))
         .route("/api/v1/lights/lightkey/simplify", post(lightkey_simplify))
         .route(
+            "/api/v1/lights/lightkey/clean-glitches",
+            post(lightkey_clean_glitches),
+        )
+        .route(
             "/api/v1/lights/lightkey/recording",
             post(lightkey_recording),
         )
@@ -924,8 +928,12 @@ async fn lights_cue_map(State(rt): State<Rt>, raw: Bytes) -> Json {
             })
             .unwrap_or_default(),
     };
+    let worked_out = captured_edited_after_save(existing, &merged, is_midi);
     let merged = SongLightingCueMap {
-        captured_edited: captured_edited_after_save(existing, &merged, is_midi),
+        // an Undo that restores rows exactly as they were also restores the flag they had
+        captured_edited: request
+            .captured_edited
+            .map_or(worked_out, |flag| flag && merged.has_captured_rows()),
         capture: existing.and_then(|m| m.capture.clone()),
         ..merged
     };
@@ -1774,6 +1782,177 @@ async fn lightkey_simplify(State(rt): State<Rt>, raw: Bytes) -> Json {
         rt.outputs.lights.replace_cue_map(merged).await;
     }
     respond(true, true, format!("Simplified: {summary}."), counts)
+}
+
+/// `POST /api/v1/lights/lightkey/clean-glitches` `{song_key, apply?}`: "Clean up glitches" for a
+/// song that is already saved (see `stagepilot_lights::lightkey_repair`). Without `apply` it only
+/// counts the brief flashes in the song's rows; with it the repaired rows are saved through the
+/// same serialized cue-map path as every other save (a new revision, so Undo can put the old
+/// rows back). Loops, manual rows and edited rows are never touched.
+async fn lightkey_clean_glitches(State(rt): State<Rt>, raw: Bytes) -> Json {
+    detached(lightkey_clean_glitches_work(rt, raw)).await
+}
+
+#[derive(serde::Deserialize)]
+struct CleanGlitchesRequest {
+    song_key: String,
+    #[serde(default)]
+    apply: bool,
+}
+
+/// 8420 -> "8,420".
+fn thousands(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+async fn lightkey_clean_glitches_work(rt: Rt, raw: Bytes) -> Json {
+    use stagepilot_lights::lightkey::LightkeyCleanGlitchesResponse;
+    let (request, _): (CleanGlitchesRequest, Value) = match body(&raw) {
+        Ok(parsed) => parsed,
+        Err(response) => return response,
+    };
+    let mut errors = Vec::new();
+    length_error(&mut errors, "song_key", &request.song_key, 1, 256);
+    if let Err(response) = finish(errors) {
+        return response;
+    }
+    let n = |v: usize| u32::try_from(v).unwrap_or(u32::MAX);
+    let respond = |accepted: bool, applied: bool, message: String, counts: [usize; 8]| {
+        ok(to_value(&LightkeyCleanGlitchesResponse {
+            accepted,
+            applied,
+            message,
+            flashes: n(counts[0]),
+            lights: n(counts[1]),
+            flashes_after: n(counts[2]),
+            rows_before: n(counts[3]),
+            rows_after: n(counts[4]),
+            messages_before: n(counts[5]),
+            messages_after: n(counts[6]),
+            loops: n(counts[7]),
+        }))
+    };
+    let _lock = rt.outputs.cue_lock.lock().await;
+    let current = current_lights(&rt);
+    let map = current
+        .cue_maps
+        .get(&request.song_key)
+        .filter(|map| map.has_captured_rows())
+        .cloned();
+    let Some(map) = map else {
+        return respond(
+            false,
+            false,
+            "This song has no captured looks to clean up.".into(),
+            [0; 8],
+        );
+    };
+    let rows = map.osc_cues.len();
+    let messages: usize = map.osc_cues.iter().map(|r| r.messages.len()).sum();
+    let loops = map.effects.len();
+    // the work is heavy (a few seconds for a long song): not on the async threads
+    let song = map.clone();
+    let cleaned = tokio::task::spawn_blocking(move || {
+        if request.apply {
+            Ok(stagepilot_lights::lightkey_repair::clean_glitches(&song))
+        } else {
+            Err(stagepilot_lights::lightkey_repair::scan(&song))
+        }
+    })
+    .await;
+    let cleaned = match cleaned {
+        Ok(result) => result,
+        Err(_) => {
+            return http_error(
+                500,
+                "That change stopped unexpectedly. Check the Lighting status.",
+            )
+        }
+    };
+    let cleaned = match cleaned {
+        // a preview: only the count
+        Err(found) => {
+            let message = if found.flashes == 0 {
+                "No glitches found in this song.".to_string()
+            } else {
+                format!(
+                    "Found {} flashes on {} lights.",
+                    thousands(found.flashes),
+                    found.lights
+                )
+            };
+            return respond(
+                true,
+                false,
+                message,
+                [
+                    found.flashes,
+                    found.lights,
+                    0,
+                    rows,
+                    rows,
+                    messages,
+                    messages,
+                    loops,
+                ],
+            );
+        }
+        Ok(cleaned) => cleaned,
+    };
+    let counts = [
+        cleaned.flashes_before,
+        cleaned.lights,
+        cleaned.flashes_after,
+        cleaned.rows_before,
+        cleaned.rows_after,
+        cleaned.messages_before,
+        cleaned.messages_after,
+        loops,
+    ];
+    if cleaned.flashes_before == 0 || cleaned.repaired == 0 {
+        return respond(
+            false,
+            false,
+            "No glitches found in this song.".into(),
+            counts,
+        );
+    }
+    if !stagepilot_lights::lightkey_looks::within_caps(&cleaned.map) {
+        return respond(
+            false,
+            false,
+            "This song is too large to clean up.".into(),
+            counts,
+        );
+    }
+    let removed = cleaned.flashes_before.saturating_sub(cleaned.flashes_after);
+    let message = format!(
+        "Removed {} flashes; {} rows became {}.",
+        thousands(removed),
+        thousands(cleaned.rows_before),
+        thousands(cleaned.rows_after)
+    );
+    let mut updated = current.clone();
+    updated
+        .cue_maps
+        .insert(request.song_key.clone(), cleaned.map);
+    updated.normalise();
+    let saved = updated.cue_maps.get(&request.song_key).cloned();
+    if let Err(response) = persist_lights(&rt, updated) {
+        return response;
+    }
+    if let Some(saved) = saved {
+        rt.outputs.lights.replace_cue_map(saved).await;
+    }
+    respond(true, true, message, counts)
 }
 
 /// The grid the older thin-and-merge step simplifies on (the former Normal detail).

@@ -494,6 +494,7 @@ export function Dashboard({
   pressLightingPad,
   undoLightingCapture,
   clearLightingLoudness,
+  cleanLightingGlitches,
   clearAllLightingCues = () => undefined,
   noteSettingsRevision,
   updater,
@@ -560,6 +561,7 @@ export function Dashboard({
   pressLightingPad?: LightingPanelActions["onPressPad"];
   undoLightingCapture?: LightingPanelActions["onUndoCapture"];
   clearLightingLoudness?: LightingPanelActions["onClearLoudness"];
+  cleanLightingGlitches?: LightingPanelActions["onCleanGlitches"];
   clearAllLightingCues?: (songs: Song[], method: LightingMethod) => void;
   /** The backend's save count of the settings, read by the Lightkey strip; a copy of the settings with an older one is reloaded. */
   noteSettingsRevision?: (revision: number | undefined) => void;
@@ -1168,6 +1170,7 @@ export function Dashboard({
             onSavePads={saveLightingPads}
             onUndoCapture={undoLightingCapture}
             onClearLoudness={clearLightingLoudness}
+            onCleanGlitches={cleanLightingGlitches}
             onSaveSettings={saveLighting}
             onTest={sendLightingTest}
             onTestOsc={sendOscLightingTest}

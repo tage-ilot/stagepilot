@@ -20,6 +20,7 @@ import type {
   LightkeyAudio,
   LightkeyMode,
   LightkeyStatus,
+  LightkeyCleanGlitchesResponse,
   LightsOperationResponse,
   LightsSettingsInput,
   LightsStatusResponse,
@@ -456,6 +457,13 @@ export const clearLightingLoudness = (songKey: string) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ song_key: songKey }),
+  });
+/** Without `apply` it only counts the brief flashes in the song's rows; with it the repaired rows are saved. */
+export const cleanLightingGlitches = (songKey: string, apply: boolean) =>
+  requestJson<LightkeyCleanGlitchesResponse>("/api/v1/lights/lightkey/clean-glitches", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ song_key: songKey, apply }),
   });
 export const setLightkeyRecording = (recording: boolean) =>
   requestJson<LightkeyActionResponse>("/api/v1/lights/lightkey/recording", {
