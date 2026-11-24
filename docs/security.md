@@ -18,6 +18,8 @@ completed a production security review.
 - The server runs inside the desktop process (no separate backend executable), so the
   shell supervises it directly; see `desktop-packaging.md`.
 
+- VerseVision is served at `/versevision/` by the same server, behind the same PIN and Origin check, and is refused (404) on the Remote Access address; its Bible keys are kept in an owner-only file under the settings folder (`versevision.md`).
+
 Loopback binding reduces exposure but is not authentication. Another process
 running as the same user may still be able to call a local service.
 

@@ -422,6 +422,10 @@ Playback plays a song in.
 
 To look at all of this without ProPresenter, see `docs/preview-live-link.md` ("The ProPresenter Link").
 
+## VerseVision
+
+The **VerseVision** button under the settings of the Presentation panel opens VerseVision, which builds verse slides in ProPresenter from a pastor's notes, on the same address and behind the same PIN as the dashboard. It uses this connection (host and port) and works on the computer StagePilot runs on. See [versevision.md](versevision.md).
+
 ## Timer sequence
 
 For `song.started` and `song.restarted`, StagePilot performs:

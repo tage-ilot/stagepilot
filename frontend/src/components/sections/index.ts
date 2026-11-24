@@ -21,6 +21,7 @@ export { OptionalBand, type OptionalBandProps } from "./OptionalBand";
 export { OptionalSection, type OptionalSectionProps } from "./OptionalSection";
 export { PanelBody, PanelLayout, type PanelBodySlots, type PanelLayoutProps } from "./PanelLayout";
 export { BODY_SLOTS, PANEL_ORDER, bodyOrder, type BodySlot } from "./panelOrder";
+export { SectionButton, type SectionButtonProps } from "./SectionButton";
 export { SectionNotice, type NoticeTone, type SectionNoticeProps } from "./SectionNotice";
 export { SettingsSection, type SettingsColumns, type SettingsSectionProps } from "./SettingsSection";
 export { StatusSummary, type StatusSummaryProps, type SummaryItem, type SummaryTone } from "./StatusSummary";

@@ -40,6 +40,8 @@ serde_json = "1.0.154"
 tempfile = "3.23.1"
 tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
 tower-http = { version = "0.6", features = ["cors"] }
+# `mount` of VerseVision hands the request on to its router (`ServiceExt::oneshot`).
+tower = { version = "0.5", default-features = false, features = ["util"] }
 chrono-tz = "0.10"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
@@ -51,6 +53,15 @@ percent-encoding = "2"
 # Diagnostics upload (rustls with the pure `ring` provider, as the other HTTP clients here).
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+# VerseVision, an in-process add-on served at /versevision/ (docs/versevision.md). One pinned commit of
+# huntrw6/versevision main; a crate there never depends on StagePilot. To bump: change `rev` in all four lines to
+# the new commit, run `cargo update -p versevision-web`, and run the gates.
+versevision-web = { git = "https://github.com/huntrw6/versevision", rev = "5a92d9ade25a8f38ac96ccb99cdb8c97035ad8dc" }
+versevision-core = { git = "https://github.com/huntrw6/versevision", rev = "5a92d9ade25a8f38ac96ccb99cdb8c97035ad8dc" }
+versevision-bible = { git = "https://github.com/huntrw6/versevision", rev = "5a92d9ade25a8f38ac96ccb99cdb8c97035ad8dc" }
+versevision-pp = { git = "https://github.com/huntrw6/versevision", rev = "5a92d9ade25a8f38ac96ccb99cdb8c97035ad8dc" }
+# The one theme-picture request VerseVision makes to ProPresenter (plain HTTP; already in the build through versevision-web).
+ureq = { version = "3", default-features = false }
 sha2 = "0.10.9"
 # Ed25519 check of the signed helper bundles (already in the build through rustls).
 ring = "0.17"

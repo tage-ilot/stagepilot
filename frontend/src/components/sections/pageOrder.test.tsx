@@ -22,7 +22,7 @@ const partOf = (node: Element): Part => {
   if (node.matches("[data-section=summary]")) return "summary";
   if (node.matches("[data-section=band], [data-variant=advanced], [data-variant=activity], [data-variant=feature]")) return "optional";
   if (node.matches("[data-save-bar]")) return "saveBar";
-  if (node.matches("[data-testid=presenter-link-section]")) return "content";
+  if (node.matches("[data-testid=presenter-link-section], [data-section=section-button]")) return "content";
   if (node.matches("[data-part=notice]")) return "notices";
   return "other";
 };
@@ -67,8 +67,9 @@ describe("every configuration page follows PanelLayout's order", () => {
     const parts = partsOf(panel);
     expectPanelOrder(parts);
     // Refresh sits inside the Timer field, so the page has no actions slot of its own (and draws no empty band for it). The Presenter Link
-    // section (the page's own content) comes after the settings and before the Save bar, with the Link ready.
-    expect(parts).toEqual(["connection", "settings", "content", "saveBar", "summary"]);
+    // section and the VerseVision button (the page's own content, the button first) come after the settings and before the Save bar,
+    // with the Link ready.
+    expect(parts).toEqual(["connection", "settings", "content", "content", "saveBar", "summary"]);
   });
 
   it("Services (Planning Center)", () => {

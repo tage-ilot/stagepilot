@@ -16,6 +16,9 @@
         },
         {
           "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork"
+        },
+        {
+          "url": "http://127.0.0.1:*/versevision/"
         }
       ]
     },

@@ -147,6 +147,10 @@ async fn authorise(
     }
     // The Lighting and Playback computers' installers are LAN only, whoever is logged in remotely (the
     // Playback and ProPresenter ones carry the helper's key).
+    // VerseVision is for this computer and the local network behind the PIN (docs/versevision.md).
+    if crate::versevision_addon::is_versevision_path(&path) {
+        return Err(denial(404, "Not Found"));
+    }
     if [
         crate::helper_install::PREFIX,
         crate::playback_helper_install::PREFIX,

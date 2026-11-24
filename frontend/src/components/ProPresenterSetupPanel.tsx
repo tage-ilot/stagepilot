@@ -19,6 +19,7 @@ import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import { useProPresenterScan, type ProPresenterScanController } from "../hooks/useProPresenterScan";
 import { ProPresenterLinkBlock } from "./ProPresenterLinkBlock";
 import { PresenterLinkSection } from "./PresenterLinkSection";
+import { VerseVisionButton } from "./VerseVisionButton";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 
 const DEFAULT_TIMEOUT_SECONDS = 3;
@@ -293,7 +294,12 @@ export function ProPresenterSetupPanel({
           </SettingsSection>
         </>
       )}
-      content={link ? <PresenterLinkSection library={library} link={link} plan={plan} playing={playing} /> : undefined}
+      content={(
+        <>
+          <VerseVisionButton />
+          {link ? <PresenterLinkSection library={library} link={link} plan={plan} playing={playing} /> : undefined}
+        </>
+      )}
       notices={blockedReason ? <SectionNotice id="propresenter-save-blocked" tone="info" variant="line">{blockedReason}</SectionNotice> : undefined}
       saveBar={<SaveBar onDiscard={discard} onRetry={save} onSave={save} state={saveState} />}
       summary={(
