@@ -50,6 +50,9 @@ jobs:
       INSTALLATION_SIGNING_KEY: ${{ secrets.INSTALLATION_SIGNING_KEY }}
       PLANNING_CENTER_CLIENT_ID: ${{ secrets.PLANNING_CENTER_CLIENT_ID }}
       PLANNING_CENTER_CLIENT_SECRET: ${{ secrets.PLANNING_CENTER_CLIENT_SECRET }}
+      API_BIBLE_API_KEY: ${{ secrets.API_BIBLE_API_KEY }}
+      YOUVERSION_API_KEY: ${{ secrets.YOUVERSION_API_KEY }}
+      ESV_API_KEY: ${{ secrets.ESV_API_KEY }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -100,16 +103,17 @@ jobs:
             --var ENROLLMENT_EXEMPT_SOURCES:${{ vars.ENROLLMENT_EXEMPT_SOURCES }}
             --var TESTING_SOURCES:${{ secrets.TESTING_SOURCES }}
             --var ENROLLMENT_WINDOW_SECONDS:${{ vars.ENROLLMENT_WINDOW_SECONDS }}
-          # The Bible text proxy keys (API_BIBLE_API_KEY, YOUVERSION_API_KEY,
-          # ESV_API_KEY) are set once with `wrangler secret put` and survive
-          # deploys; they are deliberately not listed here and never read or
-          # printed by this workflow (docs/remote-control-plane.md).
+          # The Bible text proxy keys come from the environment's Actions secrets and are installed as
+          # Worker secrets here; they are never printed (docs/remote-control-plane.md).
           secrets: |
             CLOUDFLARE_API_TOKEN
             ADMIN_API_TOKEN
             INSTALLATION_SIGNING_KEY
             PLANNING_CENTER_CLIENT_ID
             PLANNING_CENTER_CLIENT_SECRET
+            API_BIBLE_API_KEY
+            YOUVERSION_API_KEY
+            ESV_API_KEY
       - name: Read back Worker runtime secret names
         id: runtime-secrets
         uses: cloudflare/wrangler-action@v4

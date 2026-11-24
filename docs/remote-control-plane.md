@@ -399,26 +399,25 @@ failure names the provider, the failure kind and the HTTP status.
 
 ### Secrets and deployment
 
-The three keys are **Worker secrets**, never committed, never in a workflow, never printed:
+The three keys are **Worker secrets**, never committed and never printed. They are stored as
+environment secrets (`API_BIBLE_API_KEY`, `YOUVERSION_API_KEY`, `ESV_API_KEY`) of the
+`stagepilot-control-plane` GitHub environment, and `deploy-control-plane.yml` installs them as
+Worker secrets together with the other runtime secrets (the deploy then checks that all
+the names are bound; values are never read back). To rotate a key: `gh secret set API_BIBLE_API_KEY
+--env stagepilot-control-plane`, then run the deploy workflow. They can also be set by hand:
 
 ```
 cd control-plane
 npx wrangler secret put API_BIBLE_API_KEY     # paste the key at the prompt
-npx wrangler secret put YOUVERSION_API_KEY
-npx wrangler secret put ESV_API_KEY
-npx wrangler secret list --format json        # names only: confirm the three are listed
+npx wrangler secret list --format json        # names only
 ```
 
-They are optional for the Worker to start: a version whose provider has no secret answers
-`503 provider_not_configured` and nothing else changes, so the keys can be added one at a time.
-They are deliberately **not** in the `secrets:` list of `deploy-control-plane.yml` or in the
-required list of `deployment-config.mjs`: that would make every deploy fail until all three
-GitHub secrets exist, and a secret set with `wrangler secret put` survives later `wrangler deploy`
-runs. The workflow never reads or prints them.
+A version whose provider has no secret bound answers `503 provider_not_configured` and nothing
+else changes.
 
 To change a limit, add a variable to the deploy command (for example
 `--var BIBLE_INSTALLATION_HOURLY_LIMIT:300`) or set it in the Cloudflare dashboard.
 
-Before the route is deployed for real use: review the ESV API terms (copyright notice, limits on
-passage length and request volume, use through a proxy) and the API.Bible and YouVersion licences
-for serving text to other installations.
+Terms: the owner decided (2026-11-23) to serve these keys to trusted StagePilot users for now and to ask
+users to add their own keys later. API.Bible's terms forbid distributing its content to third parties without
+written approval, the ESV and YouVersion licences also need review before a public rollout.
