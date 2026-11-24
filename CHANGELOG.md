@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Lighting computer's helper timestamps every frame when it arrives, so recordings and the live view are no longer smeared.** The helper (now 0.6.1; StagePilot updates it by itself when nothing is playing) used to stamp a Lightkey frame only after it had read it and while it decoded the one before, so about half of a busy song's events arrived bunched a few milliseconds apart and tens of milliseconds late. One thread now only reads and stamps, another decodes in order. `/health` also says `dmx_dropped`.
+
 ## [2.44.2] - 2026-11-23
 
 StagePilot 2.44.2 smooths Lightkey replays, saves chases as loops, and tidies the Lighting timeline.

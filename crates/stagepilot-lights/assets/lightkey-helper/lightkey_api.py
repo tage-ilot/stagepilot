@@ -37,7 +37,7 @@ import urllib.parse
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 HOME = os.path.expanduser("~")
 APP_DIR = os.path.dirname(os.path.abspath(__file__))     # where the installer put this file; an update replaces the files here
@@ -441,10 +441,96 @@ def sacn_ips():
 
 
 # ---------------------------------------------------------------- sACN change detector
+# Two threads, so the time of a frame is the time it ARRIVED, never the time the decoder got round to it. The receiver does
+# nothing but read the socket, stamp the datagram and queue it. The decoder takes the frames out in the order they came, does the
+# hashing, the decoding and the OSC (which takes a few ms per frame when many fixtures change), and gives every event the
+# arrival time of its frame. If the decoder ever falls so far behind that the queue is full, the oldest frame is dropped
+# and counted (`dmx_dropped` in /health); the decoder compares each frame with the one before it, so the next one catches up.
+SACN_PORT = 5568
+SACN_QUEUE_MAX = 4096                 # about 50 s of two universes at 40 Hz
+SACN_QUEUE = deque()                  # (arrival ms, universe, datagram), oldest first
+SACN_QUEUE_CV = threading.Condition()  # guards SACN_QUEUE only; never held while decoding
+S["dmx_dropped"] = 0
+# Ask the kernel for the arrival time of every datagram when the system can (the receiver thread may wait a few ms for the
+# interpreter lock while the decoder runs); anywhere else, or if the answer looks wrong, the time is taken right after the read.
+_SO_TIMESTAMP = getattr(socket, "SO_TIMESTAMP", {"darwin": 0x0400, "linux": 29}.get(sys.platform))
+
+
+def sacn_enable_kernel_stamp(sock):
+    """True when `sock` now delivers the kernel's receive time with every datagram (SCM_TIMESTAMP)."""
+    if _SO_TIMESTAMP is None or not hasattr(sock, "recvmsg") or not hasattr(socket, "CMSG_SPACE"):
+        return False
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, _SO_TIMESTAMP, 1)
+        return True
+    except OSError:
+        return False
+
+
+def sacn_kernel_time(ancdata, now):
+    """Seconds since the epoch from the SCM_TIMESTAMP part of recvmsg's ancillary data; `now` when absent or not credible."""
+    for level, kind, data in ancdata:
+        if level == socket.SOL_SOCKET and kind == _SO_TIMESTAMP and len(data) >= 12:
+            sec, usec = struct.unpack_from("<qi", data)     # struct timeval; the low 4 bytes of tv_usec on every 64-bit system
+            t = sec + usec / 1e6
+            if 0 <= usec < 1000000 and abs(t - now) < 2.0:
+                return t
+    return now
+
+
+def sacn_read(sock, kernel_stamp):
+    """Wait up to the socket timeout for one datagram. Returns (arrival time in ms, datagram), or None for anything that is not
+    a data packet. Raises socket.timeout / OSError like recvfrom."""
+    if kernel_stamp:
+        d, anc, _flags, _addr = sock.recvmsg(1500, socket.CMSG_SPACE(16))
+        now = time.time()
+        t = sacn_kernel_time(anc, now)
+    else:
+        d, _addr = sock.recvfrom(1500)
+        t = time.time()
+    if len(d) < 126 or d[4:16] != b"ASC-E1.17\0\0\0":
+        return None
+    return int(t * 1000), d
+
+
+def sacn_enqueue(t, d):
+    with SACN_QUEUE_CV:
+        if len(SACN_QUEUE) >= SACN_QUEUE_MAX:
+            SACN_QUEUE.popleft()
+            S["dmx_dropped"] += 1
+        SACN_QUEUE.append((t, struct.unpack(">H", d[113:115])[0], d))
+        SACN_QUEUE_CV.notify()
+    S["dmx_seen_at"] = t
+
+
+def open_sacn_socket(ips):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except Exception:
+        pass
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)      # a burst must wait in the kernel, not be lost
+    except OSError:
+        pass
+    s.bind(("", SACN_PORT))
+    for ip in ips:
+        for u in CFG["sacn_universes"]:
+            g = socket.inet_aton("239.255.%d.%d" % (u >> 8, u & 255))
+            try:
+                s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, g + socket.inet_aton(ip))
+            except OSError:
+                pass
+    s.settimeout(1.0)
+    return s
+
+
 def sacn_loop():
+    """The receiver: read, stamp, queue. Nothing else."""
     sock = None
+    kernel_stamp = False
     joined = None
-    last = {}
     ips, ips_at = [], float("-inf")
     while True:
         # Interfaces rarely change: look again every few seconds, not on every frame (that spawned ifconfig ~80x/s).
@@ -457,23 +543,10 @@ def sacn_loop():
             joined = ips
             if ips:
                 try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    try:
-                        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-                    except Exception:
-                        pass
-                    s.bind(("", 5568))
-                    for ip in ips:
-                        for u in CFG["sacn_universes"]:
-                            g = socket.inet_aton("239.255.%d.%d" % (u >> 8, u & 255))
-                            try:
-                                s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, g + socket.inet_aton(ip))
-                            except OSError:
-                                pass
-                    s.settimeout(1.0)
-                    sock = s
-                    log.info("watching sACN universes %s on %s", CFG["sacn_universes"], ips)
+                    sock = open_sacn_socket(ips)
+                    kernel_stamp = sacn_enable_kernel_stamp(sock)
+                    log.info("watching sACN universes %s on %s (%s time stamps)", CFG["sacn_universes"], ips,
+                             "kernel" if kernel_stamp else "read")
                 except Exception as e:
                     log.warning("sACN listen failed: %s", e)
                     sock = None
@@ -485,35 +558,54 @@ def sacn_loop():
             time.sleep(3)
             continue
         try:
-            d, _ = sock.recvfrom(1500)
+            got = sacn_read(sock, kernel_stamp)
         except socket.timeout:
             continue
         except OSError:
             joined = None
             continue
-        if len(d) < 126 or d[4:16] != b"ASC-E1.17\0\0\0":
+        except Exception as e:                          # a bad datagram must never stop the receiver
+            log.warning("reading an sACN frame failed: %s", e)
             continue
-        uni = struct.unpack(">H", d[113:115])[0]
-        h = hashlib.blake2b(d[125:], digest_size=8).digest()   # start code + slots; excludes the sequence number
-        t = now_ms()
-        S["dmx_seen_at"] = t
-        if last.get(uni) != h:
-            first = uni not in last
-            last[uni] = h
-            slots = bytes(d[126:126 + 512])
-            with cv:
-                LEVELS[uni] = slots
-                if TRACKER[0] is not None:
-                    try:
-                        TRACKER[0].frame(uni, slots, t)
-                    except Exception as e:             # a bad fixture definition must never stop change detection
-                        S["levels_error"] = "%s: %s" % (type(e).__name__, e)
-                        log.warning("decoding universe %s failed: %s", uni, e)
-                    cv.notify_all()
-            if not first:
-                S["dmx_changed_at"] = t
-                for fn in HOOKS["dmx"]:
-                    fn(t, uni)
+        if got:
+            sacn_enqueue(*got)
+
+
+def sacn_frame(last, t, uni, d):
+    """The decoder's work for one frame, stamped `t` (ms) when it arrived. `last` maps universe -> hash of the previous frame."""
+    h = hashlib.blake2b(d[125:], digest_size=8).digest()   # start code + slots; excludes the sequence number
+    if last.get(uni) == h:
+        return
+    first = uni not in last
+    last[uni] = h
+    slots = bytes(d[126:126 + 512])
+    with cv:
+        LEVELS[uni] = slots
+        if TRACKER[0] is not None:
+            try:
+                TRACKER[0].frame(uni, slots, t)
+            except Exception as e:             # a bad fixture definition must never stop change detection
+                S["levels_error"] = "%s: %s" % (type(e).__name__, e)
+                log.warning("decoding universe %s failed: %s", uni, e)
+            cv.notify_all()
+    if not first:
+        S["dmx_changed_at"] = t
+        for fn in HOOKS["dmx"]:
+            fn(t, uni)
+
+
+def sacn_decode_loop():
+    """The decoder: frames in the order they arrived, each with its own arrival time."""
+    last = {}
+    while True:
+        with SACN_QUEUE_CV:
+            while not SACN_QUEUE:
+                SACN_QUEUE_CV.wait(1.0)
+            t, uni, d = SACN_QUEUE.popleft()
+        try:
+            sacn_frame(last, t, uni, d)
+        except Exception as e:                          # nothing a frame or a hook does may end this thread
+            log.warning("handling an sACN frame of universe %s failed: %s", uni, e)
 
 
 # ---------------------------------------------------------------- fixtures: project map, decoder, level tracker
@@ -1160,7 +1252,7 @@ class Recorder:
             return
         for c in cmds:
             a["last"][c["a"]] = c
-        a["events"].append({"at": round((event["t"] - a["t0"]) / 1000.0, 3), "osc": cmds})
+        a["events"].append({"at": max(0.0, round((event["t"] - a["t0"]) / 1000.0, 3)), "osc": cmds})   # a frame that arrived just before the start but was decoded after it
         if len(a["events"]) > CFG["take_max_events"]:
             self.active["overflow"] = True
 
@@ -2028,7 +2120,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             sn = snapshot()
             body = {"ok": True, "lightkey": sn["online"], "error": sn["error"],
-                    "dmx_age_ms": (sn["server_time"] - sn["dmx_seen_at"]) if sn["dmx_seen_at"] else None}
+                    "dmx_age_ms": (sn["server_time"] - sn["dmx_seen_at"]) if sn["dmx_seen_at"] else None,
+                    "dmx_dropped": sn["dmx_dropped"]}
             if CFG["cues"]:
                 body["reads"] = S.get("reads", 0)
             body["version"] = __version__
@@ -2129,7 +2222,7 @@ def run():
         log.warning("an update was interrupted; it has been completed")
     S["online"] = lightkey_running()
     load_fixtures()
-    loops = [process_loop, sacn_loop, WATCH.loop]
+    loops = [process_loop, sacn_loop, sacn_decode_loop, WATCH.loop]
     if CFG["cues"]:
         cues = load_cues()
         if cues:
