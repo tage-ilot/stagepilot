@@ -355,6 +355,7 @@ async fn a_sixty_second_ramp_plays_through_the_scheduler() {
 #[tokio::test(start_paused = true)]
 async fn an_effect_plays_through_the_scheduler_with_its_offsets() {
     let effect = LightingEffect {
+        patches: Vec::new(),
         id: Uuid::new_v4(),
         label: "pulse".into(),
         start_seconds: 2.0,

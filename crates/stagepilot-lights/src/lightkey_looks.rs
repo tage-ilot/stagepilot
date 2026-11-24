@@ -11,7 +11,8 @@ use crate::lightkey_smooth::{self, SmoothCapture, SmoothParams};
 use stagepilot_core::config::{
     round_tenths, CaptureStatus, LightingEffect, OscCueSource, OscLightingCue, OscMessage,
     SongLightingCueMap, MAX_EFFECTS_PER_SONG, MAX_EFFECT_CYCLE_STEPS_PER_SONG,
-    MAX_OSC_MESSAGES_PER_ROW, MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG,
+    MAX_EFFECT_PATCH_STEPS, MAX_OSC_MESSAGES_PER_ROW, MAX_OSC_MESSAGES_PER_SONG,
+    MAX_OSC_ROWS_PER_SONG,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use uuid::Uuid;
@@ -956,10 +957,16 @@ pub fn is_smooth(map: &SongLightingCueMap) -> bool {
 pub fn within_caps(map: &SongLightingCueMap) -> bool {
     let messages: usize = map.osc_cues.iter().map(|r| r.messages.len().max(1)).sum();
     let steps: usize = map.effects.iter().map(|e| e.cycle.len()).sum();
+    let patch_steps: usize = map
+        .effects
+        .iter()
+        .map(|e| e.patches.iter().map(|p| p.steps.len()).sum::<usize>())
+        .sum();
     map.osc_cues.len() <= MAX_OSC_ROWS_PER_SONG
         && messages <= MAX_OSC_MESSAGES_PER_SONG
         && map.effects.len() <= MAX_EFFECTS_PER_SONG
         && steps <= MAX_EFFECT_CYCLE_STEPS_PER_SONG
+        && patch_steps <= MAX_EFFECT_PATCH_STEPS
 }
 
 #[cfg(test)]

@@ -26,7 +26,7 @@
 use crate::lightkey_fixtures::{FixtureArg, FixtureCommand};
 use crate::lightkey_smooth::{self, is_angle, SmoothCapture, SmoothLook, SmoothParams};
 use stagepilot_core::config::{
-    LightingEffect, MAX_EFFECTS_PER_SONG, MAX_EFFECT_CYCLE_STEPS_PER_SONG,
+    LightingEffect, MAX_EFFECTS_PER_SONG, MAX_EFFECT_CYCLE_STEPS_PER_SONG, MAX_EFFECT_PATCH_STEPS,
     MAX_OSC_MESSAGES_PER_ROW, MAX_OSC_MESSAGES_PER_SONG, MAX_OSC_ROWS_PER_SONG,
 };
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -51,6 +51,7 @@ pub struct Caps {
     pub messages: usize,
     pub effects: usize,
     pub cycle_steps: usize,
+    pub patch_steps: usize,
 }
 
 impl Default for Caps {
@@ -60,6 +61,7 @@ impl Default for Caps {
             messages: MAX_OSC_MESSAGES_PER_SONG,
             effects: MAX_EFFECTS_PER_SONG,
             cycle_steps: MAX_EFFECT_CYCLE_STEPS_PER_SONG,
+            patch_steps: MAX_EFFECT_PATCH_STEPS,
         }
     }
 }
@@ -71,6 +73,7 @@ impl Caps {
         messages: 15_000,
         effects: 200,
         cycle_steps: 20_000,
+        patch_steps: 20_000,
     };
 
     pub fn fits(&self, size: &Size) -> bool {
@@ -78,6 +81,7 @@ impl Caps {
             && size.messages <= self.messages
             && size.effects <= self.effects
             && size.cycle_steps <= self.cycle_steps
+            && size.patch_steps <= self.patch_steps
     }
 
     /// How far over the caps a size is: 1.0 or less fits.
@@ -87,6 +91,7 @@ impl Caps {
             .max(ratio(size.messages, self.messages))
             .max(ratio(size.effects, self.effects))
             .max(ratio(size.cycle_steps, self.cycle_steps))
+            .max(ratio(size.patch_steps, self.patch_steps))
     }
 
     /// Caps `share` (0..=1) of the way down from `size`, never above these caps: where the
@@ -98,8 +103,14 @@ impl Caps {
             messages: s(size.messages, self.messages).max(1),
             effects: s(size.effects, self.effects),
             cycle_steps: s(size.cycle_steps, self.cycle_steps),
+            patch_steps: s(size.patch_steps, self.patch_steps),
         }
     }
+}
+
+/// Steps in all the patches of an effect.
+fn patch_steps_of(effect: &LightingEffect) -> usize {
+    effect.patches.iter().map(|p| p.steps.len()).sum()
 }
 
 /// What a fit comes to, in the units the caps count.
@@ -110,6 +121,7 @@ pub struct Size {
     pub messages: usize,
     pub effects: usize,
     pub cycle_steps: usize,
+    pub patch_steps: usize,
 }
 
 impl Size {
@@ -122,6 +134,7 @@ impl Size {
             messages: rows.iter().map(|r| r.messages.len()).sum(),
             effects: effects.len(),
             cycle_steps: effects.iter().map(|e| e.cycle.len()).sum(),
+            patch_steps: effects.iter().map(patch_steps_of).sum(),
         }
     }
 
@@ -129,9 +142,9 @@ impl Size {
         Size::of(&capture.rows, &capture.effects)
     }
 
-    /// Timeline items: messages and loop steps ("changes" in the operator's text).
+    /// Timeline items: messages, loop steps and patch steps ("changes" in the operator's text).
     pub fn items(&self) -> usize {
-        self.messages + self.cycle_steps
+        self.messages + self.cycle_steps + self.patch_steps
     }
 }
 
@@ -457,6 +470,7 @@ pub fn trim_to_caps(capture: &SmoothCapture, caps: &Caps) -> (SmoothCapture, usi
     // effects: the least important go first
     if out.effects.len() > caps.effects
         || out.effects.iter().map(|e| e.cycle.len()).sum::<usize>() > caps.cycle_steps
+        || out.effects.iter().map(patch_steps_of).sum::<usize>() > caps.patch_steps
     {
         let mut order: Vec<usize> = (0..out.effects.len()).collect();
         order.sort_by(|a, b| {
@@ -465,12 +479,17 @@ pub fn trim_to_caps(capture: &SmoothCapture, caps: &Caps) -> (SmoothCapture, usi
         let mut dropped: HashSet<usize> = HashSet::new();
         let mut effects = out.effects.len();
         let mut steps: usize = out.effects.iter().map(|e| e.cycle.len()).sum();
+        let mut patch_steps: usize = out.effects.iter().map(patch_steps_of).sum();
         for i in order {
-            if effects <= caps.effects && steps <= caps.cycle_steps {
+            if effects <= caps.effects
+                && steps <= caps.cycle_steps
+                && patch_steps <= caps.patch_steps
+            {
                 break;
             }
             effects -= 1;
             steps -= out.effects[i].cycle.len();
+            patch_steps -= patch_steps_of(&out.effects[i]);
             dropped.insert(i);
         }
         let mut index = 0;
@@ -770,6 +789,7 @@ mod tests {
             messages: 60,
             effects: 5,
             cycle_steps: 50,
+            patch_steps: 50,
         };
         let fitted = fit_within_caps(&[], &changes, 40.0, &caps);
         assert!(caps.fits(&Size::of_capture(&fitted.capture)));
@@ -825,6 +845,7 @@ mod tests {
             messages: 30,
             effects: 0,
             cycle_steps: 0,
+            patch_steps: 0,
         };
         let (trimmed, removed) = trim_to_caps(&capture, &caps);
         assert!(removed > 0);
@@ -895,6 +916,7 @@ mod tests {
             messages: 40,
             effects: 0,
             cycle_steps: 0,
+            patch_steps: 0,
         };
         let (trimmed, removed) = trim_to_caps(&capture, &caps);
         assert!(removed > 100);

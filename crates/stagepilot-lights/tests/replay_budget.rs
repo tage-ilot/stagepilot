@@ -160,6 +160,7 @@ fn loop_effect(
     members: impl Iterator<Item = (String, f64)>,
 ) -> LightingEffect {
     LightingEffect {
+        patches: Vec::new(),
         id: Uuid::new_v4(),
         label: "loop".into(),
         start_seconds: 0.0,

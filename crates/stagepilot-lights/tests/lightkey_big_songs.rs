@@ -86,6 +86,7 @@ fn caps_for(caps: Caps, divisor: usize) -> Caps {
         messages: caps.messages / divisor,
         effects: caps.effects / divisor,
         cycle_steps: caps.cycle_steps / divisor,
+        patch_steps: caps.patch_steps / divisor,
     }
 }
 
@@ -712,6 +713,7 @@ fn song_at_the_caps() -> (
     let steps_each = MAX_EFFECT_CYCLE_STEPS_PER_SONG / MAX_EFFECTS_PER_SONG;
     let effects = (0..MAX_EFFECTS_PER_SONG)
         .map(|e| LightingEffect {
+            patches: Vec::new(),
             id: Uuid::new_v4(),
             label: format!("Loop {e}"),
             // sixteen back-to-back windows per fixture, each in the song's first 1,200 s

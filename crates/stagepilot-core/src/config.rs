@@ -664,6 +664,7 @@ fn validate_effects(effects: &[LightingEffect], errors: &mut Errors, path: &[Val
         too_long(errors, path, "effects", effects.len(), MAX_EFFECTS_PER_SONG);
     }
     let mut step_total = 0usize;
+    let mut patch_total = 0usize;
     for (i, effect) in effects.iter().enumerate() {
         let mut ep = path.to_vec();
         ep.push(json!("effects"));
@@ -731,6 +732,7 @@ fn validate_effects(effects: &[LightingEffect], errors: &mut Errors, path: &[Val
             );
         }
         step_total += effect.cycle.len();
+        patch_total += validate_patches(effect, errors, &ep);
         for member in &effect.members {
             let address = format!("/fixture/{}/overrides/x", member.fixture);
             if member.fixture.is_empty()
@@ -809,6 +811,114 @@ fn validate_effects(effects: &[LightingEffect], errors: &mut Errors, path: &[Val
             MAX_EFFECT_CYCLE_STEPS_PER_SONG,
         );
     }
+    if patch_total > MAX_EFFECT_PATCH_STEPS {
+        too_long(errors, path, "effects", patch_total, MAX_EFFECT_PATCH_STEPS);
+    }
+}
+
+/// Rules for the patches of one effect: their count and steps, the stretch they cover (inside
+/// the effect's window), the fixture and property they name (a member and a property of the
+/// cycle), and finite step values. Returns the number of patch steps.
+fn validate_patches(effect: &LightingEffect, errors: &mut Errors, ep: &[Value]) -> usize {
+    if effect.patches.len() > MAX_EFFECT_PATCHES {
+        too_long(
+            errors,
+            ep,
+            "patches",
+            effect.patches.len(),
+            MAX_EFFECT_PATCHES,
+        );
+    }
+    let mut total = 0usize;
+    for (n, patch) in effect.patches.iter().enumerate() {
+        let mut pp = ep.to_vec();
+        pp.push(json!("patches"));
+        pp.push(json!(n));
+        if !effect.members.iter().any(|m| m.fixture == patch.fixture) {
+            value_error(
+                errors,
+                &pp,
+                "A patch needs a fixture that is a member of its effect.",
+                json!(patch.fixture),
+            );
+        }
+        if !effect.cycle.iter().any(|s| s.property == patch.property) {
+            value_error(
+                errors,
+                &pp,
+                "A patch needs a property that is in the cycle of its effect.",
+                json!(patch.property),
+            );
+        }
+        check_range(
+            errors,
+            &pp,
+            "from_seconds",
+            patch.from_seconds,
+            Some(effect.start_seconds.max(0.0)),
+            Some(effect.end_seconds.min(86_400.0)),
+            None,
+        );
+        check_range(
+            errors,
+            &pp,
+            "to_seconds",
+            patch.to_seconds,
+            Some(patch.from_seconds.max(0.0)),
+            Some(effect.end_seconds.min(86_400.0)),
+            None,
+        );
+        if patch.steps.is_empty() {
+            value_error(errors, &pp, "A patch needs at least one step.", json!(0));
+        }
+        if patch.steps.len() > MAX_EFFECT_PATCH_STEPS_PER_PATCH {
+            too_long(
+                errors,
+                &pp,
+                "steps",
+                patch.steps.len(),
+                MAX_EFFECT_PATCH_STEPS_PER_PATCH,
+            );
+        }
+        total += patch.steps.len();
+        for step in &patch.steps {
+            check_range(
+                errors,
+                &pp,
+                "at_seconds",
+                step.at_seconds,
+                Some(0.0),
+                Some(86_400.0),
+                None,
+            );
+            check_range(
+                errors,
+                &pp,
+                "fade_seconds",
+                step.fade_seconds,
+                Some(0.0),
+                Some(MAX_FADE_SECONDS),
+                None,
+            );
+            if step.value.is_empty() || step.value.len() > MAX_EFFECT_VALUES {
+                value_error(
+                    errors,
+                    &pp,
+                    "A patch step needs 1 to 8 numbers.",
+                    json!(step.value.len()),
+                );
+            }
+            if step.value.iter().any(|v| !v.is_finite()) {
+                value_error(
+                    errors,
+                    &pp,
+                    "A patch step value must be a finite number.",
+                    Value::Null,
+                );
+            }
+        }
+    }
+    total
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -947,6 +1057,12 @@ pub const MAX_EFFECT_MEMBERS: usize = 256;
 pub const MAX_EFFECT_CYCLE_STEPS: usize = 4_096;
 /// Most cycle steps in all effects of one song.
 pub const MAX_EFFECT_CYCLE_STEPS_PER_SONG: usize = 250_000;
+/// Most patches one effect may carry (small corrections of single cycles; see [`EffectPatch`]).
+pub const MAX_EFFECT_PATCHES: usize = 100_000;
+/// Most patch steps in all effects of one song (the same bound as the cycle steps).
+pub const MAX_EFFECT_PATCH_STEPS: usize = 250_000;
+/// Most steps one patch may hold.
+pub const MAX_EFFECT_PATCH_STEPS_PER_PATCH: usize = 4_096;
 /// Longest period of an effect, seconds; the shortest is `MIN_EFFECT_PERIOD_SECONDS`.
 pub const MAX_EFFECT_PERIOD_SECONDS: f64 = 600.0;
 pub const MIN_EFFECT_PERIOD_SECONDS: f64 = 0.1;
@@ -982,6 +1098,42 @@ pub struct EffectStep {
     pub fade_seconds: f64,
 }
 
+/// A small correction of a loop: for one member fixture's one property the loop is silent from
+/// `from_seconds` to `to_seconds` (song time) and `steps` play instead. A chase that repeats
+/// mostly cleanly (one cycle brighter, a pulse dropped once, a fixture that joins late) is stored
+/// as ONE loop plus patches rather than thousands of rows.
+///
+/// The steps work like a cycle's: each starts `at_seconds` after `from_seconds` and ramps over
+/// `fade_seconds` to `value`, from the value the step before it ended on. The first step starts
+/// from the value the loop itself has at `from_seconds`, so a patch begins on the loop's own value
+/// (detection also ends it on the loop's value at `to_seconds`: no gap, no jump). At
+/// `to_seconds` the loop plays again.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct EffectPatch {
+    /// Fixture name, one of the effect's members.
+    pub fixture: String,
+    /// Property name, one of the properties of the effect's cycle.
+    pub property: String,
+    pub from_seconds: f64,
+    pub to_seconds: f64,
+    pub steps: Vec<EffectPatchStep>,
+}
+
+/// One ramp of a patch: from `at_seconds` after the patch starts the property reaches `value`
+/// over `fade_seconds` (the same shape as an [`EffectStep`] without the property, which the patch
+/// already names).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct EffectPatchStep {
+    pub at_seconds: f64,
+    /// The value reached (one number per argument: 1 for a dimmer, 3 for a colour).
+    pub value: Vec<f64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    #[ts(optional, as = "Option<f64>")]
+    pub fade_seconds: f64,
+}
+
 /// A repeating pattern found in the recording, stored as ONE item: from `start_seconds` to
 /// `end_seconds` every member fixture plays `cycle` over and over, `period_seconds` long. The
 /// effect drives the properties named in `cycle` of its members for that window; outside it the
@@ -999,6 +1151,12 @@ pub struct LightingEffect {
     pub period_seconds: f64,
     pub members: Vec<EffectMember>,
     pub cycle: Vec<EffectStep>,
+    /// Small corrections of single stretches (see [`EffectPatch`]). Absent on effects without
+    /// any: older files load and save back unchanged. A build from before patches ignores the
+    /// key and plays the plain loop (the corrections are lost on the next save from that build).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<EffectPatch>>")]
+    pub patches: Vec<EffectPatch>,
     /// Where the effect came from. Left out of the saved file while `manual`.
     #[serde(default, skip_serializing_if = "OscCueSource::is_manual")]
     #[ts(optional, as = "Option<OscCueSource>")]
@@ -1580,6 +1738,16 @@ impl SongLightingCueMap {
                 step.property = step.property.trim().to_string();
                 step.at_seconds = round_millis(step.at_seconds);
                 step.fade_seconds = round_millis(step.fade_seconds);
+            }
+            for patch in &mut effect.patches {
+                patch.fixture = patch.fixture.trim().to_string();
+                patch.property = patch.property.trim().to_string();
+                patch.from_seconds = round_millis(patch.from_seconds);
+                patch.to_seconds = round_millis(patch.to_seconds);
+                for step in &mut patch.steps {
+                    step.at_seconds = round_millis(step.at_seconds);
+                    step.fade_seconds = round_millis(step.fade_seconds);
+                }
             }
         }
         map.effects.sort_by(|a, b| {

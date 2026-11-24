@@ -6,6 +6,10 @@
 
 - **The Lighting computer's helper timestamps every frame when it arrives, so recordings and the live view are no longer smeared.** The helper (now 0.6.1; StagePilot updates it by itself when nothing is playing) used to stamp a Lightkey frame only after it had read it and while it decoded the one before, so about half of a busy song's events arrived bunched a few milliseconds apart and tens of milliseconds late. One thread now only reads and stamps, another decodes in order. `/health` also says `dmx_dropped`.
 
+### Changed
+
+- **A chase that repeats mostly cleanly is now saved as one loop plus small changes,** instead of thousands of rows. A cycle that is brighter, a pulse that is dropped once, a light that joins late or a hit between two cycles no longer stops the loop: the loop plays, and a small change on top (a "patch") corrects the few seconds that differ. A loop is looked for where 60 % of the points repeat (it was 90 %) and kept when the loop and its changes cost at most 60 % of the plain ramps. The Lighting timeline says how many changes a loop has (`4.0 s loop x 16 fixtures (+12 changes)`) and the loop's row lists them. Songs saved before this change are unchanged, and a loop with no changes is saved exactly as before. A StagePilot from before this change plays such a song's loops without their changes.
+
 ## [2.44.2] - 2026-11-23
 
 StagePilot 2.44.2 smooths Lightkey replays, saves chases as loops, and tidies the Lighting timeline.

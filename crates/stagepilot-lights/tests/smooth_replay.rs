@@ -80,6 +80,7 @@ fn no_one(_: f64, _: &str) -> bool {
 /// 0 -> 1 -> 0 over `period`, starting from the last step's value (0).
 fn loop_effect(period: f64, start: f64, end: f64, members: &[(&str, f64)]) -> LightingEffect {
     LightingEffect {
+        patches: Vec::new(),
         id: Uuid::new_v4(),
         label: "loop".into(),
         start_seconds: start,
