@@ -663,6 +663,7 @@ mod tests {
                     fade_seconds: 0.5,
                 },
             ],
+            patches: Vec::new(),
             source: OscCueSource::Captured,
             edited: false,
         };
