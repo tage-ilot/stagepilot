@@ -808,6 +808,262 @@ async fn the_upcoming_plan_picked_is_not_a_pin_once_it_is_the_upcoming_one() {
     h.plugin.stop().await.unwrap();
 }
 
+// ---- reviewing a service of the days gone by ---------------------------------------------------
+
+/// The standard calendar with a service 7 days before July 12, one exactly 20 days before, and
+/// one 21 days before (the last is out of the picker's reach).
+fn with_past(cal: &Arc<Cal>) {
+    let past = |id, title, starts| P {
+        id,
+        title,
+        starts,
+        service_type: "42",
+    };
+    cal.add(past("p7", "Sunday Past", "2026-07-05T17:00:00Z"));
+    cal.add(past("p20", "Sunday Twenty", "2026-06-22T17:00:00Z"));
+    cal.add(past("p21", "Sunday Too Old", "2026-06-21T17:00:00Z"));
+}
+
+#[tokio::test]
+async fn the_list_reaches_back_20_days_and_the_upcoming_service_is_unchanged() {
+    let cal = Cal::standard(true);
+    with_past(&cal);
+    let m = mock(&cal).await;
+    let h = harness(&m, settings("42"), &july_12(), PinKeeper::in_memory());
+    h.plugin.start().await.unwrap();
+    assert_eq!(h.plan_id().as_deref(), Some("a"), "the upcoming plan loads");
+    let before = plans_calls(&m);
+    let list = h.plugin.upcoming_plans().await.unwrap();
+    let ids: Vec<&str> = list.plans.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        vec!["p20", "p7", "a", "b", "c", "far"],
+        "20 days back is listed, 21 is not, oldest first"
+    );
+    assert_eq!(list.upcoming_id.as_deref(), Some("a"));
+    assert_eq!(
+        plans_calls(&m) - before,
+        1,
+        "still one call per service type"
+    );
+    assert_eq!(list.pinned_id, None);
+    h.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_upcoming_service_is_the_nearest_from_today_not_the_oldest_past_one() {
+    // Nothing is known as upcoming from the loaded plan (the pick is a past plan and the state
+    // knows no upcoming one): the answer comes from the first plan dated today or later.
+    let cal = Cal::standard(true);
+    with_past(&cal);
+    let m = mock(&cal).await;
+    let h = harness(&m, settings("42"), &july_12(), PinKeeper::in_memory());
+    h.plugin.start().await.unwrap();
+    h.store.mutate(|s| s.upcoming = None);
+    let list = h.plugin.upcoming_plans().await.unwrap();
+    assert_eq!(list.upcoming_id.as_deref(), Some("a"));
+    h.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_busy_calendar_never_pushes_an_upcoming_plan_out_of_the_list() {
+    let cal = Cal::standard(true);
+    with_past(&cal);
+    // 70 services on the 70 days after today, more than the cap of 60 plans from today on.
+    for day in 0..70 {
+        let id: &'static str = Box::leak(format!("x{day:02}").into_boxed_str());
+        let starts: &'static str = Box::leak(
+            format!(
+                "2026-{}T18:00:00Z",
+                (NaiveDate::from_ymd_opt(2026, 7, 13).unwrap() + chrono::Duration::days(day))
+                    .format("%m-%d")
+            )
+            .into_boxed_str(),
+        );
+        cal.add(P {
+            id,
+            title: "Daily",
+            starts,
+            service_type: "42",
+        });
+    }
+    let m = mock(&cal).await;
+    let h = harness(&m, settings("42"), &july_12(), PinKeeper::in_memory());
+    h.plugin.start().await.unwrap();
+    let list = h.plugin.upcoming_plans().await.unwrap();
+    let ids: Vec<&str> = list.plans.iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(ids.len(), 62, "the past two on top of the 60 from today on");
+    assert_eq!(&ids[..3], ["p20", "p7", "a"]);
+    assert!(
+        ids.iter().filter(|id| ["p20", "p7"].contains(id)).count() == 2,
+        "{ids:?}"
+    );
+    assert_eq!(list.upcoming_id.as_deref(), Some("a"));
+    h.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_past_plan_loads_for_review_and_holds_until_the_end_of_the_day_it_was_picked() {
+    let cal = Cal::standard(true);
+    with_past(&cal);
+    let m = mock(&cal).await;
+    let clock = july_12();
+    let h = harness(&m, settings("42"), &clock, PinKeeper::in_memory());
+    h.plugin.start().await.unwrap();
+    h.pick("p7").await;
+    let state = h.store.snapshot();
+    let plan = state.plan.clone().expect("plan");
+    assert_eq!(
+        (plan.id.as_str(), plan.date.to_string().as_str()),
+        ("p7", "2026-07-05")
+    );
+    assert_eq!(plan.songs[0].title, "Song of Sunday Past");
+    assert_eq!(state.service_load.status, ServiceLoadStatus::Loaded);
+    let selection = state.selection.expect("selection");
+    assert!(selection.pinned);
+    assert_eq!(selection.plan_id.as_deref(), Some("p7"));
+    assert_eq!(state.upcoming.expect("upcoming").plan_id, "a");
+    let pin = h.keeper.get(SOURCE_PLANNING_CENTER).expect("pin");
+    assert_eq!(pin.date.to_string(), "2026-07-05");
+    assert_eq!(
+        pin.held_until.map(|d| d.to_string()).as_deref(),
+        Some("2026-07-12")
+    );
+    let list = h.plugin.upcoming_plans().await.unwrap();
+    assert_eq!(list.pinned_id.as_deref(), Some("p7"));
+    assert_eq!(list.upcoming_id.as_deref(), Some("a"));
+
+    // A reload during the day keeps the review loaded.
+    clock.set("2026-07-13T06:59:00Z");
+    h.plugin.refresh_now().await;
+    let state = h.store.snapshot();
+    assert_eq!(state.plan.map(|p| p.id).as_deref(), Some("p7"));
+    assert_eq!(state.service_load.status, ServiceLoadStatus::Loaded);
+    assert!(state.selection.unwrap().pinned);
+    assert!(h.keeper.get(SOURCE_PLANNING_CENTER).is_some());
+
+    // The next local midnight: back to the upcoming service, with the same note as any pin.
+    clock.set("2026-07-13T07:00:00Z");
+    h.plugin.refresh_now().await;
+    let state = h.store.snapshot();
+    assert_eq!(state.plan.map(|p| p.id).as_deref(), Some("b"));
+    let selection = state.selection.unwrap();
+    assert!(!selection.pinned);
+    assert_eq!(selection.notice.as_deref(), Some(NOTICE_PIN_PASSED));
+    assert_eq!(h.keeper.get(SOURCE_PLANNING_CENTER), None);
+    h.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_clock_check_drops_a_review_at_midnight_without_a_reload() {
+    let cal = Cal::standard(true);
+    with_past(&cal);
+    let m = mock(&cal).await;
+    let clock = july_12();
+    let h = harness(&m, settings("42"), &clock, PinKeeper::in_memory());
+    h.plugin
+        .set_expiry_check_interval(Duration::from_millis(20));
+    h.plugin.start().await.unwrap();
+    h.pick("p7").await;
+    assert_eq!(h.plan_id().as_deref(), Some("p7"));
+    clock.set("2026-07-13T07:00:00Z");
+    let mut loaded = None;
+    for _ in 0..100 {
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        loaded = h.plan_id();
+        if loaded.as_deref() == Some("b") {
+            break;
+        }
+    }
+    assert_eq!(loaded.as_deref(), Some("b"), "no reload was asked for");
+    h.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_review_survives_a_restart_the_same_day_and_not_the_next() {
+    let cal = Cal::standard(true);
+    with_past(&cal);
+    let m = mock(&cal).await;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("service-pin.json");
+    let keeper = || PinKeeper::new(Arc::new(FileServicePinStore::new(&path)));
+    let first = harness(&m, settings("42"), &july_12(), keeper());
+    first.plugin.start().await.unwrap();
+    first.pick("p7").await;
+    first.plugin.stop().await.unwrap();
+
+    let same_day = harness(
+        &m,
+        settings("42"),
+        &Clock::at("2026-07-12T20:00:00Z"),
+        keeper(),
+    );
+    same_day.plugin.start().await.unwrap();
+    assert_eq!(same_day.plan_id().as_deref(), Some("p7"));
+    assert!(same_day.store.snapshot().selection.unwrap().pinned);
+    same_day.plugin.stop().await.unwrap();
+
+    let next_day = harness(
+        &m,
+        settings("42"),
+        &Clock::at("2026-07-13T08:00:00Z"),
+        keeper(),
+    );
+    next_day.plugin.start().await.unwrap();
+    assert_eq!(next_day.plan_id().as_deref(), Some("b"));
+    assert_eq!(
+        next_day
+            .store
+            .snapshot()
+            .selection
+            .unwrap()
+            .notice
+            .as_deref(),
+        Some(NOTICE_PIN_PASSED)
+    );
+    next_day.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn back_to_upcoming_ends_a_review() {
+    let cal = Cal::standard(true);
+    with_past(&cal);
+    let m = mock(&cal).await;
+    let h = harness(&m, settings("42"), &july_12(), PinKeeper::in_memory());
+    h.plugin.start().await.unwrap();
+    h.pick("p20").await;
+    assert_eq!(h.plan_id().as_deref(), Some("p20"));
+    h.back().await;
+    let state = h.store.snapshot();
+    assert_eq!(state.plan.map(|p| p.id).as_deref(), Some("a"));
+    assert!(state.selection.is_none() && state.upcoming.is_none());
+    assert_eq!(h.keeper.get(SOURCE_PLANNING_CENTER), None);
+    h.plugin.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_pin_of_a_past_plan_from_an_older_file_expires_as_before() {
+    // An older build wrote no `held_until`: a past date is a pin that has already ended.
+    let cal = Cal::standard(true);
+    with_past(&cal);
+    let m = mock(&cal).await;
+    let keeper = PinKeeper::in_memory();
+    keeper
+        .set(ServicePin::new(
+            SOURCE_PLANNING_CENTER,
+            "p7",
+            NaiveDate::from_ymd_opt(2026, 7, 5).unwrap(),
+            Some("42".into()),
+            None,
+        ))
+        .unwrap();
+    let h = harness(&m, settings("42"), &july_12(), keeper);
+    h.plugin.start().await.unwrap();
+    assert_eq!(h.plan_id().as_deref(), Some("a"));
+    assert_eq!(h.keeper.get(SOURCE_PLANNING_CENTER), None);
+    h.plugin.stop().await.unwrap();
+}
+
 #[test]
 fn the_plugin_name_is_the_pin_source() {
     assert_eq!(PLUGIN_NAME, SOURCE_PLANNING_CENTER);

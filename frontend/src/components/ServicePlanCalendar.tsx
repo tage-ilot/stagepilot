@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import {
+  PICKER_PAST_DAYS,
   WEEKDAYS,
   addDays,
   addMonths,
@@ -47,7 +48,8 @@ export function ServicePlanCalendar({ plans, selectedId, today, disabled = false
     return map;
   }, [plans]);
   const selectedDate = plans.find((plan) => plan.id === selectedId)?.date ?? null;
-  const first = monthOf(today);
+  // It opens on the month of today; the grid reaches back as far as the services the backend lists.
+  const first = monthOf(addDays(today, -PICKER_PAST_DAYS));
   const lastPlan = plans.at(-1);
   const lastPlanMonth = lastPlan ? monthOf(lastPlan.date) : first;
   const lastMonth = lastPlanMonth > first ? lastPlanMonth : first;
@@ -55,7 +57,7 @@ export function ServicePlanCalendar({ plans, selectedId, today, disabled = false
   const maxDate = lastDayOfMonth(lastMonth);
   const clamp = (value: IsoDate) => (value < minDate ? minDate : value > maxDate ? maxDate : value);
 
-  const start = clamp(selectedDate ?? plans[0]?.date ?? today);
+  const start = clamp(selectedDate ?? plans.find((plan) => plan.date >= today)?.date ?? today);
   const [focusDate, setFocusDate] = useState<IsoDate>(start);
   const [month, setMonth] = useState(monthOf(start));
   const [choosing, setChoosing] = useState<IsoDate | null>(null);
@@ -182,6 +184,7 @@ export function ServicePlanCalendar({ plans, selectedId, today, disabled = false
               const inMonth = monthOf(date) === month;
               const isSelected = Boolean(selectedId) && onDay.some((plan) => plan.id === selectedId);
               const isToday = date === today;
+              const isPast = date < today;
               const name = hasService
                 ? `${formatSpokenDay(date)}: ${onDay.length === 1 ? onDay[0]?.title : `${onDay.length} services`}`
                 : formatSpokenDay(date);
@@ -196,7 +199,9 @@ export function ServicePlanCalendar({ plans, selectedId, today, disabled = false
                       isSelected
                         ? cx("font-bold", accentClasses.services.solid)
                         : hasService
-                          ? cx("font-bold", accentClasses.services.tinted, accentClasses.services.tintedHover)
+                          ? isPast
+                            ? "border-edge-medium font-medium text-ink-muted can-hover:text-ink"
+                            : cx("font-bold", accentClasses.services.tinted, accentClasses.services.tintedHover)
                           : "border-transparent text-ink-muted opacity-60",
                       !inMonth && !hasService && "opacity-40",
                       isToday && "underline decoration-2 underline-offset-4",
@@ -205,6 +210,7 @@ export function ServicePlanCalendar({ plans, selectedId, today, disabled = false
                     )}
                     data-date={date}
                     data-has-service={hasService ? "true" : undefined}
+                    data-past={hasService && isPast ? "true" : undefined}
                     data-today={isToday ? "true" : undefined}
                     onClick={() => {
                       setFocusDate(date);

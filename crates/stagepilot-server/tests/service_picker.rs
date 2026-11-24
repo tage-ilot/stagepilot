@@ -370,6 +370,11 @@ async fn fake_handler(State(fake): State<Fake>, request: AxumRequest) -> Respons
 }
 
 async fn pco_rig() -> (Rig, Fake) {
+    pco_rig_with(&[]).await
+}
+
+/// The fake Planning Center with the three upcoming plans and `extra` (id, days from today).
+async fn pco_rig_with(extra: &[(&str, i64)]) -> (Rig, Fake) {
     let noon = |days: i64| {
         (Utc::now().date_naive() + ChronoDuration::days(days))
             .and_hms_opt(12, 0, 0)
@@ -378,13 +383,15 @@ async fn pco_rig() -> (Rig, Fake) {
             .format("%Y-%m-%dT%H:%M:%SZ")
             .to_string()
     };
+    let mut starts = vec![
+        ("plan-1".to_string(), noon(1)),
+        ("plan-2".to_string(), noon(10)),
+        ("plan-3".to_string(), noon(17)),
+    ];
+    starts.extend(extra.iter().map(|(id, days)| (id.to_string(), noon(*days))));
     let fake = Fake {
         fail: Arc::default(),
-        starts: Arc::new(vec![
-            ("plan-1".into(), noon(1)),
-            ("plan-2".into(), noon(10)),
-            ("plan-3".into(), noon(17)),
-        ]),
+        starts: Arc::new(starts),
     };
     let app = axum::Router::new()
         .fallback(fake_handler)
@@ -522,4 +529,95 @@ async fn a_pick_whose_load_fails_leaves_the_loaded_plan_and_no_pin() {
         rig.runtime.pco.pins.get("planning_center").is_none(),
         "the pin file is not left behind"
     );
+}
+
+// ---- reviewing a service of the past 20 days ------------------------------------------------
+
+fn ids_of(list: &Value) -> Vec<&str> {
+    list["plans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].as_str().unwrap())
+        .collect()
+}
+
+const PAST: &[(&str, i64)] = &[("past-5", -5), ("past-20", -20), ("past-21", -21)];
+
+#[tokio::test]
+async fn the_list_reaches_back_20_days_and_the_upcoming_service_is_unchanged() {
+    let (rig, _fake) = pco_rig_with(PAST).await;
+    assert_eq!(rig.plan_id().as_deref(), Some("plan-1"));
+    let (status, list) = rig.call("GET", LIST, None).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert_eq!(
+        ids_of(&list),
+        vec!["past-20", "past-5", "plan-1", "plan-2", "plan-3"],
+        "21 days back is not listed"
+    );
+    assert_eq!(list["upcoming_id"], "plan-1");
+}
+
+#[tokio::test]
+async fn a_past_plan_is_picked_for_review_and_held_for_the_rest_of_the_day() {
+    let (rig, _fake) = pco_rig_with(PAST).await;
+    let (status, body) = rig
+        .call("POST", PIN, Some(json!({"plan_id": "past-5"})))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["state"]["plan"]["id"], "past-5");
+    assert_eq!(body["state"]["plan"]["songs"][0]["title"], "Song past-5");
+    assert_eq!(body["state"]["selection"]["pinned"], true);
+    assert_eq!(body["state"]["upcoming"]["plan_id"], "plan-1");
+    assert_eq!(body["state"]["service_load"]["status"], "loaded");
+    let pin = rig.runtime.pco.pins.get("planning_center").unwrap();
+    assert_eq!(pin.date, Utc::now().date_naive() - ChronoDuration::days(5));
+    assert_eq!(pin.held_until, Some(Utc::now().date_naive()));
+    let (_, list) = rig.call("GET", LIST, None).await;
+    assert_eq!(list["pinned_id"], "past-5");
+    assert_eq!(list["upcoming_id"], "plan-1");
+
+    // The oldest listed one can be picked too, and Back to upcoming still works.
+    let (status, body) = rig
+        .call("POST", PIN, Some(json!({"plan_id": "past-20"})))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["state"]["plan"]["id"], "past-20");
+    let (status, body) = rig.call("DELETE", PIN, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["state"]["plan"]["id"], "plan-1");
+    assert!(body["state"].get("selection").is_none(), "{body}");
+    assert!(rig.runtime.pco.pins.get("planning_center").is_none());
+}
+
+#[tokio::test]
+async fn a_plan_21_days_back_still_gets_the_existing_error() {
+    let (rig, _fake) = pco_rig_with(PAST).await;
+    let (status, body) = rig
+        .call("POST", PIN, Some(json!({"plan_id": "past-21"})))
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["detail"],
+        "That service is not in the list of upcoming services."
+    );
+    assert_eq!(rig.plan_id().as_deref(), Some("plan-1"));
+    assert!(rig.runtime.pco.pins.get("planning_center").is_none());
+}
+
+#[tokio::test]
+async fn a_past_plan_cannot_be_picked_while_the_timer_runs() {
+    let (rig, _fake) = pco_rig_with(PAST).await;
+    rig.runtime
+        .store
+        .mutate(|s| s.timer.status = TimerStatus::Running);
+    let (status, body) = rig
+        .call("POST", PIN, Some(json!({"plan_id": "past-5"})))
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(
+        body["detail"],
+        "Stop the timer before changing the service."
+    );
+    assert_eq!(rig.plan_id().as_deref(), Some("plan-1"));
 }

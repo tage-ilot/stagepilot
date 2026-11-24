@@ -239,7 +239,11 @@ fn production_service_ready(state: &ApplicationState, current: chrono::NaiveDate
         && state.service_load.status == ServiceLoadStatus::Loaded
         && !state.service_load.is_stale
         && state.service_load.target_date == Some(plan.date)
-        && plan.date >= current
+        // A service picked to review after its day has gone by (the pill's "not the upcoming
+        // service") is on purpose and does not make the system not ready.
+        && (plan.date >= current || state.selection.as_ref().is_some_and(|s| {
+            s.pinned && s.plan_id.as_deref() == Some(plan.id.as_str())
+        }))
         && !plan.songs.is_empty()
 }
 
@@ -873,4 +877,62 @@ async fn state_stream(rt: Rt, mut socket: WebSocket) {
             reason: "".into(),
         })))
         .await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use stagepilot_core::state::{ServiceLoadState, ServicePlan, ServiceSelection};
+
+    fn day(d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 11, d).unwrap()
+    }
+
+    fn loaded(plan_date: NaiveDate, selection: Option<ServiceSelection>) -> ApplicationState {
+        let plan: ServicePlan = serde_json::from_value(json!({
+            "id": "p1", "title": "Sunday", "date": plan_date.to_string(), "service_type": "Weekend",
+            "songs": [{"id": "s1", "title": "Song", "duration_seconds": 200, "order": 1}],
+        }))
+        .unwrap();
+        ApplicationState {
+            planning_center_status: ConnectionStatus::Connected,
+            service_load: ServiceLoadState {
+                status: ServiceLoadStatus::Loaded,
+                target_date: Some(plan.date),
+                ..ServiceLoadState::default()
+            },
+            plan: Some(plan),
+            selection,
+            ..ApplicationState::default()
+        }
+    }
+
+    fn picked(pinned: bool) -> Option<ServiceSelection> {
+        Some(ServiceSelection {
+            pinned,
+            plan_id: Some("p1".into()),
+            date: None,
+            notice: None,
+        })
+    }
+
+    #[test]
+    fn a_plan_from_today_on_is_ready_and_one_that_went_by_is_not() {
+        assert!(production_service_ready(&loaded(day(23), None), day(23)));
+        assert!(!production_service_ready(&loaded(day(22), None), day(23)));
+    }
+
+    #[test]
+    fn a_past_service_picked_for_review_does_not_make_the_system_not_ready() {
+        assert!(production_service_ready(
+            &loaded(day(14), picked(true)),
+            day(23)
+        ));
+        // A note about a pick that ended is not a pick.
+        assert!(!production_service_ready(
+            &loaded(day(14), picked(false)),
+            day(23)
+        ));
+    }
 }

@@ -6,7 +6,7 @@
 //! once) and counts as "no pin".
 //!
 //! [`PlanPicker`] is what a Services source (Planning Center, Demo) offers the routes: the list of
-//! plans from today on and the pin itself. Loading a plan never happens here: the routes publish
+//! plans (the past 20 days and from today on) and the pin itself. Loading a plan never happens here: the routes publish
 //! `ServicePlanSelectionRequested` and the source loads as it always does.
 
 use async_trait::async_trait;
@@ -20,7 +20,10 @@ pub const SOURCE_PLANNING_CENTER: &str = "planning_center";
 pub const SOURCE_DEMO: &str = "demo";
 /// How far ahead the picker lists plans.
 pub const PICKER_DAYS: i64 = 180;
-/// The most plans the picker lists.
+/// How many days back the picker lists plans (to review a service that has gone by).
+pub const PICKER_PAST_DAYS: i64 = 20;
+/// The most plans from today on the picker lists. The plans of the past days come on top of this,
+/// so the upcoming ones are never pushed out.
 pub const PICKER_MAX_PLANS: usize = 60;
 /// What a plan list is kept for before Planning Center is asked again.
 pub const PICKER_CACHE_SECONDS: u64 = 60;
@@ -47,6 +50,10 @@ pub struct ServicePin {
     pub service_type_id: Option<String>,
     #[serde(default)]
     pub title: Option<String>,
+    /// Set when the pin is a service that had already gone by (a review): the pin holds through
+    /// this date (the day it was picked) and ends at the next midnight. Older files do not have it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_until: Option<NaiveDate>,
 }
 
 impl ServicePin {
@@ -64,13 +71,25 @@ impl ServicePin {
             date,
             service_type_id,
             title,
+            held_until: None,
         }
     }
 
-    /// A pin holds through its whole date in the configured time zone (`today` is that zone's
-    /// date) and ends when the date has passed.
+    /// A pin of a service dated before `today` (a review) is held through `today` and ends at the
+    /// next midnight; any other pin is returned as it was.
+    pub fn held_for_review(mut self, today: NaiveDate) -> Self {
+        if self.date < today {
+            self.held_until = Some(today);
+        }
+        self
+    }
+
+    /// A pin holds through the later of its date and `held_until` in the configured time zone
+    /// (`today` is that zone's date) and ends when that day has passed.
     pub fn is_expired(&self, today: NaiveDate) -> bool {
-        self.date < today
+        self.held_until
+            .map_or(self.date, |held| held.max(self.date))
+            < today
     }
 }
 
@@ -282,8 +301,8 @@ pub struct UpcomingPlans {
 /// What a Services source offers the picker routes.
 #[async_trait]
 pub trait PlanPicker: Send + Sync {
-    /// Plans from today through `PICKER_DAYS` days, by date, at most `PICKER_MAX_PLANS`. `Err`
-    /// is a message for the operator; the loaded plan is never touched by a failed list.
+    /// Plans from `PICKER_PAST_DAYS` days ago through `PICKER_DAYS` days ahead, by date: at most
+    /// `PICKER_MAX_PLANS` from today on, and the past ones on top of them. `Err` is a message for the operator; the loaded plan is never touched by a failed list.
     async fn upcoming_plans(&self) -> Result<UpcomingPlans, String>;
     /// Today's date in the configured time zone.
     fn today(&self) -> NaiveDate;
@@ -318,6 +337,54 @@ mod tests {
         assert!(!p.is_expired(date(28)));
         assert!(!p.is_expired(date(29)));
         assert!(p.is_expired(date(30)));
+    }
+
+    #[test]
+    fn a_review_pin_of_a_past_plan_holds_through_the_day_it_was_picked() {
+        let review = ServicePin::new(SOURCE_PLANNING_CENTER, "plan-1", date(10), None, None)
+            .held_for_review(date(23));
+        assert_eq!(review.held_until, Some(date(23)));
+        assert!(!review.is_expired(date(23)));
+        assert!(
+            review.is_expired(date(24)),
+            "the next local midnight drops it"
+        );
+        // A pin of today or later is not a review and expires the day after its date.
+        let today = pin().held_for_review(date(23));
+        assert_eq!(today.held_until, None);
+        let same_day = ServicePin::new(SOURCE_PLANNING_CENTER, "p", date(23), None, None)
+            .held_for_review(date(23));
+        assert_eq!(same_day.held_until, None);
+        assert!(!same_day.is_expired(date(23)) && same_day.is_expired(date(24)));
+    }
+
+    #[test]
+    fn a_pin_file_from_before_review_pins_still_loads_and_expires_as_before() {
+        let dir = tempfile_dir("old-file");
+        let path = dir.join("service-pin.json");
+        std::fs::write(
+            &path,
+            r#"{"schema_version":1,"source":"planning_center","plan_id":"plan-9","date":"2026-11-29"}"#,
+        )
+        .unwrap();
+        let loaded = FileServicePinStore::new(&path).load().unwrap().unwrap();
+        assert_eq!(loaded.held_until, None);
+        assert!(!loaded.is_expired(date(29)));
+        assert!(loaded.is_expired(date(30)));
+        // A pin without the field is saved without it, so an older build reads it too.
+        FileServicePinStore::new(&path).save(&loaded).unwrap();
+        assert!(!std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("held_until"));
+    }
+
+    #[test]
+    fn a_review_pin_round_trips_through_the_file() {
+        let dir = tempfile_dir("review");
+        let store = FileServicePinStore::new(dir.join("service-pin.json"));
+        let review = pin().held_for_review(date(30));
+        store.save(&review).unwrap();
+        assert_eq!(store.load().unwrap(), Some(review));
     }
 
     #[test]

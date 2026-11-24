@@ -17,6 +17,12 @@ export const PLANS: UpcomingServicePlan[] = [
   plan("p-dec-13", "2026-12-13", "Family Sunday"),
 ];
 
+/** Services of the days gone by (the backend lists the past 20 days): the Sundays of Nov 8 and Nov 15. */
+export const PAST_PLANS: UpcomingServicePlan[] = [
+  plan("p-nov-08", "2026-11-08", "Past Sunday"),
+  plan("p-nov-15", "2026-11-15", "Last Sunday"),
+];
+
 export const list = (overrides: Partial<UpcomingServicePlans> = {}): UpcomingServicePlans => ({
   plans: PLANS,
   upcoming_id: "p-nov-22",

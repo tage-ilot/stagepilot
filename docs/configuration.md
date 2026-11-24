@@ -155,17 +155,23 @@ configured future window.
 ### Picking another service than the upcoming one
 
 The operator can load a service other than the upcoming one (Services section: arrows and a calendar).
-`GET /api/v1/planning-center/plans/upcoming` lists the plans from today through 180 days (at most 60, by
-date, for the configured service type or all of them; one Planning Center call per service type, kept for
-60 seconds). `POST /api/v1/planning-center/plans/pin` with `{"plan_id": "..."}` loads that plan through the
+`GET /api/v1/planning-center/plans/upcoming` lists the plans of the last 20 days (`PICKER_PAST_DAYS`, to
+review a service that has gone by) and from today through 180 days (at most 60 from today on, so a busy
+past never pushes an upcoming plan out; the past ones come on top; by date, for the configured service type
+or all of them; one Planning Center call per service type, kept for 60 seconds). `upcoming_id` is the
+upcoming service as before, never a past one. `POST /api/v1/planning-center/plans/pin` with `{"plan_id": "..."}` loads that plan through the
 same `ServicePlanSelectionRequested` event as every plan selection and keeps it; `DELETE` on the same path
 goes back to the upcoming service. Picking the upcoming plan is the same as going back. The pick is refused
-(409) for a plan that is not in the list, and while the countdown is running.
+(409) for a plan that is not in the list (a plan older than 20 days is not), and while the countdown is
+running. The calendar reaches the past days; the previous and next arrows step only among the services from
+today on (from a past service, next goes to the first service from today on).
 
 The pick is kept in `service-pin.json` beside `settings.json` (`STAGEPILOT_SERVICE_PIN_PATH` moves it); it is
 not a settings key, so older builds are unaffected. It is written atomically; a damaged file is logged once
 and ignored. It holds across reloads and restarts. It ends at the end of its date in the configured time zone
-(the next reload, or the clock check that runs every 30 seconds, loads the upcoming plan and the state says
+(a pick of a past service, a review, is held through the day it was picked and ends at the next midnight;
+`service-pin.json` then has one more optional key, `held_until`, the day it was picked, and a file without it
+reads as before; the next reload, or the clock check that runs every 30 seconds, loads the upcoming plan and the state says
 "Back to the upcoming service"), or when the plan is no longer in Planning Center ("The plan you picked is
 not in Planning Center any more; back to the upcoming service"). A failed Planning Center call never ends a
 pick. While a service is picked the application state carries `selection` (`pinned`, `plan_id`, `date`,
