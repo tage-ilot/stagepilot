@@ -1264,6 +1264,7 @@ async fn seed_glitchy_song(rt: &Runtime) -> stagepilot_core::config::SongLightin
                 fade_seconds: 0.5,
             },
         ],
+        patches: Vec::new(),
         source: OscCueSource::Captured,
         edited: false,
     };
