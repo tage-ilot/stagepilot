@@ -73,17 +73,17 @@ jobs:
           - name: macOS Apple Silicon
             runner: macos-15
             platform: darwin-aarch64
-            suffix: aarch64
+            suffix: macOS-silicon-aarch64
             command: build:mac
           - name: macOS Intel
             runner: macos-15-intel
             platform: darwin-x86_64
-            suffix: x64
+            suffix: macOS-intel-x64
             command: build:mac
           - name: Windows x64
             runner: windows-latest
             platform: windows-x86_64
-            suffix: x64
+            suffix: Windows-x64
             command: build
     runs-on: ${{ matrix.runner }}
     environment: stagepilot-control-plane
@@ -190,8 +190,8 @@ jobs:
           New-Item -ItemType Directory -Force release-assets | Out-Null
           $installer = Get-ChildItem desktop/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
           if (-not $installer) { throw "NSIS updater installer was not generated." }
-          Copy-Item $installer.FullName "release-assets/StagePilot_${version}_x64-setup.exe"
-          Copy-Item "$($installer.FullName).sig" "release-assets/StagePilot_${version}_x64-setup.exe.sig"
+          Copy-Item $installer.FullName "release-assets/StagePilot_${version}_Windows-x64-setup.exe"
+          Copy-Item "$($installer.FullName).sig" "release-assets/StagePilot_${version}_Windows-x64-setup.exe.sig"
       - uses: actions/upload-artifact@v4
         with:
           name: stagepilot-${{ matrix.platform }}
