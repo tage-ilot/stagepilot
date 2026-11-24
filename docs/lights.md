@@ -362,40 +362,81 @@ step starts from the last step's value, so the loop closes). Effects with a diff
 shape are separate effects. An effect list is optional: older cue maps have none and load
 unchanged.
 
+**Patches: a loop with small changes on top.** A chase that repeats MOSTLY (one cycle is
+brighter, a pulse is dropped once, a fixture joins late, a hit falls between two cycles, the
+level drifts) is still stored as one loop. What differs is a list of `patches` on the effect,
+one per stretch where one member's one property does something else:
+
+```json
+"patches": [{"fixture": "Z3", "property": "dimmer", "from_seconds": 140.2, "to_seconds": 142.1,
+             "steps": [{"at_seconds": 0.0, "value": [1.0], "fade_seconds": 0.25},
+                       {"at_seconds": 1.6, "value": [0.0], "fade_seconds": 0.3}]}]
+```
+
+From `from_seconds` to `to_seconds` (song time, inside the window) the patch plays that
+address and the loop is silent for it; its steps are ramps like a cycle's (`at_seconds` counts
+from `from_seconds`; a step ramps from the one before it, the first from the value the loop
+itself has at `from_seconds`, so a patch starts on the loop's own value and detection ends it
+on the loop's value too: no gap and no jump). Outside every patch the loop plays. The address
+stays "driven by an effect" through a patch (rows still do not apply there, an operator
+take-over, a seek into the middle of a patch and the first look work as for a loop), and the
+edges and instant steps of a patch are instants the replay never misses. Patches are
+optional: a file without them reads and writes unchanged, and an older build that does not
+know the key ignores it and plays the plain loop (the changes are lost from that build's
+replay, and from the file if that build saves the song). The timeline's loop band says
+`4.0 s loop x 16 fixtures (+12 changes)`, and the loop's row lists the changes under the
+loop like its steps. They are not edited by hand: removing a loop removes its patches.
+
 Detection (`lightkey_effects.rs`):
 
 1. Every numeric address is resampled to 50 ms and compared with itself `T` earlier for `T`
    from 1 to 30 s: a point matches when the two values are within twice the tolerance and
    the value moved by at least four tolerances during that period. The longest window where
-   90 % of the points match and which holds at least three cycles is the loop; the
-   fundamental period wins over its multiples. Up to three windows per address, so a loop
-   that stops and starts again is found twice. The period is refined to the millisecond.
+   60 % of the points match and which holds at least three cycles is the loop (a loop may
+   carry patches, so it need not repeat cleanly; among near-equal periods the one with the
+   most matching points wins, then its fundamental over its multiples). Up to three windows
+   per address, so a loop that stops and starts again is found twice. The period is refined
+   to the millisecond.
 2. Properties of one fixture with the same period are joined; fixtures with the same
    properties, a period within 2 % and overlapping windows are clustered, each fixture's
    phase offset found by sliding its series against the first one's and refined on the raw
    samples. The period is refined on the cluster as a whole (the value that lines up the
    cycles of all members best).
 3. The cycle is the per-phase median of all members and all cycles, fitted with ramps at
-   half the tolerance and closed into a loop.
-4. **Acceptance by reconstruction.** The effect is evaluated with the same evaluator the
+   half the tolerance and closed into a loop. Outlier cycles do not move it.
+4. **Patches** (`lightkey_patches.rs`). Per member and property the recording is compared
+   with what the loop plays, every 25 ms. Where they differ by more than twice the
+   tolerance for more than two frames the stretch becomes a patch: stretches closer than
+   eight frames are one, the patch runs from the last good frame before to the first good
+   frame after, and the recording over it is fitted with ramps at half the tolerance (the
+   first value is the loop's value there, and so is the last unless the patch ends the
+   effect's window). Neighbouring patches of one address are joined into one when the joined
+   patch has no more steps than the two (a fixture that is dark for a minute is one patch,
+   not one per cycle). A stretch where the loop plays nothing like the recording is a longer
+   patch, never a reason to give the loop up.
+5. **Acceptance by reconstruction.** The effect is evaluated with the same evaluator the
    replay uses and compared with the raw samples of every member at 25 ms. At least
-   98 % of the window must be within twice the tolerance for every member. If not, the
-   window is narrowed to its best stretch (the start and the end of a pattern are usually
-   not the loop) and tried again; members that still do not fit leave and are tried on
-   their own; the stretches cut off are tried again as windows of their own. An effect must
-   also be worth it: its cycle steps must be at most 60 % of the ramp segments the same
-   window needs as plain rows. A window that starts before the chase does (the effect is dark
-   or still for a while) starts at its first matching cycle instead: the lead-in before it
-   stays plain rows, and the members keep their phase.
-5. Whatever is not accepted stays plain ramps for that window, so the rest of the fit is
+   98 % of the window must be within twice the tolerance for every member (patches
+   included). Several windows of the loop are built with their patches (the whole one,
+   without a lead-in where the effect is dark or still before the chase starts, trimmed to
+   the best stretch where the loop alone holds) and the one that saves the most steps wins
+   (a patch step counts double against a plain ramp segment, so a lead-in stays rows); the
+   stretches cut off are tried again as windows of their own. A member whose patches cost
+   more than 60 % of the ramp segments it would need as plain rows, or that is still not
+   reproduced, leaves and is tried on its own. An effect must also be worth it: its cycle
+   steps plus its patch steps must be at most 60 % of the ramp segments the same window
+   needs as plain rows.
+6. Whatever is not accepted stays plain ramps for that window, so the rest of the fit is
    exact (see below).
 
 False-positive guards: a flat stretch never matches; a slow monotone fade does not match
 itself one period earlier (it either moved too little to count as moving or too far to be
 within tolerance), so it is never an effect; a window under three cycles is never an
-effect; two overlapping loops on one address match no period at 90 % and stay ramps; an
+effect; two overlapping loops on one address match no period at 60 % and stay ramps; an
 effect whose period drifts is cut by the acceptance into windows that hold or falls back
-to ramps.
+to ramps; a recording that repeats too little for loop plus patches to cost at most 60 % of
+the ramps stays ramps (a level that drifts by more than a few tolerances needs a patch in
+every cycle and does not pay).
 
 **Reconstruction metric.** `cargo run --release -p stagepilot-lights --example smooth_report -- takes.json`
 rebuilds every address at 25 ms from the saved rows and effects (with
@@ -409,10 +450,19 @@ Acceptance: outside effects the largest error is at most the tolerance; overall 
 percentile is at most twice the tolerance. Over the two real takes (below) both hold; inside an
 effect up to 2 % of the moments can be further off (the report prints the maximum).
 
+**How a song fits, rows against loops.** `cargo run --release -p stagepilot-lights --example loop_report -- --saved cue_map.json`
+(or `--recording take.json`, a kept raw recording) fits a saved song's 25 ms replay, or a raw
+recording, the way the app does and prints rows, messages, loops (and their members), cycle
+steps and patch steps, then, per property class, the share of 25 ms samples where the fitted
+song's replay is further than one tolerance and than two from the original (against the
+recording cleaned of flashes, as the fit sees it, and as it was). It reads the file and writes
+nothing.
+
 **Caps.** `fade_seconds` 0 to 600 s (a captured ramp is at most 60 s). Per song: **50,000
 rows and 600,000 messages** (256 messages per row, a longer row is split), **1,000 effects**,
 256 members per effect, 4,096 cycle steps per effect and **250,000 cycle steps** per song, a
-period of 0.1 to 600 s, at most 8 numbers per step. (Before this change the caps were 1,000
+period of 0.1 to 600 s, at most 8 numbers per step; patches: 100,000 per effect, 4,096 steps
+per patch and **250,000 patch steps** per song. (Before this change the caps were 1,000
 rows, 15,000 messages, 200 effects and 20,000 steps; a busy 5-minute song on a 66-fixture rig
 is about 11,000 rows as recorded.) A song that would still pass a cap is never dropped, see
 the next section.

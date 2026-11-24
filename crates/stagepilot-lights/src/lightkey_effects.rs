@@ -6,8 +6,9 @@
 //! 1. Every numeric address is resampled to a 50 ms grid. For each candidate lag `T` of 1 to
 //!    30 s the grid is compared with itself `T` earlier; a point *matches* when the two values
 //!    are within twice the tolerance and the value moved by at least four tolerances during
-//!    that period (so a flat stretch never counts). The longest window in which at least 90 %
-//!    of the points match (and which holds at least three cycles) is the loop of that lag; the
+//!    that period (so a flat stretch never counts). The longest window in which at least 60 %
+//!    of the points match (and which holds at least three cycles) is the loop of that lag (a
+//!    loop may carry patches, see 4, so it need not repeat cleanly); the
 //!    smallest lag whose window is within 5 % of the best one wins (a loop of `T` also repeats
 //!    after `2T`). The period is then refined to the millisecond on the raw samples, comparing
 //!    many cycles apart so a tiny period error shows. Up to three separate windows are taken
@@ -18,12 +19,18 @@
 //!    sliding its grid against the seed's, then refined on the raw samples.
 //! 3. The cycle is the per-phase median of all members and all cycles, fitted with ramps
 //!    (the same fit as the rows, at half the tolerance, closed into a loop).
-//! 4. Acceptance: the effect is rebuilt with [`Timeline`], the same evaluator the replay
+//! 4. Patches: where a member does not do what the loop does (one cycle brighter, a pulse
+//!    dropped once, a fixture that joins late, a slow drift) the difference becomes a small
+//!    patch of ramps for that member and property (see [`crate::lightkey_patches`]); the loop
+//!    plays everywhere else. Several windows are tried (the whole one, without its lead-in,
+//!    trimmed to its best stretch) and the one that saves the most steps wins.
+//! 5. Acceptance: the effect is rebuilt with [`Timeline`], the same evaluator the replay
 //!    uses, and compared with the raw samples of every member over the window at 25 ms. A
-//!    member stays when at least 98 % of its points are within twice the tolerance; members
-//!    that fail leave and are tried as effects of their own. An effect must also be worth it:
-//!    its cycle steps must be at most 60 % of the ramp segments the same window needs as plain
-//!    rows.
+//!    member stays when at least 98 % of its points are within twice the tolerance and its
+//!    patches cost at most 60 % of the ramp segments it needs as plain rows; members that fail
+//!    leave and are tried as effects of their own. An effect must also be worth it: its cycle
+//!    steps plus its patch steps must be at most 60 % of the ramp segments the same window
+//!    needs as plain rows.
 //!
 //! False-positive guards: a slow monotone fade does not match itself `T` earlier (it moved too
 //! far in a period, or too little to count as moving); a flat stretch never matches; a window
@@ -32,6 +39,7 @@
 
 use crate::lightkey_curve::Timeline;
 use crate::lightkey_fixtures::{fixture_of, FixtureArg};
+use crate::lightkey_patches::{fit_patches, MemberSeries};
 use crate::lightkey_smooth::{polyline, property_class, tolerance_for, Series, MAX_RAMP_SECONDS};
 use stagepilot_core::config::{
     EffectMember, EffectStep, LightingEffect, OscCueSource, MAX_EFFECTS_PER_SONG,
@@ -49,6 +57,16 @@ const WINDOWS_PER_ADDRESS: usize = 3;
 const TEMPLATE_STEP: f64 = 0.025;
 const ACCEPT_SHARE: f64 = 0.98;
 const MAX_STEP_SHARE: f64 = 0.6;
+/// Scores of a grid point in the search for a repeating window: a point that matches counts
+/// `HIT`, one that does not `MISS`, and a window needs a sum of at least 0, so at least
+/// `-MISS / (HIT - MISS)` = 60 % of its points must match. (A loop with patches is accepted when
+/// it is cheaper than plain ramps, so the search need not insist on a clean repeat.)
+const HIT: i32 = 2;
+const MISS: i32 = -3;
+/// What a patch step weighs against a plain ramp segment when windows are compared.
+const PATCH_STEP_WEIGHT: i64 = 3;
+/// Share of the points of two members' grids that must match at the best phase offset.
+const OFFSET_SHARE: f64 = 0.9;
 const MIN_CYCLES: f64 = 3.0;
 /// Largest tolerance multiplier loop detection uses (see [`detect`]).
 pub const MAX_EFFECT_SCALE: f64 = 4.0;
@@ -67,6 +85,9 @@ pub struct EffectInfo {
     pub members: Vec<(String, f64)>,
     pub properties: Vec<String>,
     pub cycle_steps: usize,
+    /// Patches the loop carries and the steps in them.
+    pub patches: usize,
+    pub patch_steps: usize,
     /// Plain ramp segments the same windows would have needed.
     pub replaces_segments: usize,
     /// Worst member: share of the window within twice the tolerance.
@@ -151,7 +172,7 @@ fn grid_len(end: f64) -> usize {
 }
 
 /// The longest window (as grid indexes `first..=last` of matching points) for lag `k`, where
-/// at least 90 % match.
+/// the scores add up to at least 0 (at least 60 % of the points match, see [`HIT`]).
 fn longest_window(score: &[i32]) -> Option<(usize, usize)> {
     // prefix sums; interval i..j has sum P[j] - P[i]
     let mut prefix = Vec::with_capacity(score.len() + 1);
@@ -208,10 +229,10 @@ fn search_address(series: &Series, index: usize, end: f64, scale: f64) -> Addres
     let mut candidates = Vec::new();
     let mut best_share = 0.0f64;
     for _ in 0..WINDOWS_PER_ADDRESS {
-        // (k, total points of the window, first matching index, last matching index)
-        let mut found: Vec<(usize, usize, usize, usize)> = Vec::new();
+        // (k, points of the window, first matching index, last matching index, matches)
+        let mut found: Vec<(usize, usize, usize, usize, usize)> = Vec::new();
         for k in kmin..=kmax {
-            let mut score = vec![-9i32; n - k];
+            let mut score = vec![MISS; n - k];
             for i in k..n {
                 if masked[i] {
                     continue;
@@ -221,7 +242,7 @@ fn search_address(series: &Series, index: usize, end: f64, scale: f64) -> Addres
                     diff = diff.max((x[i * dim + c] - x[(i - k) * dim + c]).abs());
                 }
                 if diff <= 2.0 * tol && ext.range(i - k, i) >= 4.0 * move_tol {
-                    score[i - k] = 1;
+                    score[i - k] = HIT;
                 }
             }
             if let Some((a, b)) = longest_window(&score) {
@@ -230,18 +251,25 @@ fn search_address(series: &Series, index: usize, end: f64, scale: f64) -> Addres
                 let last = b + k - 1;
                 let span = last + 1 - first;
                 if span >= 2 * k {
-                    found.push((k, span + k, first, last));
+                    let matches = score[a..b].iter().filter(|s| **s == HIT).count();
+                    found.push((k, span + k, first, last, matches));
                 }
             }
         }
-        let Some(&(_, best_total, _, _)) = found.iter().max_by_key(|f| f.1) else {
+        // The best lag is the one whose window holds the most matching points: with the loose
+        // bar of a loop that carries patches, the lags next to the true one also reach a long
+        // window, but with far fewer matches.
+        let key = |f: &(usize, usize, usize, usize, usize)| f.4;
+        let Some(&(_, best_total, _, _, best_matches)) = found.iter().max_by_key(|f| key(f)) else {
             break;
         };
         best_share = best_share.max(best_total as f64 / n as f64);
         // the best window's lag, then its fundamental: a loop of T also repeats after 2T, 3T...
         // and the best window sits somewhere on a plateau of near-equal lags
-        let near = |f: &&(usize, usize, usize, usize)| f.1 as f64 >= 0.95 * best_total as f64;
-        let Some(&(mut k, _, mut first, mut last)) = found.iter().filter(near).max_by_key(|f| f.1)
+        let near =
+            |f: &&(usize, usize, usize, usize, usize)| f.4 as f64 >= 0.95 * best_matches as f64;
+        let Some(&(mut k, _, mut first, mut last, _)) =
+            found.iter().filter(near).max_by_key(|f| key(f))
         else {
             break;
         };
@@ -252,11 +280,11 @@ fn search_address(series: &Series, index: usize, end: f64, scale: f64) -> Addres
                     .iter()
                     .filter(near)
                     .filter(|f| f.0 >= kmin && f.0 + 2 >= target && f.0 <= target + 2 && f.0 < k)
-                    .max_by_key(|f| f.1)
+                    .max_by_key(|f| key(f))
                     .copied()
             });
             match divisor {
-                Some((k2, _, f2, l2)) => {
+                Some((k2, _, f2, l2, _)) => {
                     k = k2;
                     first = f2;
                     last = l2;
@@ -455,7 +483,7 @@ fn phase_offset(
             best = (cov, mean, lag);
         }
     }
-    if best.0 < 0.9 {
+    if best.0 < OFFSET_SHARE {
         return None;
     }
     // refine on the raw samples, +-50 ms around the coarse lag, 2 ms steps
@@ -579,6 +607,7 @@ fn build_effect(
     let steps = cycle.len();
     let n = cluster.loops.len();
     let effect = LightingEffect {
+        patches: Vec::new(),
         id: Uuid::new_v4(),
         label: format!(
             "Loop - {n} fixture{}, {period} s",
@@ -634,8 +663,8 @@ fn round4(x: f64) -> f64 {
 }
 
 /// How scattered the members' samples are around the cycle at this period: for each phase the
-/// median absolute deviation over all members and cycles, in tolerances, averaged. The right
-/// period lines the cycles up and gives the smallest value.
+/// mean absolute deviation from the median over all members and cycles, in tolerances, averaged.
+/// The right period lines the cycles up and gives the smallest value.
 fn dispersion(
     cluster: &Cluster,
     series: &[&Series],
@@ -675,9 +704,10 @@ fn dispersion(
             }
             samples.sort_by(f64::total_cmp);
             let median = samples[samples.len() / 2];
-            let mut dev: Vec<f64> = samples.iter().map(|v| (v - median).abs()).collect();
-            dev.sort_by(f64::total_cmp);
-            total += dev[dev.len() / 2] / tol;
+            // The mean (not the median) of the deviations: a pulse that is dark in most cycles
+            // at a wrong period has a median deviation of 0 and would look aligned.
+            let dev: f64 = samples.iter().map(|v| (v - median).abs()).sum();
+            total += dev / samples.len() as f64 / tol;
             count += 1;
         }
     }
@@ -809,38 +839,148 @@ fn lead_in_seconds(eval: &Eval, period: f64) -> f64 {
         .map_or(0.0, |a| a as f64 * CHECK_STEP)
 }
 
-/// Ramp segments the members need as plain rows inside `[start, end]`.
-fn plain_segments(
+/// Ramp segments each member needs as plain rows inside `[start, end]` (the order of the
+/// cluster's members).
+fn plain_segments_per_member(
     cluster: &Cluster,
     series: &[&Series],
     start: f64,
     end: f64,
     scale: f64,
-) -> usize {
-    let mut total = 0usize;
-    for (l, _) in &cluster.loops {
-        for (_, si) in &l.properties {
-            let s = series[*si];
-            let ts: Vec<f64> = (0..s.len())
-                .map(|i| s.ts[i])
-                .filter(|t| *t >= start && *t <= end)
-                .collect();
-            if ts.len() < 2 {
-                continue;
+) -> Vec<usize> {
+    cluster
+        .loops
+        .iter()
+        .map(|(l, _)| {
+            let mut total = 0usize;
+            for (_, si) in &l.properties {
+                let s = series[*si];
+                let ts: Vec<f64> = (0..s.len())
+                    .map(|i| s.ts[i])
+                    .filter(|t| *t >= start && *t <= end)
+                    .collect();
+                if ts.len() < 2 {
+                    continue;
+                }
+                let first = s.ts.partition_point(|t| *t < start);
+                let vs = &s.vs[first * s.dim..(first + ts.len()) * s.dim];
+                total += polyline(
+                    &ts,
+                    vs,
+                    s.dim,
+                    tolerance_for(&s.address, scale),
+                    MAX_RAMP_SECONDS,
+                )
+                .len();
             }
-            let first = s.ts.partition_point(|t| *t < start);
-            let vs = &s.vs[first * s.dim..(first + ts.len()) * s.dim];
-            total += polyline(
-                &ts,
-                vs,
-                s.dim,
-                tolerance_for(&s.address, scale),
-                MAX_RAMP_SECONDS,
-            )
-            .len();
-        }
+            total
+        })
+        .collect()
+}
+
+/// The longest stretch of an evaluation where at least 60 % of the moments are reproduced by the
+/// loop alone (the rest is left to patches), as `(start, end)` seconds, when it holds at least
+/// three cycles.
+fn trim_soft(eval: &Eval, start: f64, period: f64) -> Option<(f64, f64)> {
+    let score: Vec<i32> = eval
+        .good
+        .iter()
+        .map(|g| if *g >= GOOD_MOMENT { HIT } else { MISS })
+        .collect();
+    let (a, b) = longest_window(&score)?;
+    let (t0, t1) = (start + a as f64 * CHECK_STEP, start + b as f64 * CHECK_STEP);
+    (t1 - t0 >= MIN_CYCLES * period).then_some((t0, t1))
+}
+
+/// One window of a cluster built into an effect with its patches, and what it costs.
+struct Trial {
+    effect: LightingEffect,
+    window: (f64, f64),
+    cycle_steps: usize,
+    patch_steps: usize,
+    /// Per member: plain ramp segments, patch steps, share of the window reproduced.
+    member_plain: Vec<usize>,
+    member_patch_steps: Vec<usize>,
+    member_share: Vec<f64>,
+    /// The loop alone, without its patches (the lead-in and trims are judged on it).
+    loop_eval: Eval,
+}
+
+impl Trial {
+    /// Whether member `m` pays its way: it is reproduced and its patches cost at most 60 % of the
+    /// segments it needs as plain rows.
+    fn member_ok(&self, m: usize) -> bool {
+        self.member_share[m] >= ACCEPT_SHARE
+            && self.member_patch_steps[m] as f64 <= MAX_STEP_SHARE * self.member_plain[m] as f64
     }
-    total
+
+    /// Steps saved against plain rows by the members that pay their way, less the cycle, with a
+    /// patch step counted as [`PATCH_STEP_WEIGHT`] steps: when two windows save about the same,
+    /// the one that leaves a stretch to rows (which can be edited) wins over the one that
+    /// patches it (a dark lead-in is rows, not a patch for every member).
+    fn savings(&self) -> i64 {
+        let kept: i64 = (0..self.member_plain.len())
+            .filter(|m| self.member_ok(*m))
+            .map(|m| {
+                self.member_plain[m] as i64 - PATCH_STEP_WEIGHT * self.member_patch_steps[m] as i64
+            })
+            .sum();
+        kept - self.cycle_steps as i64
+    }
+}
+
+/// Build the cluster's loop over `[start, end]`, find its patches, and judge it. `None` when the
+/// cycle cannot be built or the patches would not fit the caps.
+fn trial(
+    cluster: &Cluster,
+    series: &[&Series],
+    start: f64,
+    end: f64,
+    period: f64,
+    scale: f64,
+) -> Option<Trial> {
+    let (effect, cycle_steps) = build_effect(cluster, series, start, end, period, scale)?;
+    let loop_eval = evaluate(&effect, cluster, series, scale);
+    let members: MemberSeries = cluster
+        .loops
+        .iter()
+        .map(|(l, _)| {
+            (
+                l.fixture.as_str(),
+                l.properties
+                    .iter()
+                    .map(|(p, si)| (p.as_str(), series[*si]))
+                    .collect(),
+            )
+        })
+        .collect();
+    let fit = fit_patches(&effect, &members, scale);
+    if fit.over_cap {
+        return None;
+    }
+    let mut effect = effect;
+    let patch_steps = fit.steps();
+    let member_patch_steps = fit.member_steps.clone();
+    effect.patches = fit.patches;
+    let (member_share, loop_eval) = if effect.patches.is_empty() {
+        (loop_eval.member_share.clone(), loop_eval)
+    } else {
+        (
+            evaluate(&effect, cluster, series, scale).member_share,
+            loop_eval,
+        )
+    };
+    let member_plain = plain_segments_per_member(cluster, series, start, end, scale);
+    Some(Trial {
+        effect,
+        window: (start, end),
+        cycle_steps,
+        patch_steps,
+        member_plain,
+        member_patch_steps,
+        member_share,
+        loop_eval,
+    })
 }
 
 // ------------------------------------------------------------------------------------- driver
@@ -970,42 +1110,85 @@ pub fn detect(series: &[&Series], end: f64, scale: f64) -> Detected {
                 loops: members.iter().map(|&(j, o)| (&loops[j], o)).collect(),
             };
             period = refine_cluster_period(&cluster, series, start, end_t, period, scale);
-            let Some((effect, steps)) = build_effect(&cluster, series, start, end_t, period, scale)
-            else {
-                reject(&mut out, &cluster, series, "the cycle could not be built (a member has no samples in the window, or the cycle is too long)");
+            let Some(whole) = trial(&cluster, series, start, end_t, period, scale) else {
+                reject(&mut out, &cluster, series, "the cycle could not be built (a member has no samples in the window, or the cycle is too long), or its patches are too many");
                 break;
             };
-            let eval = evaluate(&effect, &cluster, series, scale);
-            let failing: Vec<usize> = eval
-                .member_share
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| **s < ACCEPT_SHARE)
-                .map(|(i, _)| i)
-                .collect();
-            if failing.is_empty() {
-                // the loop starts at its first matching cycle; the lead-in stays plain rows
-                // (members keep their phase: the window start and their offsets move together)
-                let lead = lead_in_seconds(&eval, period);
-                if lead > 0.25 && end_t - (start + lead) >= MIN_CYCLES * period {
-                    start += lead;
-                    for m in members.iter_mut() {
-                        m.1 = (m.1 - lead).rem_euclid(period);
-                    }
+            // Other windows of the same loop: without the dark or still lead-in before the
+            // first matching cycle, trimmed to the best stretch where the loop alone holds
+            // (strictly, then leaving more to patches). The one that saves the most steps wins.
+            let mut windows: Vec<(f64, f64)> = Vec::new();
+            let lead = lead_in_seconds(&whole.loop_eval, period);
+            if lead > 0.25 && end_t - (start + lead) >= MIN_CYCLES * period {
+                windows.push((start + lead, end_t));
+            }
+            for found in [
+                trim(&whole.loop_eval, start, period),
+                trim_soft(&whole.loop_eval, start, period),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if found.0 - start > 0.25 || end_t - found.1 > 0.25 {
+                    windows.push(found);
+                }
+            }
+            windows.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6);
+            let mut best = whole;
+            for (a, b) in windows {
+                if (a - best.window.0).abs() < 1e-6 && (b - best.window.1).abs() < 1e-6 {
                     continue;
                 }
-                let plain = plain_segments(&cluster, series, start, end_t, scale);
-                if steps as f64 > MAX_STEP_SHARE * plain as f64 {
+                if let Some(t) = trial(&cluster, series, a, b, period, scale) {
+                    if t.savings() > best.savings() {
+                        best = t;
+                    }
+                }
+            }
+            // A patch that starts at the window's start or ends at its end is a stretch the loop
+            // does not play at all (the chase has not begun, or is over): shaved off, it is rows,
+            // which can be edited. Tried, and kept when it saves at least as much.
+            let (mut shaved_start, mut shaved_end) = best.window;
+            for p in &best.effect.patches {
+                if p.from_seconds <= best.window.0 + 1e-6 {
+                    shaved_start = shaved_start.max(p.to_seconds);
+                }
+                if p.to_seconds >= best.window.1 - 1e-6 {
+                    shaved_end = shaved_end.min(p.from_seconds);
+                }
+            }
+            if (shaved_start, shaved_end) != best.window
+                && shaved_end - shaved_start >= MIN_CYCLES * period
+            {
+                if let Some(t) = trial(&cluster, series, shaved_start, shaved_end, period, scale) {
+                    if t.savings() >= best.savings() {
+                        best = t;
+                    }
+                }
+            }
+            if best.window != (start, end_t) {
+                // (the windows left outside are tried again once this effect is settled)
+                start = best.window.0;
+                end_t = best.window.1;
+                continue;
+            }
+            let failing: Vec<usize> = (0..members.len()).filter(|m| !best.member_ok(*m)).collect();
+            if failing.is_empty() {
+                let plain: usize = best.member_plain.iter().sum();
+                let steps = best.cycle_steps;
+                let cost = steps + best.patch_steps;
+                let effect = best.effect;
+                if cost as f64 > MAX_STEP_SHARE * plain as f64 {
                     reject(
                         &mut out,
                         &cluster,
                         series,
-                        &format!("a loop of {:.2} s fits, but its cycle needs {steps} steps against {plain} plain ramp segments (not worth it)", period),
+                        &format!("a loop of {:.2} s fits, but its cycle and patches need {cost} steps ({steps} + {}) against {plain} plain ramp segments (not worth it)", period, best.patch_steps),
                     );
                 } else if out.effects.len() >= MAX_EFFECTS_PER_SONG {
                     reject(&mut out, &cluster, series, "too many effects in the song");
                 } else {
-                    let worst = eval.member_share.iter().cloned().fold(1.0, f64::min);
+                    let worst = best.member_share.iter().cloned().fold(1.0, f64::min);
                     let mut properties: Vec<String> =
                         seed.properties.iter().map(|(p, _)| p.clone()).collect();
                     properties.sort();
@@ -1021,6 +1204,8 @@ pub fn detect(series: &[&Series], end: f64, scale: f64) -> Detected {
                             .collect(),
                         properties,
                         cycle_steps: steps,
+                        patches: effect.patches.len(),
+                        patch_steps: best.patch_steps,
                         replaces_segments: plain,
                         worst_share: worst,
                     });
@@ -1062,24 +1247,15 @@ pub fn detect(series: &[&Series], end: f64, scale: f64) -> Detected {
                 }
                 break;
             }
-            // not good enough: first narrow the window to its best stretch
-            if let Some((a, b)) = trim(&eval, start, period) {
-                if a - start > 0.25 || end_t - b > 0.25 {
-                    // (the windows left outside are tried again once this effect is settled)
-                    start = a;
-                    end_t = b;
-                    continue;
-                }
-            }
-            // the window cannot be narrowed further: failing members leave, to try alone
+            // members that are not reproduced, or whose patches cost too much, leave, to try alone
             if failing.len() == members.len() {
-                let worst = eval.member_share.iter().cloned().fold(1.0, f64::min);
+                let worst = best.member_share.iter().cloned().fold(1.0, f64::min);
                 reject(
                     &mut out,
                     &cluster,
                     series,
                     &format!(
-                        "a loop of {:.2} s was found but only {:.0} % of its best stretch is within 2x tolerance, 95 % needed: plain ramps",
+                        "a loop of {:.2} s was found but its members need too many patches or only {:.0} % of the best stretch is within 2x tolerance, 98 % needed: plain ramps",
                         period,
                         worst * 100.0
                     ),

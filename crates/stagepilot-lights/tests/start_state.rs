@@ -507,6 +507,7 @@ fn the_starting_look_counts_toward_the_caps_and_the_pass_still_ends_saved() {
         messages: 200,
         effects: 10,
         cycle_steps: 100,
+        patch_steps: 100,
     };
     let fitted = fit_within_caps(&pass.baseline, &pass.changes, 60.0, &caps);
     let rows = smooth_rows(&fitted.capture.rows);

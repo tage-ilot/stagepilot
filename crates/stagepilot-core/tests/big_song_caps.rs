@@ -55,6 +55,7 @@ fn song_at_a_share_of_the_caps(divisor: usize) -> SongLightingCueMap {
     );
     let effects: Vec<LightingEffect> = (0..MAX_EFFECTS_PER_SONG / divisor)
         .map(|e| LightingEffect {
+            patches: Vec::new(),
             id: Uuid::new_v4(),
             label: format!("Loop {e}"),
             start_seconds: (e % 100) as f64,

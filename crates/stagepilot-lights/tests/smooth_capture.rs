@@ -369,7 +369,26 @@ fn an_interrupted_effect_is_found_in_both_halves() {
         triangle(t, 5.0, -40.0, 40.0)
     }));
     let capture = run(&changes, 140.0, true);
-    assert!(capture.effects.len() >= 2, "{:?}", capture.effect_infos);
+    // Both halves are loops: two loops, or ONE loop with a patch that plays the pause (the
+    // cheaper of the two, since the loop carries small changes).
+    let covered = |from: f64, to: f64| {
+        capture
+            .effects
+            .iter()
+            .any(|e| e.start_seconds <= from + 5.0 && e.end_seconds >= to - 5.0)
+    };
+    assert!(
+        capture.effects.len() >= 2
+            || (covered(0.0, 140.0) && !capture.effects[0].patches.is_empty()),
+        "{:?}",
+        capture.effect_infos
+    );
+    let steps: usize = capture
+        .effects
+        .iter()
+        .map(|e| e.cycle.len() + e.patches.iter().map(|p| p.steps.len()).sum::<usize>())
+        .sum();
+    assert!(steps <= 12, "{steps} steps");
     let r = report(&changes, 140.0, &capture);
     assert!(
         max_outside(&r) <= 1.5 + 1e-9,
@@ -536,6 +555,7 @@ fn options_step_even_with_a_fade_and_colours_ramp_per_channel() {
 fn loop_effect(period: f64, start: f64, end: f64, members: &[(&str, f64)]) -> LightingEffect {
     // 0 -> 1 over the first half, 1 -> 0 over the second
     LightingEffect {
+        patches: Vec::new(),
         id: Uuid::new_v4(),
         label: "loop".into(),
         start_seconds: start,

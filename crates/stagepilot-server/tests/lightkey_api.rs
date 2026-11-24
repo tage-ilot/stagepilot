@@ -516,6 +516,7 @@ async fn row_saves_keep_effects_and_only_a_remove_list_drops_one() {
     use stagepilot_core::config::{EffectMember, EffectStep, LightingEffect, OscCueSource};
     let (router, rt) = app(osc_lights()).await;
     let effect = |label: &str| LightingEffect {
+        patches: Vec::new(),
         id: uuid::Uuid::new_v4(),
         label: label.into(),
         start_seconds: 10.0,

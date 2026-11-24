@@ -70,6 +70,25 @@ describe("loops on the timeline", () => {
     expect(screen.getByRole("button", { name: "Effect loop" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("says how many changes a loop carries on its band, and lists them under the loop", async () => {
+    const patch = (fixture: string, from: number) => ({ fixture, property: "dimmer", from_seconds: from, to_seconds: from + 1, steps: [{ at_seconds: 0, value: [1], fade_seconds: 0.2 }, { at_seconds: 0.6, value: [0.2] }] });
+    mount(rows(), [{ ...effect(), patches: [patch("P1", 70), patch("P3", 90.5), patch("P3", 130)] }]);
+    const band = screen.getByTestId("lighting-effect");
+    expect(within(band).getByTestId("lighting-effect-label")).toHaveTextContent("4.0 s loop x 16 fixtures (+3 changes)");
+    await userEvent.setup().click(band);
+    const popover = screen.getByTestId("lighting-effect-popover");
+    const listed = within(within(popover).getByTestId("effect-changes")).getAllByTestId("effect-change");
+    expect(listed).toHaveLength(3);
+    expect(listed[1]).toHaveTextContent("P3 dimmer, 01:30.5 to 01:31.5 (2 steps)");
+  });
+
+  it("a loop with no changes says nothing about them", async () => {
+    mount();
+    expect(within(screen.getByTestId("lighting-effect")).getByTestId("lighting-effect-label")).toHaveTextContent(/^4\.0 s loop x 16 fixtures$/);
+    await userEvent.setup().click(screen.getByTestId("lighting-effect"));
+    expect(screen.queryByTestId("effect-changes")).toBeNull();
+  });
+
   it("stacks overlapping loops on lanes, at most three", () => {
     const loops = [effect("a"), { ...effect("b"), start_seconds: 100 }, { ...effect("c"), start_seconds: 110 }, { ...effect("d"), start_seconds: 120 }];
     mount(rows(), loops);

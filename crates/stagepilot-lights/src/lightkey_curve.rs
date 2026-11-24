@@ -27,6 +27,14 @@
 //! cycle at phase `(t - start - offset) mod period`. The first step of a property starts from
 //! the last step's value, so the loop closes. After the window the rows apply again.
 //!
+//! An effect may carry *patches* (small corrections of one member's one property over a short
+//! stretch, see `EffectPatch`). Inside a patch the patch plays that address and the loop is
+//! silent for it; the patch's first step ramps from the value the loop itself has where the patch
+//! starts, so a patch begins on the loop's value and (as detection builds it) ends on it too.
+//! Outside every patch the loop plays. A patch is part of the effect: the address stays "driven
+//! by an effect" through it, and its edges and its instant steps are instants a replay must not
+//! miss.
+//!
 //! # Playback at the seams
 //!
 //! [`Timeline::value_at`] is the song as captured. A replay uses [`Timeline::playback_at`]: the
@@ -37,7 +45,7 @@
 //! only approximate, so the two can differ at its edges).
 
 use crate::lightkey_fixtures::FixtureArg;
-use stagepilot_core::config::{LightingEffect, OscArgument, OscLightingCue};
+use stagepilot_core::config::{EffectPatch, LightingEffect, OscArgument, OscLightingCue};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -156,6 +164,50 @@ struct EffectStepN {
     value: Vec<f64>,
 }
 
+/// One patch of one address: absolute song times, steps relative to `from`.
+#[derive(Debug, Clone)]
+struct PatchN {
+    from: f64,
+    to: f64,
+    steps: Vec<EffectStepN>,
+    /// Absolute times of the steps without a fade, sorted.
+    instants: Vec<f64>,
+}
+
+impl PatchN {
+    fn new(patch: &EffectPatch) -> Option<Self> {
+        if patch.steps.is_empty()
+            || !patch.from_seconds.is_finite()
+            || !patch.to_seconds.is_finite()
+            || patch.to_seconds <= patch.from_seconds
+        {
+            return None;
+        }
+        let mut steps: Vec<EffectStepN> = patch
+            .steps
+            .iter()
+            .map(|s| EffectStepN {
+                at: s.at_seconds,
+                fade: s.fade_seconds,
+                value: s.value.clone(),
+            })
+            .collect();
+        steps.sort_by(|a, b| a.at.total_cmp(&b.at));
+        let mut instants: Vec<f64> = steps
+            .iter()
+            .filter(|s| s.fade <= 0.0)
+            .map(|s| patch.from_seconds + s.at)
+            .collect();
+        instants.sort_by(f64::total_cmp);
+        Some(Self {
+            from: patch.from_seconds,
+            to: patch.to_seconds,
+            steps,
+            instants,
+        })
+    }
+}
+
 /// A cycle shared by every member of an effect: property, steps, instants.
 type SharedCycle<'a> = (&'a str, Arc<Vec<EffectStepN>>, Arc<Vec<f64>>);
 
@@ -171,11 +223,59 @@ struct EffectCurve {
     steps: Arc<Vec<EffectStepN>>,
     /// The cycle times of the steps without a fade, sorted: the instants a replay must not miss.
     instants: Arc<Vec<f64>>,
+    /// The patches of this address, sorted by start (empty for an effect without any).
+    patches: Vec<PatchN>,
 }
 
+/// How many patches in a row a search for the next loop instant skips before it settles for
+/// waking early (a wake that finds nothing to send costs nothing).
+const MAX_PATCH_SKIPS: usize = 16;
+
 impl EffectCurve {
-    /// The next instant step (a cycle step without a fade) after `at`, inside the window.
+    /// The patch playing at `t`, if any.
+    fn patch_at(&self, t: f64) -> Option<&PatchN> {
+        let i = self.patches.partition_point(|p| p.from <= t);
+        i.checked_sub(1)
+            .map(|i| &self.patches[i])
+            .filter(|p| t < p.to)
+    }
+
+    /// The next instant of the effect after `at`, inside the window: an instant step of the
+    /// loop (not one a patch is silencing), or an edge or an instant step of a patch.
     fn next_step_after(&self, at: f64) -> Option<f64> {
+        let mut best: Option<f64> = None;
+        let mut cursor = at;
+        for _ in 0..MAX_PATCH_SKIPS {
+            let Some(t) = self.next_loop_instant_after(cursor) else {
+                break;
+            };
+            match self.patch_at(t) {
+                Some(p) => cursor = p.to - 1e-9,
+                None => {
+                    best = Some(t);
+                    break;
+                }
+            }
+            if cursor <= at {
+                break;
+            }
+        }
+        let first = self.patches.partition_point(|p| p.to <= at);
+        for p in self.patches.iter().skip(first).take(2) {
+            let edges = [p.from, p.to];
+            let i = p.instants.partition_point(|s| *s <= at);
+            for t in edges.into_iter().chain(p.instants.get(i).copied()) {
+                if t > at && t < self.end && best.is_none_or(|b| t < b) {
+                    best = Some(t);
+                }
+            }
+        }
+        best
+    }
+
+    /// The next instant step of the loop (a cycle step without a fade) after `at`, inside the
+    /// window, whatever the patches say.
+    fn next_loop_instant_after(&self, at: f64) -> Option<f64> {
         let origin = self.start + self.offset;
         let cycle = ((at - origin) / self.period).floor();
         let mut best: Option<f64> = None;
@@ -195,6 +295,39 @@ impl EffectCurve {
     }
 
     fn value(&self, t: f64) -> Vec<f64> {
+        match self.patch_at(t) {
+            Some(p) => self.patch_value(p, t),
+            None => self.loop_value(t),
+        }
+    }
+
+    /// What a patch plays at `t`: its first step ramps from the loop's own value where the patch
+    /// starts, and each next step from the step before it.
+    fn patch_value(&self, patch: &PatchN, t: f64) -> Vec<f64> {
+        let local = t - patch.from;
+        let idx = patch.steps.partition_point(|s| s.at <= local);
+        if idx == 0 {
+            return self.loop_value(patch.from);
+        }
+        let step = &patch.steps[idx - 1];
+        let from = if idx == 1 {
+            self.loop_value(patch.from)
+        } else {
+            patch.steps[idx - 2].value.clone()
+        };
+        if step.fade > 0.0 && local - step.at < step.fade && from.len() == step.value.len() {
+            let f = (local - step.at) / step.fade;
+            from.iter()
+                .zip(&step.value)
+                .map(|(a, b)| a + (b - a) * f)
+                .collect()
+        } else {
+            step.value.clone()
+        }
+    }
+
+    /// What the loop itself plays at `t`, patches aside.
+    fn loop_value(&self, t: f64) -> Vec<f64> {
         let phase = (t - self.start - self.offset).rem_euclid(self.period);
         let n = self.steps.len();
         let idx = self.steps.partition_point(|s| s.at <= phase);
@@ -294,16 +427,31 @@ impl Timeline {
                     (*property, Arc::new(steps.clone()), Arc::new(instants))
                 })
                 .collect();
-            for member in &effect.members {
-                for (property, steps, instants) in &shared {
-                    timeline
-                        .effects
+            let mut patches: BTreeMap<String, Vec<PatchN>> = BTreeMap::new();
+            for patch in &effect.patches {
+                if let Some(n) = PatchN::new(patch) {
+                    patches
                         .entry(format!(
                             "/fixture/{}/overrides/{}",
-                            member.fixture, property
+                            patch.fixture, patch.property
                         ))
                         .or_default()
+                        .push(n);
+                }
+            }
+            for list in patches.values_mut() {
+                list.sort_by(|a, b| a.from.total_cmp(&b.from));
+            }
+            for member in &effect.members {
+                for (property, steps, instants) in &shared {
+                    let address = format!("/fixture/{}/overrides/{}", member.fixture, property);
+                    let own = patches.get(&address).cloned().unwrap_or_default();
+                    timeline
+                        .effects
+                        .entry(address)
+                        .or_default()
                         .push(EffectCurve {
+                            patches: own,
                             start: effect.start_seconds,
                             end: effect.end_seconds,
                             period: effect.period_seconds,

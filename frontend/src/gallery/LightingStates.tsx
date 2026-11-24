@@ -1,6 +1,6 @@
 import { HOST_LABEL } from "../components/lightingHost";
 import { lightkeyDown, lightkeyOf } from "./fixtures";
-import { Lighting, LightingTimelineSample } from "./LightingSample";
+import { Lighting, LightingLoopChangesSample, LightingTimelineSample } from "./LightingSample";
 import { Scripted } from "./Scripted";
 import type { SampleState } from "./StateCard";
 
@@ -23,5 +23,6 @@ export const lightingStates: SampleState[] = [
   { id: "replay-off", label: "Replay is off", look: "The warning that saved lights will not play, with its button, stays in view.", render: () => <Lighting status={lightkeyOf({ replay: false })} /> },
   { id: "timeline-waveform", label: "Timeline: the song has a Playback waveform", look: "The song's waveform is the faint shape behind the markers, where the room loudness used to be. No waveform row under the arrangement bar, no loudness shape, no note chip on the song, no Clear loudness, no audio input.", render: () => <LightingTimelineSample kind="waveform" /> },
   { id: "timeline-loudness", label: "Timeline: the song has no waveform", look: "As before: the room loudness recorded with the microphone is the faint shape behind the markers (the song has a note chip, and Clear loudness and the audio input are in Record mode).", render: () => <LightingTimelineSample kind="loudness" /> },
+  { id: "timeline-loop-changes", label: "Timeline: a loop with changes on top", look: "Two striped loop bands under the cues: the first repeats cleanly (\"4.0 s loop x 16 fixtures\"), the second carries small changes and says so (\"4.0 s loop x 16 fixtures (+8 changes)\"). Under the timeline the second loop's row is open: its window and period, the properties and the fixtures with their offsets, then \"Changes on top of the loop (8)\" with one line per change (fixture and property, when it plays, how many steps).", render: () => <LightingLoopChangesSample /> },
   { id: "off", label: "Off", look: "Lighting is off: sACN: Off and DMX: \u2014 (both grey) and no Details button (nothing to set up yet).", render: () => <Lighting status={lightkeyDown({ link: "off", detail: "Lighting is off." })} /> },
 ];

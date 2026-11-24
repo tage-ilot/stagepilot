@@ -301,6 +301,22 @@ export interface EffectStep {
   fade_seconds?: number;
 }
 
+/** One ramp of a patch: from `at_seconds` after the patch starts the property reaches `value` over `fade_seconds`. */
+export interface EffectPatchStep {
+  at_seconds: number;
+  value: number[];
+  fade_seconds?: number;
+}
+
+/** A small correction of a loop: one member's one property plays `steps` instead of the loop from `from_seconds` to `to_seconds` (song time). */
+export interface EffectPatch {
+  fixture: string;
+  property: string;
+  from_seconds: number;
+  to_seconds: number;
+  steps: EffectPatchStep[];
+}
+
 /** A repeating pattern found in a recording, stored once. Never changed by editing rows; removed as a whole. */
 export interface LightingEffect {
   id: string;
@@ -310,6 +326,8 @@ export interface LightingEffect {
   period_seconds: number;
   members: EffectMember[];
   cycle: EffectStep[];
+  /** Small corrections of single stretches of the loop. Absent when the loop repeats cleanly. */
+  patches?: EffectPatch[];
   source?: OscCueSource;
   edited?: boolean;
 }
