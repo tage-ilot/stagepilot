@@ -248,7 +248,7 @@ test("manifest generator requires artifacts and signatures for every platform", 
     for (const file of [
       "StagePilot_1.2.0_aarch64.app.tar.gz",
       "StagePilot_1.2.0_x64.app.tar.gz",
-      "StagePilot_1.2.0_x64-setup.exe",
+      "StagePilot_1.2.0_Windows-x64-setup.exe",
     ]) {
       fs.writeFileSync(path.join(directory, file), "artifact");
       fs.writeFileSync(path.join(directory, `${file}.sig`), `signature-${file}`);
@@ -309,7 +309,7 @@ test("updater manifest tooling accepts a pre-release version and keeps it under 
     for (const file of [
       `StagePilot_${version}_aarch64.app.tar.gz`,
       `StagePilot_${version}_x64.app.tar.gz`,
-      `StagePilot_${version}_x64-setup.exe`,
+      `StagePilot_${version}_Windows-x64-setup.exe`,
     ]) {
       fs.writeFileSync(path.join(directory, file), "artifact");
       fs.writeFileSync(path.join(directory, `${file}.sig`), `signature-${file}`);
@@ -327,7 +327,7 @@ test("updater manifest tooling accepts a pre-release version and keeps it under 
     // ever resolves to the newest non-draft, non-pre-release release.
     const audit = (v) => execFileSync(process.execPath, [path.join(root, "scripts/audit_release.mjs"), "assets", directory, v], { stdio: "pipe" });
     fs.writeFileSync(path.join(directory, "release-notes.md"), "notes");
-    for (const name of [`StagePilot_${version}_aarch64.dmg`, `StagePilot_${version}_x64.dmg`]) fs.writeFileSync(path.join(directory, name), "dmg");
+    for (const name of [`StagePilot_${version}_macOS-silicon-aarch64.dmg`, `StagePilot_${version}_macOS-intel-x64.dmg`]) fs.writeFileSync(path.join(directory, name), "dmg");
     audit(version);
     assert.throws(() => audit("2.42.0-nightly.1"), /version is required/);
   } finally {

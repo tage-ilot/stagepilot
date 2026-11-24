@@ -758,6 +758,58 @@ describe('private-beta control plane', () => {
     expect(github).toHaveBeenCalledTimes(3);
   });
 
+  it('serves a release whose Windows installer is named after the system (2.45.0 on)', async () => {
+    const version = '1.1.103-beta.1';
+    const broker = 'https://stagepilot-beta-control-plane.stagepilot-illuminary-beta.workers.dev/v1/releases';
+    const manifest = JSON.stringify({
+      version,
+      pub_date: '2026-09-15T00:00:00Z',
+      platforms: {
+        'darwin-aarch64': { url: `${broker}/v${version}/StagePilot_${version}_aarch64.app.tar.gz`, signature: 'a' },
+        'darwin-x86_64': { url: `${broker}/v${version}/StagePilot_${version}_x64.app.tar.gz`, signature: 'b' },
+        'windows-x86_64': { url: `${broker}/v${version}/StagePilot_${version}_Windows-x64-setup.exe`, signature: 'c' },
+      },
+    });
+    const github = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url);
+      if (url.hostname === 'api.github.com') {
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer github-release-token-server-side-only');
+      }
+      if (url.pathname.endsWith('/releases/tags/v1.1.103-beta.1')) {
+        return new Response(JSON.stringify({
+          tag_name: 'v1.1.103-beta.1',
+          draft: false,
+          assets: [{
+            name: 'latest.json',
+            url: 'https://api.github.com/repos/tage-ilot/stagepilot-beta/releases/assets/101',
+            size: manifest.length,
+            state: 'uploaded',
+            content_type: 'application/json',
+          }],
+        }));
+      }
+      if (url.pathname.endsWith('/releases/assets/101')) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://release-assets.githubusercontent.com/private-signed-download' },
+        });
+      }
+      if (url.hostname === 'release-assets.githubusercontent.com') {
+        expect(new Headers(init?.headers).get('authorization')).toBeNull();
+        return new Response(manifest, { headers: { 'content-length': String(manifest.length) } });
+      }
+      throw new Error(`unexpected GitHub request: ${url.pathname}`);
+    });
+    vi.stubGlobal('fetch', github);
+
+    const response = await registry.fetch(request('/v1/releases/latest.json'));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('public, max-age=60, s-maxage=300');
+    expect(await response.text()).toBe(manifest);
+    expect(github).toHaveBeenCalledTimes(3);
+  });
+
   it('rejects a manifest that points beta clients outside the broker', async () => {
     const manifest = JSON.stringify({
       version: '1.1.103-beta.1',

@@ -1260,12 +1260,16 @@ export class Registry {
 
   private allowedReleaseAsset(version: string, filename: string): boolean {
     if (!this.releaseVersions().includes(version)) return false;
+    // Releases from 2.45.0 on name the installers after the system (the update packages keep their names); earlier ones keep the old names.
     return new Set([
       `StagePilot_${version}_aarch64.dmg`,
       `StagePilot_${version}_x64.dmg`,
       `StagePilot_${version}_aarch64.app.tar.gz`,
       `StagePilot_${version}_x64.app.tar.gz`,
       `StagePilot_${version}_x64-setup.exe`,
+      `StagePilot_${version}_macOS-silicon-aarch64.dmg`,
+      `StagePilot_${version}_macOS-intel-x64.dmg`,
+      `StagePilot_${version}_Windows-x64-setup.exe`,
     ]).has(filename) || (version === this.latestReleaseVersion() && filename === 'latest.json');
   }
 
@@ -1369,16 +1373,16 @@ export class Registry {
       };
       if (manifest.version !== version || typeof manifest.pub_date !== 'string'
         || !Number.isFinite(Date.parse(manifest.pub_date)) || !manifest.platforms) return false;
-      const filenames: Record<string, string> = {
-        'darwin-aarch64': `StagePilot_${version}_aarch64.app.tar.gz`,
-        'darwin-x86_64': `StagePilot_${version}_x64.app.tar.gz`,
-        'windows-x86_64': `StagePilot_${version}_x64-setup.exe`,
+      const filenames: Record<string, string[]> = {
+        'darwin-aarch64': [`StagePilot_${version}_aarch64.app.tar.gz`],
+        'darwin-x86_64': [`StagePilot_${version}_x64.app.tar.gz`],
+        'windows-x86_64': [`StagePilot_${version}_Windows-x64-setup.exe`, `StagePilot_${version}_x64-setup.exe`],
       };
       if (Object.keys(manifest.platforms).sort().join(',') !== Object.keys(filenames).sort().join(',')) return false;
-      return Object.entries(filenames).every(([platform, filename]) => {
+      return Object.entries(filenames).every(([platform, names]) => {
         const entry = manifest.platforms?.[platform];
-        return entry?.url === `${BETA_RELEASE_ORIGIN}/v1/releases/v${version}/${filename}`
-          && typeof entry.signature === 'string' && entry.signature.length > 0 && entry.signature.length <= 4096;
+        return names.some((filename) => entry?.url === `${BETA_RELEASE_ORIGIN}/v1/releases/v${version}/${filename}`)
+          && typeof entry?.signature === 'string' && entry.signature.length > 0 && entry.signature.length <= 4096;
       });
     } catch {
       return false;

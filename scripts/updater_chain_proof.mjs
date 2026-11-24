@@ -33,7 +33,7 @@ const stage = (version) => {
   for (const file of [
     `StagePilot_${version}_aarch64.app.tar.gz`,
     `StagePilot_${version}_x64.app.tar.gz`,
-    `StagePilot_${version}_x64-setup.exe`,
+    `StagePilot_${version}_Windows-x64-setup.exe`,
   ]) {
     // Placeholder bytes. These are not, and must never be presented as, real
     // signed platform artifacts.
@@ -65,7 +65,7 @@ try {
   for (const [platform, filename] of Object.entries({
     "darwin-aarch64": `StagePilot_${version}_aarch64.app.tar.gz`,
     "darwin-x86_64": `StagePilot_${version}_x64.app.tar.gz`,
-    "windows-x86_64": `StagePilot_${version}_x64-setup.exe`,
+    "windows-x86_64": `StagePilot_${version}_Windows-x64-setup.exe`,
   })) {
     const sidecar = fs.readFileSync(path.join(release, `${filename}.sig`), "utf8").trim();
     assert.equal(manifest.platforms[platform].signature, sidecar);
@@ -76,7 +76,7 @@ try {
   // 3. A missing signature must stop manifest generation before publication.
   const unsigned = stage(version);
   directories.push(unsigned);
-  fs.rmSync(path.join(unsigned, `StagePilot_${version}_x64-setup.exe.sig`));
+  fs.rmSync(path.join(unsigned, `StagePilot_${version}_Windows-x64-setup.exe.sig`));
   rejects(() => generate(unsigned, `v${version}`, BASE), /Missing updater signature/);
   proven.push("missing_signature_rejected");
 

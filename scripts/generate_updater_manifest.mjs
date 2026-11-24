@@ -12,7 +12,7 @@ const normalizedBase = base.href.replace(/\/$/, "");
 const platforms = {
   "darwin-aarch64": `StagePilot_${version}_aarch64.app.tar.gz`,
   "darwin-x86_64": `StagePilot_${version}_x64.app.tar.gz`,
-  "windows-x86_64": `StagePilot_${version}_x64-setup.exe`,
+  "windows-x86_64": `StagePilot_${version}_Windows-x64-setup.exe`,
 };
 const manifestPlatforms = {};
 for (const [platform, filename] of Object.entries(platforms)) {

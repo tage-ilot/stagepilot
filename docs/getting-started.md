@@ -16,7 +16,7 @@ StagePilot runs on Windows and macOS.
 
 ## Install
 
-Get the installer for your computer from the **[latest StagePilot release](https://github.com/tage-ilot/stagepilot/releases/latest)**: Windows x64 (`.exe`), Intel Mac (`x64.dmg`), or Apple Silicon Mac (`aarch64.dmg`). Only install downloads from the official StagePilot GitHub release page. StagePilot updates itself from there; an **Update** button appears beside the logo when a new release is ready.
+Get the installer for your computer from the **[latest StagePilot release](https://github.com/tage-ilot/stagepilot/releases/latest)**: Windows (`Windows-x64-setup.exe`), Intel Mac (`macOS-intel-x64.dmg`), or Apple Silicon Mac (`macOS-silicon-aarch64.dmg`). Only install downloads from the official StagePilot GitHub release page. StagePilot updates itself from there; an **Update** button appears beside the logo when a new release is ready.
 
 On **Windows**, run the installer and open StagePilot from the Start menu.
 

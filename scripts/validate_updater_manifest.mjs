@@ -11,7 +11,7 @@ if (base.protocol !== "https:" || base.search || base.hash) throw new Error("Dow
 const filenames = {
   "darwin-aarch64": `StagePilot_${manifest.version}_aarch64.app.tar.gz`,
   "darwin-x86_64": `StagePilot_${manifest.version}_x64.app.tar.gz`,
-  "windows-x86_64": `StagePilot_${manifest.version}_x64-setup.exe`,
+  "windows-x86_64": `StagePilot_${manifest.version}_Windows-x64-setup.exe`,
 };
 if (Object.keys(manifest.platforms ?? {}).sort().join(",") !== Object.keys(filenames).sort().join(",")) {
   throw new Error("Manifest platform inventory is invalid.");

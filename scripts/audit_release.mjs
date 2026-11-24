@@ -27,14 +27,14 @@ function auditAssets(directory, version) {
     throw new Error("A stable X.Y.Z or pre-release X.Y.Z-(alpha|beta|rc).N version is required.");
   }
   const required = [
-    `StagePilot_${version}_aarch64.dmg`,
-    `StagePilot_${version}_x64.dmg`,
+    `StagePilot_${version}_macOS-silicon-aarch64.dmg`,
+    `StagePilot_${version}_macOS-intel-x64.dmg`,
     `StagePilot_${version}_aarch64.app.tar.gz`,
     `StagePilot_${version}_aarch64.app.tar.gz.sig`,
     `StagePilot_${version}_x64.app.tar.gz`,
     `StagePilot_${version}_x64.app.tar.gz.sig`,
-    `StagePilot_${version}_x64-setup.exe`,
-    `StagePilot_${version}_x64-setup.exe.sig`,
+    `StagePilot_${version}_Windows-x64-setup.exe`,
+    `StagePilot_${version}_Windows-x64-setup.exe.sig`,
     "latest.json",
     "release-notes.md",
   ];

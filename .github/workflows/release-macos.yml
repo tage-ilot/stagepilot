@@ -73,17 +73,19 @@ jobs:
           - name: macOS Apple Silicon
             runner: macos-15
             platform: darwin-aarch64
-            suffix: aarch64
+            suffix: macOS-silicon-aarch64
+            archive: aarch64
             command: build:mac
           - name: macOS Intel
             runner: macos-15-intel
             platform: darwin-x86_64
-            suffix: x64
+            suffix: macOS-intel-x64
+            archive: x64
             command: build:mac
           - name: Windows x64
             runner: windows-latest
             platform: windows-x86_64
-            suffix: x64
+            suffix: Windows-x64
             command: build
     runs-on: ${{ matrix.runner }}
     environment: stagepilot-control-plane
@@ -180,8 +182,8 @@ jobs:
           VERSION="${RELEASE_TAG#v}"
           mkdir -p release-assets
           cp desktop/src-tauri/target/release/bundle/dmg/*.dmg "release-assets/StagePilot_${VERSION}_${{ matrix.suffix }}.dmg"
-          cp desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz "release-assets/StagePilot_${VERSION}_${{ matrix.suffix }}.app.tar.gz"
-          cp desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz.sig "release-assets/StagePilot_${VERSION}_${{ matrix.suffix }}.app.tar.gz.sig"
+          cp desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz "release-assets/StagePilot_${VERSION}_${{ matrix.archive }}.app.tar.gz"
+          cp desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz.sig "release-assets/StagePilot_${VERSION}_${{ matrix.archive }}.app.tar.gz.sig"
       - name: Collect Windows release assets
         if: runner.os == 'Windows'
         shell: pwsh
@@ -190,8 +192,8 @@ jobs:
           New-Item -ItemType Directory -Force release-assets | Out-Null
           $installer = Get-ChildItem desktop/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
           if (-not $installer) { throw "NSIS updater installer was not generated." }
-          Copy-Item $installer.FullName "release-assets/StagePilot_${version}_x64-setup.exe"
-          Copy-Item "$($installer.FullName).sig" "release-assets/StagePilot_${version}_x64-setup.exe.sig"
+          Copy-Item $installer.FullName "release-assets/StagePilot_${version}_Windows-x64-setup.exe"
+          Copy-Item "$($installer.FullName).sig" "release-assets/StagePilot_${version}_Windows-x64-setup.exe.sig"
       - uses: actions/upload-artifact@v4
         with:
           name: stagepilot-${{ matrix.platform }}
