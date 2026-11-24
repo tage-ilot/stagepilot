@@ -3,66 +3,32 @@
   StagePilot
 </h1>
 
-StagePilot brings the moving parts of a live production into one dependable dashboard. It loads service plans from Planning Center, follows MultiTracks Playback (over its network API or MIDI cues), keeps a ProPresenter countdown in sync, and sends scheduled MIDI or OSC cues to a lighting controller such as Lightkey.
+**Your production tech, working as one.** StagePilot connects Planning Center, MultiTracks Playback, ProPresenter and Lightkey. Press play in Playback, and the countdown, the screens and the lights follow the song.
 
-## Download
+<p align="center"><img src="docs/img/now-playing.png" width="720" alt="Now Playing: the current song, time remaining, position in the set and the next song"></p>
 
-Get the installer for your computer from the **[latest StagePilot release](https://github.com/tage-ilot/stagepilot/releases/latest)**: Windows x64 (`.exe`), Intel Mac (`x64.dmg`), or Apple Silicon Mac (`aarch64.dmg`). Only install downloads from the official StagePilot GitHub release page. StagePilot updates itself from there; an **Update** button appears beside the logo when a new release is ready.
+### The plan and the band
 
-On **Windows**, run the installer and open StagePilot from the Start menu.
+StagePilot loads this week's service from Planning Center and follows Playback, so everyone sees what's playing, how long is left and what's next. You can watch it on the computer or in any browser on your network.
 
-On **macOS**, open the DMG and drag StagePilot to Applications. The app is not Apple-notarized, so the first time, right-click StagePilot and select **Open** (or use **System Settings → Privacy & Security → Open Anyway**). See [macOS ad-hoc signing](docs/macos-adhoc-signing.md).
+<p align="center"><img src="docs/img/services.png" width="340" alt="Services card: connected, with the last plan sync time"></p>
 
-## Initial setup
+<img src="docs/img/playback.png" alt="Playback Live Link: connected, with the songs of the set">
 
-Everything is set up inside StagePilot.
+### The screens
 
-1. Open **Backend** and set the timezone, log level, and server port under Advanced.
-2. Open **Services**, choose **Sign in with Planning Center** (or **Manual API Connection** with a Personal Access Token), test the connection, and choose a service type. Treat the token like a password and keep it out of screenshots and issues.
-3. Open **Playback**. The default method is **Playback API**: pick your Playback computer (or enter its address) and connect. To use MIDI cues instead, choose **MIDI**; the cue setup is in the [configuration guide](docs/configuration.md).
-4. Open **Presentation**, enter ProPresenter's host and API port, select the song timer and optional Look, then test the connection.
-5. Open **Lighting** to choose MIDI or OSC, select the output, and add elapsed-time lighting cues.
+StagePilot keeps ProPresenter's countdown and Look in step. It also adds the setlist to your playlist with each song's arrangement and key.
 
-If Playback's song order differs from the service plan, use **Song arrangement** in the Playback panel to skip songs on either side. Nothing is reordered, and skips are saved with **Save configuration**.
+<img src="docs/img/presentation.png" alt="ProPresenter Live Link: connected, Timer and Look, Presenter Link with 4 songs ready to import">
 
-Settings persist between launches, and StagePilot reconnects your integrations on startup. Planning Center credentials are kept in the operating system credential store.
+### The lights
 
-The title-bar **X** hides the dashboard while StagePilot keeps running. Restore it from the system-tray icon (Windows) or Dock/menu-bar icon (macOS), and use **Quit StagePilot** there to stop it completely.
+Record your operator's Lightkey run once, and StagePilot replays it with that song every week. If someone touches a fixture, StagePilot hands it back. Other lighting controllers get timed MIDI or OSC cues.
 
-## Browser dashboard
+<img src="docs/img/lighting.png" alt="sACN DMX Live Link: connected, 66 fixtures, songs captured for replay">
 
-While StagePilot is running, the dashboard is also at [http://127.0.0.1:8765](http://127.0.0.1:8765) (or the port saved in **Backend**). To open it from another computer on a trusted network, set **Connection Access** to **Local network** in **Backend**, then replace the initial PIN (`1234`) under **Access PIN**. Restart StagePilot if it asks, then open `http://<this computer's IP>:8765`. **Internet** turns on Remote access. A PIN is always required from other devices; don't use Local network on public Wi-Fi.
+## Try it
 
-## Weekly operation
+Download StagePilot for Windows or Mac from the **[latest release](https://github.com/tage-ilot/stagepilot/releases/latest)**, then follow the [getting started guide](docs/getting-started.md).
 
-StagePilot loads the plan for today, or the next upcoming plan for the selected service type; if several are equally likely it asks you to choose.
-
-Before a service:
-
-1. Confirm the service and time in **Service plan**.
-2. Check that the status at the top of the dashboard reads **Ready**, and open any connection card that needs attention.
-3. Start a song in Playback (or use **Manual Controls**) and confirm ProPresenter shows the countdown with the right duration.
-4. Keep StagePilot open during the service.
-
-Select **Edit layout** to rearrange the dashboard widgets. See [Dashboard layout](docs/dashboard-layout.md).
-
-## Troubleshooting
-
-StagePilot keeps the last loaded plan, so if Planning Center is unavailable the dashboard shows it with a stale warning instead of going empty.
-
-If something fails:
-
-1. Open the affected connection card and run its connection test.
-2. Check **Recent Event Stream** for the specific error.
-3. In **Backend**, select **Copy Log** (or **Send all logs to developer**). For more detail, first set the log level to `DEBUG`, restart StagePilot, and reproduce the issue once.
-4. Attach the log to a [GitHub issue](https://github.com/tage-ilot/stagepilot/issues).
-
-More in the [configuration guide](docs/configuration.md) and [security notes](docs/security.md). Test the full signal path with your real computers, network, and gear before an event.
-
-## Contributing
-
-Development and packaging instructions are in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-StagePilot is licensed under the [GNU General Public License v3.0](LICENSE).
+[Contributing](CONTRIBUTING.md) · [GPL-3.0 license](LICENSE)
