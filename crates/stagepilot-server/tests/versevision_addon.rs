@@ -13,7 +13,6 @@ use stagepilot_server::remote_fakes::{FakeBootstrap, FakeManager};
 use stagepilot_server::versevision_addon::Installation;
 use stagepilot_server::{build_app, AppOptions, RemoteAccess, RemoteIngress, Runtime};
 use std::net::SocketAddr;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower::ServiceExt;
@@ -231,6 +230,7 @@ async fn its_files_live_under_the_settings_folder_and_the_keys_are_owner_only() 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
         let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&root.join("keys")), 0o700);
         // A key saved on the Config page lands in keys/keys.env with owner-only permissions.
