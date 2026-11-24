@@ -13,7 +13,7 @@ use axum::response::{IntoResponse, Response};
 use serde_json::{json, Map, Value};
 use stagepilot_core::config::{ConnectionMethod, ServiceSource};
 use stagepilot_core::events::{new_event, ActionName, EventPayload, EventType};
-use stagepilot_core::service_pin::NOTICE_PIN_VANISHED;
+use stagepilot_core::service_pin::{NOTICE_PIN_VANISHED, PICKER_PAST_DAYS};
 use stagepilot_core::settings::{PersistentPlanningCenterSettings, UpdateError};
 use stagepilot_core::state::{PluginStatus, ServiceLoadStatus, TimerStatus};
 use stagepilot_pco::errors::PcoError;
@@ -780,7 +780,7 @@ const TIMER_RUNNING_MESSAGE: &str = "Stop the timer before changing the service.
 const CHANGE_FAILED_MESSAGE: &str = "The service could not be changed. Try again.";
 const BACK_MESSAGE: &str = "Back to the upcoming service.";
 
-/// `GET /planning-center/plans/upcoming`: plans from today on, for the picker. A failure is a
+/// `GET /planning-center/plans/upcoming`: plans of the last 20 days and from today on, for the picker. A failure is a
 /// plain message; the loaded plan is never touched.
 pub async fn upcoming_plans(State(rt): State<Rt>) -> Response {
     let Some(plugin) = picker_plugin(&rt) else {
@@ -838,7 +838,8 @@ async fn change_selection(rt: &Rt, wanted: Option<String>) -> Response {
         let Some(plan) = list.plans.iter().find(|p| &p.id == id) else {
             return respond(http_error(409, NOT_LISTED_MESSAGE));
         };
-        if plan.date < today {
+        // The list reaches back `PICKER_PAST_DAYS` days, to review a service that has gone by.
+        if plan.date < today - chrono::Duration::days(PICKER_PAST_DAYS) {
             return respond(http_error(409, PASSED_MESSAGE));
         }
         // Picking the upcoming service is the same as going back to it.

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { PLANS, plan } from "../test/servicePlanFixtures";
+import { PAST_PLANS, PLANS, plan } from "../test/servicePlanFixtures";
 import { ServicePlanCalendar } from "./ServicePlanCalendar";
 
 const TODAY = "2026-11-17";
@@ -93,11 +93,14 @@ describe("ServicePlanCalendar", () => {
     expect(screen.getByRole("heading", { name: "December 2026" })).toBeInTheDocument();
   });
 
-  it("does not go before this month or past the last month with a service", async () => {
+  it("does not go before the month 20 days back or past the last month with a service", async () => {
     open();
+    // Nov 17 minus 20 days is Oct 28: the grid reaches October and no further.
     await userEvent.keyboard("{PageUp}{PageUp}");
-    expect(screen.getByRole("heading", { name: "November 2026" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "October 2026" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Previous month" })).toBeDisabled();
+    await userEvent.keyboard("{PageDown}");
+    expect(screen.getByRole("heading", { name: "November 2026" })).toBeInTheDocument();
     await userEvent.keyboard("{PageDown}{PageDown}{PageDown}");
     expect(screen.getByRole("heading", { name: "December 2026" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next month" })).toBeDisabled();
@@ -160,5 +163,44 @@ describe("ServicePlanCalendar", () => {
     open({ selectedId: null, plans: [plan("far", "2027-01-10", "January Sunday")], today: "2026-12-30" });
     expect(screen.getByRole("heading", { name: "January 2027" })).toBeInTheDocument();
     expect(focusedDate()).toBe("2027-01-10");
+  });
+
+  describe("services of the days gone by", () => {
+    const withPast = { plans: [...PAST_PLANS, ...PLANS] };
+
+    it("opens on the month of today, not on the first past service, and shows a past day with a service as pickable but muted", async () => {
+      const { onPick } = open({ ...withPast, selectedId: null });
+      expect(screen.getByRole("heading", { name: "November 2026" })).toBeInTheDocument();
+      expect(focusedDate()).toBe("2026-11-22");
+      const past = day("Sunday Nov 15: Last Sunday");
+      expect(past).toHaveAttribute("data-has-service", "true");
+      expect(past).toHaveAttribute("data-past", "true");
+      expect(past).not.toHaveAttribute("aria-disabled");
+      expect(day("Sunday Nov 22: Sunday Service")).not.toHaveAttribute("data-past");
+      await userEvent.click(past);
+      expect(onPick).toHaveBeenCalledWith("p-nov-15");
+    });
+
+    it("marks a picked past service the way any picked service is marked", () => {
+      open({ ...withPast, selectedId: "p-nov-15" });
+      expect(day("Sunday Nov 15: Last Sunday").closest("[role=gridcell]")).toHaveAttribute("aria-selected", "true");
+      expect(focusedDate()).toBe("2026-11-15");
+    });
+
+    it("reaches a past service in the month before with the back arrow", async () => {
+      const { onPick } = open({ plans: [plan("p-oct-30", "2026-10-30", "Halloween Sunday"), ...PLANS] });
+      await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
+      expect(screen.getByRole("heading", { name: "October 2026" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Previous month" })).toBeDisabled();
+      await userEvent.click(day("Friday Oct 30: Halloween Sunday"));
+      expect(onPick).toHaveBeenCalledWith("p-oct-30");
+    });
+
+    it("keeps a day without a service dimmed and unpickable, past or not", async () => {
+      const { onPick } = open(withPast);
+      await userEvent.click(day("Monday Nov 16"));
+      expect(day("Monday Nov 16")).toHaveAttribute("aria-disabled", "true");
+      expect(onPick).not.toHaveBeenCalled();
+    });
   });
 });

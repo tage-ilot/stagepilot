@@ -9,6 +9,7 @@ import { madeUpHealth, madeUpLights, madeUpMidi, madeUpPlanningCenter, madeUpSer
 import { PresenterApiContext } from "../hooks/presenterApi";
 import { madeUpPresenterApi, PLAN_NAMES, withoutPlayback } from "./presenterLinkData";
 import { Fresh, Scripted, type Step } from "./Scripted";
+import { galleryServiceState } from "./servicePlanSample";
 import type { SampleState } from "./StateCard";
 
 /** Every callback of a page does nothing here: the gallery asks no backend and saves nothing. */
@@ -56,7 +57,7 @@ export const presentationPages: SampleState[] = [
 
 // ---- Services (Planning Center) ---------------------------------------------------------------------------------------
 
-const services = (over: { status?: ReturnType<typeof madeUpPlanningCenter>; error?: string | null; message?: string | null; pending?: "test" | "load-types" | "save" | null; types?: boolean } = {}) => (
+const services = (over: { status?: ReturnType<typeof madeUpPlanningCenter>; error?: string | null; message?: string | null; pending?: "test" | "load-types" | "save" | null; types?: boolean; state?: ReturnType<typeof madeUpState>; picker?: boolean } = {}) => (
   <PlanningCenterSetupPanel
     error={over.error ?? null}
     message={over.message ?? null}
@@ -69,9 +70,10 @@ const services = (over: { status?: ReturnType<typeof madeUpPlanningCenter>; erro
     pendingAction={null}
     pendingOperation={over.pending ?? null}
     pendingPlanId={null}
+    servicePlanChoice={over.picker ? { pending: false, error: null, announcement: "", pick: nothing, back: nothing } : undefined}
     serviceTypes={over.types === false ? [] : madeUpServiceTypes}
     settings={madeUpSettings()}
-    state={madeUpState()}
+    state={over.state ?? madeUpState()}
     status={over.status ?? madeUpPlanningCenter()}
     onDisconnectOAuth={nothing}
     onSignInOAuth={nothing}
@@ -86,6 +88,8 @@ export const servicesPages: SampleState[] = [
   { id: "busy", label: "Services: loading service types", look: "All fields disabled by the section; the button says Loading….", render: () => page([], services({ pending: "load-types" })) },
   { id: "no-types", label: "Services: no service types yet", look: "Service type is off on its own (no types to choose), not busy; the others are enabled.", render: () => page([], services({ types: false })) },
   { id: "error", label: "Services: a failure", look: "The danger notice, in the notices just above the Save bar.", render: () => page([], services({ error: "Planning Center did not answer. Check the Internet and try again." })) },
+  { id: "past-calendar", label: "Services: a past service open in the calendar", look: "A service from the past 20 days is loaded for review: its date with the 'Past service' tag, the 'Current Upcoming' button and the 'Current upcoming service not selected' pill beside the Calendar button. The calendar shows that day selected, the other past days with a service muted (not dimmed: they can be picked), the upcoming days as before, and, when the 20 days reach into the month before, the back arrow goes there. The arrows beside the date step only among the services from today on.", render: () => <Fresh><Scripted patient steps={[{ press: "Calendar" }]}>{services({ picker: true, state: galleryServiceState("g-past-9") })}</Scripted></Fresh> },
+  { id: "upcoming-calendar", label: "Services: the upcoming service open in the calendar", look: "The same calendar with the upcoming service loaded: the past days with a service are muted next to the ones to come.", render: () => <Fresh><Scripted patient steps={[{ press: "Calendar" }]}>{services({ picker: true, state: galleryServiceState("g-next-4") })}</Scripted></Fresh> },
 ];
 
 // ---- Backend (StagePilot) ---------------------------------------------------------------------------------------------

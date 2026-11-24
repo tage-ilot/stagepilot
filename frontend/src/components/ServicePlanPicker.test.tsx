@@ -1,9 +1,9 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ServicePlanChoice } from "../hooks/useServicePlanChoice";
-import { PLANS, list, stateFor } from "../test/servicePlanFixtures";
+import { PAST_PLANS, PLANS, list, stateFor } from "../test/servicePlanFixtures";
 import type { ApplicationState, UpcomingServicePlans } from "../types";
 import { ServicePlanPicker } from "./ServicePlanPicker";
 
@@ -32,6 +32,15 @@ const next = () => screen.getByRole("button", { name: "Next service" });
 const calendar = () => screen.getByRole("button", { name: "Calendar" });
 
 describe("ServicePlanPicker", () => {
+  // The fixtures say today is Tue Nov 17, 2026 (Los Angeles); the picker reads the clock, so it is set.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-17T20:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("shows the loaded service's date and title with the Upcoming service tag, and the left arrow rests", async () => {
     await show(stateFor(PLANS[0]!, false));
     expect(screen.getByTestId("picker-selected")).toHaveTextContent("Sun 22 Nov");
@@ -203,5 +212,58 @@ describe("ServicePlanPicker", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe("services of the days gone by", () => {
+    const withPast = (extra: Partial<UpcomingServicePlans> = {}) => list({ plans: [...PAST_PLANS, ...PLANS], ...extra });
+
+    it("lets the calendar pick a past service and loads it through the same pick", async () => {
+      const { choice } = await show(stateFor(PLANS[0]!, false), { answer: withPast() });
+      await userEvent.click(calendar());
+      await userEvent.click(screen.getByRole("button", { name: "Sunday Nov 15: Last Sunday" }));
+      expect(choice.pick).toHaveBeenCalledWith("p-nov-15");
+    });
+
+    it("keeps the arrows among the services from today on: the left arrow still rests on the upcoming service", async () => {
+      const { choice } = await show(stateFor(PLANS[0]!, false), { answer: withPast() });
+      expect(previous()).toBeDisabled();
+      expect(previous()).toHaveAccessibleDescription("This is the first service.");
+      await userEvent.click(next());
+      expect(choice.pick).toHaveBeenCalledWith("p-nov-29");
+      expect(screen.queryByTestId("not-upcoming")).not.toBeInTheDocument();
+    });
+
+    it("does not step into the past from the second service either", async () => {
+      const { choice } = await show(stateFor(PLANS[1]!, true), { answer: withPast({ pinned_id: "p-nov-29", pinned_date: "2026-11-29" }) });
+      await userEvent.click(previous());
+      expect(choice.pick).toHaveBeenLastCalledWith("p-nov-22");
+    });
+
+    it("shows the date, a Past service tag and the pill while a past service is loaded, and the right arrow goes to the first service from today on", async () => {
+      const { choice } = await show(stateFor(PAST_PLANS[1]!, true), { answer: withPast({ pinned_id: "p-nov-15", pinned_date: "2026-11-15" }) });
+      expect(screen.getByTestId("picker-selected")).toHaveTextContent("Sun 15 Nov");
+      expect(screen.getByTestId("picker-selected")).toHaveTextContent("Last Sunday");
+      expect(screen.getByText("Past service")).toBeInTheDocument();
+      expect(screen.queryByText("Upcoming service")).not.toBeInTheDocument();
+      expect(screen.getByTestId("not-upcoming-pill")).toHaveTextContent("Current upcoming service not selected");
+      expect(screen.getByTestId("not-upcoming")).toHaveAttribute("data-date", "2026-11-15");
+      expect(previous()).toBeDisabled();
+      await userEvent.click(next());
+      expect(choice.pick).toHaveBeenCalledWith("p-nov-22");
+      await userEvent.click(screen.getByRole("button", { name: "Current Upcoming" }));
+      expect(choice.back).toHaveBeenCalled();
+    });
+
+    it("has no Past service tag on a service from today on", async () => {
+      await show(stateFor(PLANS[0]!, false), { answer: withPast() });
+      expect(screen.queryByText("Past service")).not.toBeInTheDocument();
+    });
+
+    it("says there are no upcoming services when only past ones are listed, and still opens the calendar", async () => {
+      await show(stateFor(PAST_PLANS[1]!, true), { answer: list({ plans: PAST_PLANS, upcoming_id: null }) });
+      expect(screen.getByText("No upcoming services were found.")).toBeInTheDocument();
+      expect(calendar()).toBeEnabled();
+      expect(next()).toBeDisabled();
+    });
   });
 });

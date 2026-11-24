@@ -20,7 +20,7 @@ describe("the section gallery: configuration pages", () => {
   it("lists every state of every page and every template", () => {
     render(<Frame />);
     expect(ids("page-presentation")).toEqual(["clean", "held", "look-chosen", "unavailable", "timer-none", "not-connected", "error", "busy-refresh", "busy-save", "disabled", "failed", "loading"]);
-    expect(ids("page-services")).toEqual(["signed-out", "signed-in", "expired", "manual-held", "busy", "no-types", "error"]);
+    expect(ids("page-services")).toEqual(["signed-out", "signed-in", "expired", "manual-held", "busy", "no-types", "error", "past-calendar", "upcoming-calendar"]);
     expect(ids("page-backend")).toEqual(["clean", "advanced-open", "error", "disconnected", "failure"]);
     expect(ids("page-playback")).toEqual(["api-open", "api-closed", "midi", "midi-held"]);
     expect(ids("page-lighting")).toEqual(["osc", "midi", "midi-held", "midi-busy", "clean-button", "clean-ask", "clean-done", "timeline-closed"]);

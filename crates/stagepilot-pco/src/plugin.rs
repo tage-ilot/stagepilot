@@ -17,7 +17,7 @@ use stagepilot_core::events::{new_event, EventPayload, EventType, Integration};
 use stagepilot_core::plugin::Plugin;
 use stagepilot_core::service_pin::{
     PinKeeper, PlanPicker, ServicePin, UpcomingPlan, UpcomingPlans, NOTICE_PIN_PASSED,
-    NOTICE_PIN_VANISHED, PICKER_CACHE_SECONDS, PICKER_DAYS, PICKER_MAX_PLANS,
+    NOTICE_PIN_VANISHED, PICKER_CACHE_SECONDS, PICKER_DAYS, PICKER_MAX_PLANS, PICKER_PAST_DAYS,
     SOURCE_PLANNING_CENTER,
 };
 use stagepilot_core::state::*;
@@ -457,8 +457,14 @@ impl Inner {
         let client = self.client()?;
         let service_types = client.list_service_types().await?;
         let configured = self.configured_service_types(&service_types)?;
+        // The past days come too (to review a service that has gone by).
         let mut found = client
-            .list_upcoming_plans(&configured, today, PICKER_DAYS, &self.timezone_name)
+            .list_upcoming_plans(
+                &configured,
+                today - Duration::days(PICKER_PAST_DAYS),
+                PICKER_DAYS + PICKER_PAST_DAYS,
+                &self.timezone_name,
+            )
             .await?;
         found.sort_by(|a, b| {
             (a.target_date, a.service_times.first(), a.id.as_str()).cmp(&(
@@ -467,7 +473,9 @@ impl Inner {
                 b.id.as_str(),
             ))
         });
-        found.truncate(PICKER_MAX_PLANS);
+        // The cap counts the plans from today on, so a busy past never pushes an upcoming plan out.
+        let past = found.partition_point(|c| c.target_date < today);
+        found.truncate(past + PICKER_MAX_PLANS);
         let plans: Vec<UpcomingPlan> = found
             .into_iter()
             .map(|c| UpcomingPlan {
@@ -720,11 +728,23 @@ impl Inner {
 
     // ---- the refresh itself ----------------------------------------------------------------------------
 
-    fn actionable_plan_date(state: &ApplicationState, search_date: NaiveDate) -> Option<NaiveDate> {
+    /// The date of the loaded plan if it still counts: dated today or later, or a service that
+    /// had gone by and is held for review by a pin that has not ended.
+    fn actionable_plan_date(
+        &self,
+        state: &ApplicationState,
+        search_date: NaiveDate,
+    ) -> Option<NaiveDate> {
+        let held = self
+            .keeper()
+            .get(SOURCE_PLANNING_CENTER)
+            .filter(|pin| !pin.is_expired(search_date));
         state
             .plan
             .as_ref()
-            .filter(|p| p.date >= search_date)
+            .filter(|p| {
+                p.date >= search_date || held.as_ref().is_some_and(|pin| pin.plan_id == p.id)
+            })
             .map(|p| p.date)
     }
 
@@ -850,7 +870,7 @@ impl Inner {
         let search_date = self.today();
         let pin = self.active_pin();
         let previous_state = self.store.snapshot();
-        let previous_plan_date = Self::actionable_plan_date(&previous_state, search_date);
+        let previous_plan_date = self.actionable_plan_date(&previous_state, search_date);
         let has_actionable_plan = previous_plan_date.is_some();
         let previous_candidate_date = previous_state.service_load.target_date;
         let previous_candidates: Vec<ServicePlanCandidate> = match previous_candidate_date {
@@ -1057,7 +1077,7 @@ impl Inner {
             );
             self.record_error(detail, &error, false);
             let current = self.store.snapshot();
-            let current_plan_date = Self::actionable_plan_date(&current, search_date);
+            let current_plan_date = self.actionable_plan_date(&current, search_date);
             self.publish_connection(ConnectionStatus::Error, detail)
                 .await;
             self.publish_load_state(
@@ -1097,6 +1117,8 @@ impl Inner {
         let search_end = search_date + Duration::days(lookahead);
         // A pinned plan may be dated beyond the upcoming search window.
         let loaded_end = hint.pinned_date.map_or(search_end, |d| d.max(search_end));
+        // ... or a service that has gone by, picked to review.
+        let loaded_start = hint.pinned_date.map_or(search_date, |d| d.min(search_date));
         match result {
             PlanDiscoveryResult::NotFound { target_date, .. } => {
                 if target_date != search_date {
@@ -1161,7 +1183,7 @@ impl Inner {
                 skipped_items,
             } => {
                 let loaded_date = plan.date;
-                if !(search_date <= loaded_date && loaded_date <= loaded_end)
+                if !(loaded_start <= loaded_date && loaded_date <= loaded_end)
                     || candidate.target_date != loaded_date
                     || candidate.id != plan.id
                 {
@@ -1323,7 +1345,7 @@ impl Inner {
         }
         let state = self.store.snapshot();
         let target = self.today();
-        let plan_date = Self::actionable_plan_date(&state, target);
+        let plan_date = self.actionable_plan_date(&state, target);
         self.publish_connection(ConnectionStatus::Error, detail)
             .await;
         self.publish_load_state(
@@ -1517,7 +1539,7 @@ impl PlanPicker for PcoPlugin {
             // Not known from the loaded plan: the only plan on the nearest date, if there is
             // exactly one, within the days the upcoming search looks.
             let lookahead = i64::from(inner.settings().upcoming_lookahead_days);
-            let first = plans.first()?;
+            let first = plans.iter().find(|p| p.date >= inner.today())?;
             if first.date > inner.today() + Duration::days(lookahead) {
                 return None;
             }
@@ -1542,13 +1564,16 @@ impl PlanPicker for PcoPlugin {
 
     fn set_pin(&self, plan: &UpcomingPlan) -> Result<(), String> {
         *lock(&self.inner.notice) = None;
-        self.inner.keeper().set(ServicePin::new(
-            SOURCE_PLANNING_CENTER,
-            &plan.id,
-            plan.date,
-            Some(plan.service_type_id.clone()),
-            Some(plan.title.clone()),
-        ))
+        self.inner.keeper().set(
+            ServicePin::new(
+                SOURCE_PLANNING_CENTER,
+                &plan.id,
+                plan.date,
+                Some(plan.service_type_id.clone()),
+                Some(plan.title.clone()),
+            )
+            .held_for_review(self.inner.today()),
+        )
     }
 
     fn clear_pin(&self) -> Result<(), String> {

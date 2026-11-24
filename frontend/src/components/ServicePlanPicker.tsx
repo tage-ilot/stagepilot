@@ -15,7 +15,8 @@ import { InlineAlert } from "./ui/InlineAlert";
  * Which service StagePilot has loaded, and a way to load another one: `‹ Sun, Nov 22, 2026 – Sunday Service ›` and a
  * calendar. The arrows step to the previous and next service (not day) among the services from today on; the left arrow
  * rests on the upcoming service. Picking any other service keeps it until it is changed, goes by, or is gone from
- * Planning Center (the backend decides; this only asks and shows).
+ * Planning Center (the backend decides; this only asks and shows). The calendar also reaches the services of the past 20
+ * days, to review one; the arrows never go there, and the automatic return to the upcoming service stays.
  */
 export function ServicePlanPicker({
   state,
@@ -62,15 +63,19 @@ export function ServicePlanPicker({
     return () => { cancelled = true; };
   }, [loadPlans, loaded, pinned, loadStatus, attempt]);
 
+  const today = todayIn(timezone);
   const plans = list?.plans ?? [];
+  // The arrows step only among the services from today on; the calendar alone reaches the days gone by.
+  const stepping = plans.filter((candidate) => candidate.date >= today);
   const plan = state.plan;
-  const index = plan ? plans.findIndex((candidate) => candidate.id === plan.id) : -1;
+  const index = plan ? stepping.findIndex((candidate) => candidate.id === plan.id) : -1;
+  const reviewing = Boolean(plan) && plan !== null && plan.date < today && plans.some((candidate) => candidate.id === plan.id);
   const upcomingId = list?.upcoming_id ?? state.upcoming?.plan_id ?? null;
   const isUpcoming = Boolean(plan) && plan?.id === upcomingId && !pinned;
   const busy = choice.pending || !canOperate;
-  const previous = index > 0 && plans[index]?.id !== upcomingId ? (plans[index - 1] ?? null) : null;
-  const next = index >= 0 ? (plans[index + 1] ?? null) : null;
-  const today = todayIn(timezone);
+  const previous = index > 0 && stepping[index]?.id !== upcomingId ? (stepping[index - 1] ?? null) : null;
+  // From a service that has gone by, forward goes to the first service from today on.
+  const next = reviewing ? (stepping[0] ?? null) : index >= 0 ? (stepping[index + 1] ?? null) : null;
 
   const closeCalendar = useCallback(() => {
     setOpen(false);
@@ -104,6 +109,7 @@ export function ServicePlanPicker({
               <span className="text-ink-muted">No service loaded</span>
             )}
             {isUpcoming && <Badge className="ml-2 align-middle" tone="info">Upcoming service</Badge>}
+            {reviewing && <Badge className="ml-2 align-middle" tone="idle">Past service</Badge>}
           </p>
           <ReasonButton
             aria-label="Next service"
@@ -150,7 +156,7 @@ export function ServicePlanPicker({
         {pinned && plan && <NotUpcomingPill canOperate={canOperate} date={plan.date} size="touch" onBack={choice.back} pending={choice.pending} />}
       </div>
 
-      {!loadingList && !listError && plans.length === 0 && (
+      {!loadingList && !listError && stepping.length === 0 && (
         <p className="mt-2 text-sm text-ink-body">No upcoming services were found.</p>
       )}
       {choice.pending && <p className="mt-2 text-sm text-ink-muted">Loading the service…</p>}
