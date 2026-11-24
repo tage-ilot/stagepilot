@@ -73,6 +73,10 @@ class FakeUpstream {
   override: ((call: UpstreamCall) => Response | Promise<Response> | undefined) | undefined;
 
   readonly fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    // The Workers runtime accepts only 'follow' and 'manual' (anything else, e.g. 'error', throws a TypeError).
+    if (init?.redirect !== undefined && init.redirect !== 'follow' && init.redirect !== 'manual') {
+      throw new TypeError(`Invalid redirect value, must be one of "follow" or "manual" (got "${String(init.redirect)}")`);
+    }
     const target = new URL(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url);
     const headers: Record<string, string> = {};
     for (const [name, value] of Object.entries((init?.headers ?? {}) as Record<string, string>)) headers[name.toLowerCase()] = value;
@@ -222,6 +226,18 @@ describe('Bible text proxy', () => {
   }
 
   describe('providers', () => {
+    it('calls every provider with a fetch option set the Workers runtime accepts and never follows a redirect', async () => {
+      const friend = await enroll('bible-runtime-0001');
+      for (const [version, ref] of [['nkjv', 'John 3:16'], ['niv', 'Psalm 23:1'], ['esv', 'John 3:16']] as const) {
+        expect((await passage(friend, version, ref)).status).toBe(200);
+      }
+      const modes = upstream.fetch.mock.calls.map(([, init]) => (init as RequestInit | undefined)?.redirect);
+      expect(modes.length).toBeGreaterThan(3);
+      expect(new Set(modes)).toEqual(new Set(['manual']));
+      upstream.override = () => new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/' } });
+      expect((await passage(friend, 'kjv', 'John 3:17')).status).toBe(502);      // a redirect is a failed upstream call
+    });
+
     it('serves NKJV through API.Bible exactly as the Python provider calls it', async () => {
       const friend = await enroll('bible-nkjv-0001');
       const response = await passage(friend, 'nkjv', 'John 3:16-18');
