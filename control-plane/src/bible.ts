@@ -313,7 +313,9 @@ async function upstreamJson(url: URL, headers: Record<string, string>, timeoutMs
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers,
-      redirect: 'error',
+      // Workers cannot fetch with redirect: 'error' (the runtime throws a TypeError); 'manual' returns the 3xx
+      // answer, which is not ok and so counts as a failed upstream call, never followed.
+      redirect: 'manual',
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
