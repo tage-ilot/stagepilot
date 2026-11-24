@@ -13,15 +13,6 @@ On **Windows**, run the installer and open StagePilot from the Start menu.
 
 On **macOS**, open the DMG and drag StagePilot to Applications. The app is not Apple-notarized, so the first time, right-click StagePilot and select **Open** (or use **System Settings → Privacy & Security → Open Anyway**). See [macOS ad-hoc signing](docs/macos-adhoc-signing.md).
 
-## What you need
-
-- Planning Center Services (sign in, or a Personal Access Token)
-- MultiTracks Playback on the same network, or a MIDI input
-- ProPresenter with its network API enabled
-- Optionally, a MIDI or OSC destination for Lightkey or another lighting controller
-
-Planning Center, Playback, ProPresenter, and Lighting are independent. You can set up and test one without the others being online.
-
 ## Initial setup
 
 Everything is set up inside StagePilot.
