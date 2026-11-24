@@ -11,6 +11,10 @@ export const RUNTIME_SECRET_NAMES = Object.freeze([
   "INSTALLATION_SIGNING_KEY",
   "PLANNING_CENTER_CLIENT_ID",
   "PLANNING_CENTER_CLIENT_SECRET",
+  // Bible text proxy keys (src/bible.ts); the deploy installs them from the environment's Actions secrets.
+  "API_BIBLE_API_KEY",
+  "YOUVERSION_API_KEY",
+  "ESV_API_KEY",
 ]);
 
 function required(environment, name) {
@@ -46,6 +50,7 @@ export function validateDeploymentEnvironment(environment) {
   const adminToken = required(environment, "ADMIN_API_TOKEN");
   const signingKey = required(environment, "INSTALLATION_SIGNING_KEY");
   const pcoClientId = required(environment, "PLANNING_CENTER_CLIENT_ID");
+  for (const name of ["API_BIBLE_API_KEY", "YOUVERSION_API_KEY", "ESV_API_KEY"]) required(environment, name);   // Bible text proxy keys
   const pcoClientSecret = required(environment, "PLANNING_CENTER_CLIENT_SECRET");
 
   if (!ID.test(accountId)) throw new Error("CLOUDFLARE_ACCOUNT_ID must be 32 lowercase hexadecimal characters");

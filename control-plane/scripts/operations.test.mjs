@@ -24,6 +24,9 @@ function deploymentEnvironment(overrides = {}) {
     INSTALLATION_SIGNING_KEY: "independent-signing-key-at-least-thirty-two-characters",
     PLANNING_CENTER_CLIENT_ID: "pco-client-id",
     PLANNING_CENTER_CLIENT_SECRET: "pco-client-secret",
+    API_BIBLE_API_KEY: "test-api-bible-key",
+    YOUVERSION_API_KEY: "test-youversion-key",
+    ESV_API_KEY: "test-esv-key",
     ...overrides,
   };
 }

@@ -1,6 +1,8 @@
+import { galleryServiceList } from "./servicePlanSample";
+
 /**
  * The gallery has no backend. The only requests its blocks can make are the helper setup boxes asking for their one-time command
- * (and ending it): they are answered here with a made-up command that goes nowhere. Anything else is a plain 404.
+ * (and ending it) and the Services page asking for its list of services: they are answered here with a made-up command that goes nowhere. Anything else is a plain 404.
  */
 export function installMadeUpApi(): void {
   const real = window.fetch.bind(window);
@@ -15,6 +17,7 @@ export function installMadeUpApi(): void {
         expires_at: new Date(Date.now() + 30 * 60_000).toISOString(), lan_ip: "192.0.2.20", port: 8000, bundled_version: "0.0.0",
       });
     }
+    if (path === "/api/v1/planning-center/plans/upcoming") return json(galleryServiceList());
     if (path.startsWith("/api/")) return json({ error: "The section gallery has no backend." }, 404);
     return real(input, init);
   };

@@ -8,6 +8,9 @@ import { describeError } from "../errorText";
 /** A calendar date as `YYYY-MM-DD`. */
 export type IsoDate = string;
 
+/** How many days back the backend lists services (`PICKER_PAST_DAYS`): a service that has gone by can be loaded to review it. */
+export const PICKER_PAST_DAYS = 20;
+
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export function parseIso(value: IsoDate): { year: number; month: number; day: number } | null {

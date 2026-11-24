@@ -248,3 +248,176 @@ never overwrite it. The admin list exposes it as `locationOverride`, and the pag
 ### Legacy nameless test installs and the active counter
 
 Installations from before device names were reported have no `deviceName`. One that is revoked and was never provisioned counts as a test installation (it is dead weight from the earliest test runs), so the 48h-offline sweep and the purge-now action delete it. A live, pinned or ever-provisioned installation is never matched by this. The sweep and the purge-now action also recount `activeInstallations` from the stored records, so a drifted counter (which the 500 cap and the admin "Total" read) corrects itself within an hour.
+
+## Bible text proxy (VerseVision)
+
+VerseVision (bundled into StagePilot) can show verse text without shipping any Bible API key: each
+installation asks this Worker for the text with its own installation credential, and the Worker
+calls API.Bible, YouVersion or the ESV API with the operator's keys. The keys exist only as Worker
+secrets. Code: `control-plane/src/bible.ts` (providers, reference parsing, caching) and the two
+counters in the Registry Durable Object (`src/index.ts`).
+
+### Route
+
+`GET /v1/installations/:id/bible/passage?version=<V>&ref=<reference>`
+
+`POST /v1/installations/:id/bible/passage` with `{"version": "NKJV", "ref": "John 3:16-18 & 20"}`
+(for references too long for a URL; body at most 4 KB).
+
+Authenticated like every other installation route: `Authorization: Bearer <installation credential>`.
+A missing, wrong or **revoked** credential, or an unknown id, is `401 {"error":"unauthorized"}`.
+Responses are always `cache-control: no-store`.
+
+- `version`: one of `ESV NIV AMP BSB LSV NIRV NASB1995 NASB2020 TPT NKJV NLT KJV MSG WEB`
+  (case-insensitive). Anything else is `400 invalid_version`; nothing the client sends is ever used
+  as an upstream URL. Version aliases (VerseVision's `YLT -> NLT`) stay in the client.
+- `ref`: VerseVision's normalized reference without the version: `John 3:16-18`,
+  `John 3:16-18 & 20`, `1 Samuel 3:4 & 4:2`. The book may be written as its name, a common
+  abbreviation (`Ps`, `1 Sam`, `II Kings`) or its id (`JHN`); `&`, `,` and `;` all separate spans; a
+  span without a chapter uses the previous span's chapter. Refused with `400 invalid_reference`: an
+  unknown book, a whole chapter (`John 3`), a chapter or verse that cannot exist, a range that runs
+  backwards, overlapping spans, a version suffix. A range across chapters (`John 3:16-4:2`) is
+  `400 unsupported_reference` (the Python providers do not support it either; ask per chapter).
+  More than **40 verses** in one request is `400 too_many_verses`.
+
+Success (`200`):
+
+```
+{
+  "version":     "NKJV",                      // the requested version, upper case
+  "reference":   "John 3:16-18",              // normalized, without the version
+  "verses":      [ {"book_id": "JHN", "chapter": 3, "verse": 16, "text": "..."} ],  // in the order asked
+  "copyright":   "...",                       // string or null; show it with the text
+  "attribution": "...",                       // string or null
+  "provider":    "api_bible",                 // api_bible | youversion | esv
+  "cached":      false                        // true only for a copy served from the Worker's cache
+}
+```
+
+`book_id` is the three-character id of VerseVision's book table (`GEN`, `1SA`, `JHN`, ...). `text`
+is plain text: no verse number, headings, footnotes or markup. `copyright` is the first verse
+copyright the provider sent (API.Bible sends one per verse), else the Bible's own.
+
+Errors are `{"error": "<code>", "message": "<English sentence>"}`; the message never contains an
+upstream body, a URL or a key.
+
+| Status | `error` | When |
+| --- | --- | --- |
+| 400 | `invalid_request`, `invalid_version`, `invalid_reference`, `unsupported_reference`, `too_many_verses` | the request is wrong; fix it, do not retry unchanged |
+| 401 | `unauthorized` | bad, missing or revoked credential |
+| 405 / 413 | `method_not_allowed` / `request_too_large` | other method / POST body over 4 KB |
+| 429 | `rate_limited` (`scope`: `installation_hourly`, `installation_daily`, `global_daily`) | a limit below; `Retry-After` says how many seconds |
+| 502 | `upstream_error` | the provider failed, refused or sent nothing usable (its answer is never echoed) |
+| 503 | `provider_not_configured` | the secret for this version's provider is not set on the Worker (`Retry-After: 300`) |
+| 503 | `upstream_busy` | the provider itself rate limited the Worker (`Retry-After: 60`) |
+| 504 | `upstream_timeout` | the provider did not answer within 15 s |
+
+Sample responses (the verse text here is synthetic placeholder text, not Scripture):
+
+```
+GET /v1/installations/9f3a1c7e/bible/passage?version=NKJV&ref=John%203:16-17      (API.Bible)
+{"version":"NKJV","reference":"John 3:16-17",
+ "verses":[{"book_id":"JHN","chapter":3,"verse":16,"text":"Synthetic verse sixteen."},
+           {"book_id":"JHN","chapter":3,"verse":17,"text":"Synthetic verse seventeen."}],
+ "copyright":"Synthetic NKJV copyright","attribution":"Synthetic NKJV description",
+ "provider":"api_bible","cached":false}
+
+GET /v1/installations/9f3a1c7e/bible/passage?version=NIV&ref=Romans%208:1          (YouVersion, now from the cache)
+{"version":"NIV","reference":"Romans 8:1",
+ "verses":[{"book_id":"ROM","chapter":8,"verse":1,"text":"Synthetic verse one."}],
+ "copyright":"Synthetic NIV copyright","attribution":"Synthetic promotional text",
+ "provider":"youversion","cached":true}
+
+POST /v1/installations/9f3a1c7e/bible/passage  {"version":"esv","ref":"Psalm 23:1 & 4"}   (ESV, never cached)
+{"version":"ESV","reference":"Psalms 23:1 & 4",
+ "verses":[{"book_id":"PSA","chapter":23,"verse":1,"text":"Synthetic verse one."},
+           {"book_id":"PSA","chapter":23,"verse":4,"text":"Synthetic verse four."}],
+ "copyright":"Scripture quotations are from the ESV\u00ae Bible (The Holy Bible, English Standard Version\u00ae), \u00a9 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. www.esv.org",
+ "attribution":null,"provider":"esv","cached":false}
+```
+
+### Which provider serves which version
+
+Copied from the operator's VerseVision configuration (`[bible.version_routes]` and the
+`bible_ids`; the ids are public identifiers, not secrets). Changing it is a code change in
+`VERSION_ROUTES` (`src/bible.ts`).
+
+| Provider | Versions | Secret |
+| --- | --- | --- |
+| API.Bible (`https://api.scripture.api.bible/v1`) | NKJV, NLT, KJV, MSG, WEB | `API_BIBLE_API_KEY` |
+| YouVersion (`https://api.youversion.com/v1`) | NIV, AMP, BSB, LSV, NIRV, NASB1995, NASB2020, TPT | `YOUVERSION_API_KEY` |
+| ESV API (`https://api.esv.org/v3`) | ESV | `ESV_API_KEY` |
+
+The Worker calls each provider the way VerseVision's Python providers do, one upstream request per
+verse (at most six at a time):
+
+- API.Bible: `GET /bibles?language=eng` once for the Bible's copyright and description, then
+  `GET /bibles/{id}/verses/{BOOK.C.V}?content-type=text&include-notes=false&include-titles=false`
+  with header `api-key`. The `content` is read as text (every text node trimmed and joined by one
+  space, like BeautifulSoup `get_text(" ", strip=True)`) and a leading `[16]` or `[16-17]` marker
+  is removed.
+- YouVersion: `GET /bibles?language_ranges[]=en&page_size=99` once, then
+  `GET /bibles/{id}/passages/{BOOK.C.V}?format=text&include_headings=false&include_notes=false`
+  with header `X-YVP-App-Key`; whitespace in `content` is collapsed.
+- ESV: `GET /passage/text/?q=<Book> <C>:<V>` with `Authorization: Token <key>` and the options that
+  strip everything but the words (no verse numbers, headings, footnotes, copyright, indentation or
+  line wrapping); the `passages` are joined and whitespace is collapsed. The Crossway notice is
+  returned as `copyright`.
+
+Each upstream request has a 15 s timeout (`BIBLE_UPSTREAM_TIMEOUT_SECONDS`, 1 to 30). An upstream
+error body is never read or passed on. The route needs one upstream request per verse: Workers
+Free allows 50 subrequests per invocation, so a 40-verse passage needs the Workers Paid plan (the
+Cache API calls count too).
+
+### Limits (counted in the Registry Durable Object)
+
+| Limit | Default | Variable |
+| --- | --- | --- |
+| passages per installation per hour | 600 | `BIBLE_INSTALLATION_HOURLY_LIMIT` |
+| passages per installation per day | 5,000 | `BIBLE_INSTALLATION_DAILY_LIMIT` |
+| uncached upstream passages per day, all installations | 20,000 | `BIBLE_GLOBAL_DAILY_CAP` |
+| verses per request | 40 | fixed in code (`MAX_VERSES_PER_REQUEST`) |
+
+Windows are fixed windows of 3,600 s and 86,400 s that start at the first request after the
+previous window ended; the `429` carries `Retry-After` for the window that was hit. Every
+authenticated passage request counts toward the installation limits, including cached ones, refused
+ones and ones for a provider with no secret, so a client stuck in a loop cannot hammer the Worker.
+The global cap counts only requests that need an upstream call, so cached text keeps being served
+after the cap is reached. A variable that is empty, not a whole number, or below 1 falls back to
+the default. Change one by setting it as a plain Worker variable (a `--var NAME:VALUE` on the
+deploy command, or `[vars]`); it needs no code change.
+
+### Caching
+
+Non-ESV passages are cached for **30 days** in the Cloudflare Cache API (key: provider, Bible id,
+version, book and verse spans), plus each Bible's copyright and description for 7 days. The cache
+lives in the data centre that served the request and is not shared between data centres. **The ESV
+is never cached or stored**: the Worker does not read or write the cache for it, `cached` is always
+`false`, and the text is not written to any log, error or diagnostics bundle (Crossway's terms
+limit local storage). Passage text is never logged for any version; the only log line on a
+failure names the provider, the failure kind and the HTTP status.
+
+### Secrets and deployment
+
+The three keys are **Worker secrets**, never committed and never printed. They are stored as
+environment secrets (`API_BIBLE_API_KEY`, `YOUVERSION_API_KEY`, `ESV_API_KEY`) of the
+`stagepilot-control-plane` GitHub environment, and `deploy-control-plane.yml` installs them as
+Worker secrets together with the other runtime secrets (the deploy then checks that all
+the names are bound; values are never read back). To rotate a key: `gh secret set API_BIBLE_API_KEY
+--env stagepilot-control-plane`, then run the deploy workflow. They can also be set by hand:
+
+```
+cd control-plane
+npx wrangler secret put API_BIBLE_API_KEY     # paste the key at the prompt
+npx wrangler secret list --format json        # names only
+```
+
+A version whose provider has no secret bound answers `503 provider_not_configured` and nothing
+else changes.
+
+To change a limit, add a variable to the deploy command (for example
+`--var BIBLE_INSTALLATION_HOURLY_LIMIT:300`) or set it in the Cloudflare dashboard.
+
+Terms: the owner decided (2026-11-23) to serve these keys to trusted StagePilot users for now and to ask
+users to add their own keys later. API.Bible's terms forbid distributing its content to third parties without
+written approval, the ESV and YouVersion licences also need review before a public rollout.
