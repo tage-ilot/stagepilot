@@ -57,6 +57,18 @@ bucket_name = "stagepilot-beta-diagnostics"
 # CLOUDFLARE_API_TOKEN, ADMIN_API_TOKEN, INSTALLATION_SIGNING_KEY,
 # GITHUB_RELEASE_TOKEN.
 # Do not add deployment-specific placeholders or secret values to this file.
+#
+# Bible text proxy (GET|POST /v1/installations/:id/bible/passage, src/bible.ts).
+# Three further Worker secrets hold the operator's Bible API keys. They are
+# OPTIONAL for the Worker to run (a version whose provider has no key answers
+# 503 provider_not_configured) and are set once by hand, not by the deploy
+# workflow, which never reads or prints them:
+#   npx wrangler secret put API_BIBLE_API_KEY
+#   npx wrangler secret put YOUVERSION_API_KEY
+#   npx wrangler secret put ESV_API_KEY
+# Optional plain variables (defaults in parentheses; see docs/remote-control-plane.md):
+# BIBLE_INSTALLATION_HOURLY_LIMIT (600), BIBLE_INSTALLATION_DAILY_LIMIT (5000),
+# BIBLE_GLOBAL_DAILY_CAP (20000), BIBLE_UPSTREAM_TIMEOUT_SECONDS (15).
 
 [assets]
 directory = "./public"

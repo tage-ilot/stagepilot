@@ -1,4 +1,6 @@
-interface Env {
+import { handleBiblePassage, positiveInteger, type BibleCache, type BibleEnv } from './bible';
+
+interface Env extends BibleEnv {
   REGISTRY: DurableObjectNamespace;
   CLOUDFLARE_API_TOKEN: string;
   CLOUDFLARE_ACCOUNT_ID: string;
@@ -43,6 +45,14 @@ interface Env {
   // Static asset binding for the fleet admin panel (control-plane/public),
   // configured via the [assets] block in wrangler.toml.
   ASSETS?: Fetcher;
+  // Bible text proxy (see src/bible.ts and docs/remote-control-plane.md). The
+  // provider keys API_BIBLE_API_KEY, YOUVERSION_API_KEY and ESV_API_KEY are
+  // Worker secrets (see BibleEnv); they are optional here: a version whose
+  // provider has no key answers 503 provider_not_configured. The limits below
+  // are optional plain variables; an invalid value falls back to the default.
+  BIBLE_INSTALLATION_HOURLY_LIMIT?: string;
+  BIBLE_INSTALLATION_DAILY_LIMIT?: string;
+  BIBLE_GLOBAL_DAILY_CAP?: string;
   // R2 bucket for installation-uploaded diagnostic bundles (frontend/backend
   // logs + app/version info). Optional/deferred the same way GITHUB_RELEASE_TOKEN
   // is: if the deploying CLOUDFLARE_API_TOKEN lacks R2 permissions this binding
@@ -134,6 +144,9 @@ interface Installation {
   // statusRate/mutationRate so a crash loop hammering /diagnostics cannot
   // also exhaust the installation's normal status/mutation quota.
   diagnosticsRate?: RateWindow;
+  // Bible text proxy passage counters (fixed windows, like the other rates).
+  bibleHourRate?: RateWindow;
+  bibleDayRate?: RateWindow;
 }
 
 // Metadata for one uploaded diagnostic bundle (frontend log + backend log +
@@ -300,6 +313,12 @@ const OAUTH_TOKEN_REQUESTS_PER_MINUTE = 20;
 const MAX_OAUTH_RATE_SOURCES = 2_000;
 const MAX_DIAGNOSTICS_BUNDLE_BYTES = 2 * 1024 * 1024;
 const DIAGNOSTICS_UPLOADS_PER_HOUR = 6;
+// Bible text proxy defaults (overridable with BIBLE_* variables, see Env).
+const BIBLE_INSTALLATION_HOURLY_DEFAULT = 600;
+const BIBLE_INSTALLATION_DAILY_DEFAULT = 5_000;
+const BIBLE_GLOBAL_DAILY_DEFAULT = 20_000;
+const BIBLE_GLOBAL_KEY = 'bible:global-day';
+const REGISTRY_NAME = 'stagepilot-private-beta-v1';
 // Operator-requested hard ceiling, enforced here in code -- NOT by an R2
 // bucket lifecycle rule or any Cloudflare-side storage quota. Neither R2
 // nor the Cloudflare REST API offers a real "stop accepting writes" quota;
@@ -1117,6 +1136,19 @@ export class Registry {
         await this.takeInstallationRate(installation, 'mutation');
         return await this.withProviderLane('recovery', () => this.reactivate(installation));
       }
+      // Bible text proxy gates, called by the Worker's own passage handler (the
+      // public entry point refuses these paths): authenticate the installation
+      // and take its passage count, or take one slot of the service-wide daily
+      // cap for an upstream call. The slow upstream work itself runs outside
+      // this Durable Object (src/bible.ts).
+      const bibleGate = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/bible\/(reserve|slot)$/);
+      if (request.method === 'POST' && bibleGate) {
+        const installation = await this.state.storage.get<Installation>(`installation:${bibleGate[1]}`);
+        if (!installation || !(await this.authenticateInstallation(request, installation))) {
+          return reply({ error: 'unauthorized' }, 401);
+        }
+        return bibleGate[2] === 'reserve' ? await this.bibleReserve(installation) : await this.bibleSlot();
+      }
       const route = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/(status|provision|disable|revoke|reconcile)$/);
       if (!route) return reply({ error: 'not found' }, 404);
       const installation = await this.state.storage.get<Installation>(`installation:${route[1]}`);
@@ -1814,6 +1846,50 @@ export class Registry {
     }
     installation[field] = { ...window, count: window.count + 1 };
     await this.save(installation);
+  }
+
+  // Fixed-window counter shared by the Bible limits: the window the request
+  // falls in, restarted once it is older than `seconds`.
+  private bibleWindow(current: RateWindow | undefined, now: number, seconds: number): RateWindow {
+    return !current || now - current.startedAt >= seconds ? { startedAt: now, count: 0 } : current;
+  }
+
+  private bibleLimited(scope: string, window: RateWindow, seconds: number, now: number): Response {
+    const retryAfter = Math.max(1, seconds - (now - window.startedAt));
+    return reply({
+      error: 'rate_limited',
+      scope,
+      message: 'the Bible text limit was reached; try again later',
+      retryAfterSeconds: retryAfter,
+    }, 429, retryAfter);
+  }
+
+  // One passage request by an authenticated installation (cached or not).
+  private async bibleReserve(installation: Installation): Promise<Response> {
+    const now = Math.floor(Date.now() / 1000);
+    const hour = this.bibleWindow(installation.bibleHourRate, now, 3600);
+    const day = this.bibleWindow(installation.bibleDayRate, now, 86_400);
+    if (hour.count >= positiveInteger(this.env.BIBLE_INSTALLATION_HOURLY_LIMIT, BIBLE_INSTALLATION_HOURLY_DEFAULT)) {
+      return this.bibleLimited('installation_hourly', hour, 3600, now);
+    }
+    if (day.count >= positiveInteger(this.env.BIBLE_INSTALLATION_DAILY_LIMIT, BIBLE_INSTALLATION_DAILY_DEFAULT)) {
+      return this.bibleLimited('installation_daily', day, 86_400, now);
+    }
+    installation.bibleHourRate = { ...hour, count: hour.count + 1 };
+    installation.bibleDayRate = { ...day, count: day.count + 1 };
+    await this.save(installation);
+    return reply({ ok: true });
+  }
+
+  // One upstream (uncached) passage fetch, against the service-wide daily cap.
+  private async bibleSlot(): Promise<Response> {
+    const now = Math.floor(Date.now() / 1000);
+    const window = this.bibleWindow(await this.state.storage.get<RateWindow>(BIBLE_GLOBAL_KEY), now, 86_400);
+    if (window.count >= positiveInteger(this.env.BIBLE_GLOBAL_DAILY_CAP, BIBLE_GLOBAL_DAILY_DEFAULT)) {
+      return this.bibleLimited('global_daily', window, 86_400, now);
+    }
+    await this.state.storage.put(BIBLE_GLOBAL_KEY, { ...window, count: window.count + 1 });
+    return reply({ ok: true });
   }
 
   private async provision(request: Request, installation: Installation): Promise<Response> {
@@ -2784,7 +2860,16 @@ export default {
     if (request.method === 'GET' && url.pathname.startsWith('/admin/') && env.ASSETS) {
       return await env.ASSETS.fetch(request);
     }
-    const id = env.REGISTRY.idFromName('stagepilot-private-beta-v1');
-    return env.REGISTRY.get(id).fetch(request);
+    const registry = env.REGISTRY.get(env.REGISTRY.idFromName(REGISTRY_NAME));
+    // Bible text proxy. The passage route runs here so its upstream calls stay
+    // outside the Registry's serialised section; the two gate paths it uses
+    // inside the Registry are never reachable from the network.
+    const bible = url.pathname.match(/^\/v1\/installations\/([a-f0-9]{8}|[a-f0-9]{16}|[a-f0-9]{32})\/bible\/([a-z]+)$/);
+    if (bible) {
+      if (bible[2] !== 'passage') return reply({ error: 'not found' }, 404);
+      const cache = (globalThis as { caches?: { default?: BibleCache } }).caches?.default;
+      return await handleBiblePassage(request, env, bible[1], registry, cache);
+    }
+    return registry.fetch(request);
   },
 };

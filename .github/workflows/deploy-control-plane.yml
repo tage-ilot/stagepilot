@@ -100,6 +100,10 @@ jobs:
             --var ENROLLMENT_EXEMPT_SOURCES:${{ vars.ENROLLMENT_EXEMPT_SOURCES }}
             --var TESTING_SOURCES:${{ secrets.TESTING_SOURCES }}
             --var ENROLLMENT_WINDOW_SECONDS:${{ vars.ENROLLMENT_WINDOW_SECONDS }}
+          # The Bible text proxy keys (API_BIBLE_API_KEY, YOUVERSION_API_KEY,
+          # ESV_API_KEY) are set once with `wrangler secret put` and survive
+          # deploys; they are deliberately not listed here and never read or
+          # printed by this workflow (docs/remote-control-plane.md).
           secrets: |
             CLOUDFLARE_API_TOKEN
             ADMIN_API_TOKEN
