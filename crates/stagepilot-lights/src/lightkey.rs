@@ -284,6 +284,29 @@ pub struct LightkeySimplifyResponse {
     pub messages_after: u32,
 }
 
+/// `LightkeyCleanGlitchesResponse`: what "Clean up glitches" found in a song (`applied = false`)
+/// or did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LightkeyCleanGlitchesResponse {
+    /// The song has captured rows, and (for `apply`) something could be cleaned.
+    pub accepted: bool,
+    /// The repaired rows were saved (always false for a preview).
+    pub applied: bool,
+    pub message: String,
+    /// Brief flashes found, and the lights (fixtures) they are on.
+    pub flashes: u32,
+    pub lights: u32,
+    /// Brief flashes left after the repair (0 for a preview).
+    pub flashes_after: u32,
+    pub rows_before: u32,
+    pub rows_after: u32,
+    pub messages_before: u32,
+    pub messages_after: u32,
+    /// Loops in the song; the repair never changes them.
+    pub loops: u32,
+}
+
 // ------------------------------------------------------------------ pure logic
 
 /// `effective_api_url`: the saved (chosen) address; in Automatic (blank) the computer the search

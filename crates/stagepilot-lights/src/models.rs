@@ -136,6 +136,12 @@ pub struct LightingCueMapRequest {
     #[serde(default)]
     #[ts(optional)]
     pub remove_effect_ids: Option<Vec<String>>,
+    /// The song's "captured looks were changed by hand" flag after this save. Left out = it is
+    /// worked out from the rows (a captured row that is gone sets it). An Undo that puts back
+    /// the rows exactly as they were sends the flag they had.
+    #[serde(default)]
+    #[ts(optional)]
+    pub captured_edited: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

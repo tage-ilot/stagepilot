@@ -21,6 +21,7 @@ pub mod lightkey_looks;
 pub mod lightkey_operator;
 pub mod lightkey_recording;
 pub mod lightkey_relay;
+pub mod lightkey_repair;
 pub mod lightkey_replay;
 pub mod lightkey_smooth;
 pub mod lightkey_start;

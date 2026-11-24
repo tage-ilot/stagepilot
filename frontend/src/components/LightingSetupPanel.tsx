@@ -8,6 +8,7 @@ import type {
   LightingEffect,
   LightingMethod,
   LightingPad,
+  LightkeyCleanGlitchesResponse,
   LightkeyStatus,
   OscArgument,
   OscLightingCue,
@@ -26,6 +27,7 @@ import {
   type ClearCuesRequest,
 } from "./lightingCueConfirmations";
 import { ClearCuesDialog } from "./ClearCuesDialog";
+import { CleanGlitchesDialog, type CleanGlitchesRequest } from "./CleanGlitchesDialog";
 import { serviceCueText } from "./lightingCueCount";
 import { SetupPanelHeader } from "./SetupPanelHeader";
 import { Button } from "./ui/Button";
@@ -107,6 +109,8 @@ export interface LightingPanelActions {
   onUndoCapture: (songKey: string, cueId: string) => Promise<boolean>;
   /** Removes the selected song's loudness envelope (nothing else). */
   onClearLoudness?: (songKey: string) => Promise<boolean>;
+  /** Clean up glitches: without `apply` it counts the brief flashes in the song's rows; with it the rows are repaired and saved. Null when nothing could be asked. */
+  onCleanGlitches?: (songKey: string, apply: boolean) => Promise<LightkeyCleanGlitchesResponse | null>;
   onSavePads: (pads: LightingPad[]) => Promise<boolean>;
   /** The backend's save count of the settings, every time the Lightkey strip reads its status. */
   onSettingsRevision: (revision: number | undefined) => void;
@@ -135,6 +139,7 @@ export function LightingSetupPanel({
   onPressPad,
   onUndoCapture,
   onClearLoudness,
+  onCleanGlitches,
   onSavePads,
   onSettingsRevision,
   library,
@@ -153,7 +158,7 @@ export function LightingSetupPanel({
   onSaveSettings: (settings: LightsSettingsInput) => void;
   onTest: (note: number, velocity: number) => void;
   onTestOsc?: (address: string, args: OscArgument[]) => void;
-  onSaveCues: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod, options?: { removeEffectIds?: string[] }) => void;
+  onSaveCues: (song: Song, cues: LightingCue[] | OscLightingCue[], method: LightingMethod, options?: { removeEffectIds?: string[]; capturedEdited?: boolean }) => void;
   onClearAllCues?: (songs: Song[], method: LightingMethod) => void;
   /** The optional Playback library (read-only): key, BPM, length and arrangement on each song chip. */
   library?: PlaybackLibraryController;
@@ -368,7 +373,7 @@ export function LightingSetupPanel({
   };
 
   // One step of undo for merge, simplify and remove-fixture. Any other edit forgets it.
-  const [undo, setUndo] = useState<{ cues: OscLightingCue[]; text: string } | null>(null);
+  const [undo, setUndo] = useState<{ cues: OscLightingCue[]; text: string; /** The song's "changed by hand" flag to put back with the rows. */ capturedEdited?: boolean } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -381,7 +386,7 @@ export function LightingSetupPanel({
     });
   }, [oscCues]);
 
-  const persistOscCues = (nextCues: OscLightingCue[], keepUndo = false, options?: { removeEffectIds?: string[] }) => {
+  const persistOscCues = (nextCues: OscLightingCue[], keepUndo = false, options?: { removeEffectIds?: string[]; capturedEdited?: boolean }) => {
     if (!keepUndo) setUndo(null);
     const sortedCues = [...nextCues].sort((left, right) => left.at_seconds - right.at_seconds);
     setOscCues(sortedCues);
@@ -454,8 +459,39 @@ export function LightingSetupPanel({
   };
   const undoLast = () => {
     if (!undo) return;
-    persistOscCues(undo.cues, true);
+    persistOscCues(undo.cues, true, undo.capturedEdited === undefined ? undefined : { capturedEdited: undo.capturedEdited });
     setUndo(null);
+  };
+  // Clean up glitches: ask what is in the saved song, then (after the person says yes) repair it. The one step of Undo puts the old rows back.
+  const [pendingClean, setPendingClean] = useState<CleanGlitchesRequest | null>(null);
+  const [cleanBusy, setCleanBusy] = useState<"looking" | "cleaning" | null>(null);
+  const cleanBusyRef = useRef(false);
+  const runClean = async (songKeyToClean: string) => {
+    if (!onCleanGlitches || cleanBusyRef.current) return;
+    cleanBusyRef.current = true;
+    setCleanBusy("cleaning");
+    const before = oscCues;
+    const edited = Boolean(savedCueMap?.captured_edited);
+    try {
+      const response = await onCleanGlitches(songKeyToClean, true);
+      if (response?.applied) setUndo({ cues: before, text: "Undo clean-up", capturedEdited: edited });
+    } finally {
+      cleanBusyRef.current = false;
+      setCleanBusy(null);
+    }
+  };
+  const askCleanGlitches = async () => {
+    if (!onCleanGlitches || !selectedSong || cleanBusyRef.current) return;
+    const key = songKey(selectedSong);
+    cleanBusyRef.current = true;
+    setCleanBusy("looking");
+    try {
+      const found = await onCleanGlitches(key, false);
+      if (found?.accepted && found.flashes > 0) setPendingClean({ subject: selectedSong.title, flashes: found.flashes, lights: found.lights, onClean: () => void runClean(key) });
+    } finally {
+      cleanBusyRef.current = false;
+      setCleanBusy(null);
+    }
   };
   // The follow-along re-renders this panel ten times a second; anything that walks every row is kept until the rows change.
   const looks = useMemo(() => ({
@@ -819,6 +855,11 @@ export function LightingSetupPanel({
           >
             {selectedIds.length > 1 ? `Merge ${selectedIds.length} rows` : "Merge rows"}
           </Button>
+          {onCleanGlitches && looks.count > 0 && (
+            <ReasonButton className={CONTROL_34} disabled={pendingOperation !== null || cleanBusy !== null} onClick={() => void askCleanGlitches()} reason={!selectedSong ? "Choose a song first." : undefined} variant="tinted">
+              {cleanBusy === "looking" ? "Looking…" : cleanBusy === "cleaning" ? "Cleaning…" : "Clean up glitches\u2026"}
+            </ReasonButton>
+          )}
           {undo && <Button className={CONTROL_34} onClick={undoLast} variant="secondary">{undo.text}</Button>}
         </>
       )}
@@ -832,6 +873,7 @@ export function LightingSetupPanel({
       below={(
         <>
           <ClearCuesDialog onClose={() => setPendingClear(null)} request={pendingClear} />
+          <CleanGlitchesDialog onClose={() => setPendingClean(null)} request={pendingClean} />
           <Dialog
             actions={effectToRemove && (
               <>

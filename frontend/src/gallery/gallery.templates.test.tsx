@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Frame } from "./Gallery";
@@ -23,7 +23,7 @@ describe("the section gallery: configuration pages", () => {
     expect(ids("page-services")).toEqual(["signed-out", "signed-in", "expired", "manual-held", "busy", "no-types", "error"]);
     expect(ids("page-backend")).toEqual(["clean", "advanced-open", "error", "disconnected", "failure"]);
     expect(ids("page-playback")).toEqual(["api-open", "api-closed", "midi", "midi-held"]);
-    expect(ids("page-lighting")).toEqual(["osc", "midi", "midi-held", "midi-busy", "timeline-closed"]);
+    expect(ids("page-lighting")).toEqual(["osc", "midi", "midi-held", "midi-busy", "clean-button", "clean-ask", "clean-done", "timeline-closed"]);
     expect(ids("page-remote")).toEqual(["connected", "persisted-open", "persisted-closed", "bootstrap", "confirm-disable", "confirm-regenerate", "error", "read-only"]);
     expect(ids("template-settings")).toEqual(["clean", "title", "held", "error", "busy", "columns-standard", "columns-inset", "columns-pair", "columns-triple", "columns-lead", "columns-single", "boxed"]);
     expect(ids("template-actions")).toEqual(["idle", "busy", "disabled", "primary"]);
@@ -103,5 +103,15 @@ describe("the section gallery: configuration pages", () => {
     expect(button(midi, /Song lighting timeline/)).toHaveAttribute("aria-expanded", "true");
     expect(sample("page-playback-midi-held").querySelector("[data-columns=triple]")).toBeInTheDocument();
     await waitFor(() => expect(sample("page-lighting-midi-held").querySelectorAll("[data-held-marker]").length).toBeGreaterThanOrEqual(1), WAIT);
+  }, 60000);
+
+  it("draws Clean up glitches: the button, the question before it changes anything, and the result with one Undo", async () => {
+    render(<Frame />);
+    expect(button(sample("page-lighting-clean-button"), /^Clean up glitches/)).toBeTruthy();
+    expect(within(sample("page-lighting-clean-button")).queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(within(sample("page-lighting-clean-ask")).getByRole("dialog", { name: "Clean up glitches?" })).toHaveTextContent("Found 312 flashes on 16 lights in Holy Forever. Remove them? You can Undo."), WAIT);
+    await waitFor(() => expect(button(sample("page-lighting-clean-done"), /^Undo clean-up/)).toBeTruthy(), WAIT);
+    expect(sample("page-lighting-clean-done")).toHaveTextContent("Removed 312 flashes; 8,420 rows became 6,100.");
+    expect(within(sample("page-lighting-clean-done")).queryByRole("dialog")).toBeNull();
   }, 60000);
 });

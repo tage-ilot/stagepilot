@@ -17,4 +17,10 @@ revision?: number,
  * effects, so removing one is this explicit list. Left out = every effect stays; an
  * unknown id is ignored. Only an OSC save removes effects.
  */
-remove_effect_ids?: Array<string>, };
+remove_effect_ids?: Array<string>, 
+/**
+ * The song's "captured looks were changed by hand" flag after this save. Left out = it is
+ * worked out from the rows (a captured row that is gone sets it). An Undo that puts back
+ * the rows exactly as they were sends the flag they had.
+ */
+captured_edited?: boolean, };

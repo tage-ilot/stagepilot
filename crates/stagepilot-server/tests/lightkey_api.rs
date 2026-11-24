@@ -1214,3 +1214,178 @@ async fn the_status_carries_the_helper_health_once_connected() {
     assert_eq!(helper["map"], 7);
     assert_eq!(helper["watch_state"], "permission_denied");
 }
+
+// ------------------------------------------------------------------------- Clean up glitches
+
+/// A song with 300 captured dimmer rows 25 ms apart on a ramp, three one-frame flashes, a loop
+/// and a manual row.
+async fn seed_glitchy_song(rt: &Runtime) -> stagepilot_core::config::SongLightingCueMap {
+    use stagepilot_core::config::{
+        EffectMember, EffectStep, LightingEffect, OscCueSource, SongLightingCueMap,
+    };
+    let mut manual = captured_row(1.0, "/fixture/P2/overrides/dimmer", 0.4);
+    manual.source = OscCueSource::Manual;
+    let mut osc_cues = vec![manual];
+    for k in 0..300 {
+        let ramp = 0.2 + 0.002 * k as f64;
+        let value = if [60, 140, 220].contains(&k) {
+            0.9
+        } else {
+            ramp
+        };
+        osc_cues.push(captured_row(
+            k as f64 * 0.025,
+            "/fixture/P1/overrides/dimmer",
+            (value * 10_000.0_f64).round() / 10_000.0,
+        ));
+    }
+    let effect = LightingEffect {
+        id: uuid::Uuid::new_v4(),
+        label: "chase".into(),
+        start_seconds: 2.0,
+        end_seconds: 7.0,
+        period_seconds: 1.0,
+        members: vec![EffectMember {
+            fixture: "L1".into(),
+            offset_seconds: 0.0,
+        }],
+        cycle: vec![
+            EffectStep {
+                at_seconds: 0.0,
+                property: "dimmer".into(),
+                value: vec![0.1],
+                fade_seconds: 0.5,
+            },
+            EffectStep {
+                at_seconds: 0.5,
+                property: "dimmer".into(),
+                value: vec![0.9],
+                fade_seconds: 0.5,
+            },
+        ],
+        source: OscCueSource::Captured,
+        edited: false,
+    };
+    let map = SongLightingCueMap {
+        song_key: "song-1".into(),
+        song_title: "Holy Forever".into(),
+        cues: vec![],
+        osc_cues,
+        loudness: None,
+        captured_edited: false,
+        capture: None,
+        effects: vec![effect],
+    };
+    let mut lights = osc_lights();
+    lights.cue_maps.insert("song-1".into(), map.clone());
+    rt.settings_service.persist_lights(lights).unwrap();
+    map
+}
+
+#[tokio::test]
+async fn clean_glitches_counts_then_repairs_and_undo_puts_the_old_song_back() {
+    let (router, rt) = app(osc_lights()).await;
+    let original = seed_glitchy_song(&rt).await;
+    let url = format!("{LK}/clean-glitches");
+    let saved = |s: &Value| s["settings"]["lights"]["cue_maps"]["song-1"].clone();
+    let (_, before) = call(&router, "GET", "/api/v1/settings", None).await;
+    let revision = before["settings"]["lights"]["cue_revisions"]["song-1"].clone();
+
+    // a preview counts and changes nothing
+    let (code, preview) = call(&router, "POST", &url, Some(json!({"song_key": "song-1"}))).await;
+    assert_eq!(code, StatusCode::OK);
+    assert_eq!(preview["accepted"], true);
+    assert_eq!(preview["applied"], false);
+    assert_eq!(preview["flashes"], 3);
+    assert_eq!(preview["lights"], 1);
+    assert_eq!(preview["loops"], 1);
+    let (_, same) = call(&router, "GET", "/api/v1/settings", None).await;
+    assert_eq!(saved(&same), saved(&before));
+
+    // apply saves the repair as a new revision
+    let (_, applied) = call(
+        &router,
+        "POST",
+        &url,
+        Some(json!({"song_key": "song-1", "apply": true})),
+    )
+    .await;
+    assert_eq!(applied["applied"], true, "{applied}");
+    assert_eq!(applied["flashes"], 3);
+    assert_eq!(applied["flashes_after"], 0);
+    assert_eq!(applied["rows_before"], 301);
+    assert!(applied["rows_after"].as_u64().unwrap() < 301, "{applied}");
+    assert_eq!(applied["loops"], 1);
+    let message = applied["message"].as_str().unwrap();
+    assert!(
+        message.starts_with("Removed 3 flashes; 301 rows became "),
+        "{message}"
+    );
+    let (_, after) = call(&router, "GET", "/api/v1/settings", None).await;
+    assert_ne!(
+        after["settings"]["lights"]["cue_revisions"]["song-1"],
+        revision
+    );
+    let repaired = saved(&after);
+    assert_eq!(
+        repaired["effects"],
+        saved(&before)["effects"],
+        "the loop is untouched"
+    );
+    let rows = repaired["osc_cues"].as_array().unwrap();
+    assert_eq!(
+        rows.iter().filter(|r| r["source"] != "captured").count(),
+        1,
+        "the manual row stays"
+    );
+
+    // nothing left to clean
+    let (_, again) = call(
+        &router,
+        "POST",
+        &url,
+        Some(json!({"song_key": "song-1", "apply": true})),
+    )
+    .await;
+    assert_eq!(again["applied"], false);
+
+    // Undo: the app puts the old rows back with the flag they had; the song is byte for byte as it was
+    let (code, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/lights/cue-map",
+        Some(json!({
+            "method": "osc",
+            "song_key": "song-1",
+            "song_title": "Holy Forever",
+            "osc_cues": original.osc_cues,
+            "revision": after["settings"]["lights"]["cue_revisions"]["song-1"],
+            "captured_edited": false,
+        })),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK);
+    let (_, undone) = call(&router, "GET", "/api/v1/settings", None).await;
+    rt.stop().await;
+    assert_eq!(
+        serde_json::to_string(&saved(&undone)).unwrap(),
+        serde_json::to_string(&saved(&before)).unwrap()
+    );
+}
+
+#[tokio::test]
+async fn clean_glitches_validates_and_answers_a_song_without_captured_looks() {
+    let (router, rt) = app(osc_lights()).await;
+    let url = format!("{LK}/clean-glitches");
+    let (code, body) = call(&router, "POST", &url, Some(json!({}))).await;
+    assert_eq!(code, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["detail"][0]["loc"], json!(["body", "song_key"]));
+    let (code, body) = call(&router, "POST", &url, Some(json!({"song_key": "nothing"}))).await;
+    rt.stop().await;
+    assert_eq!(code, StatusCode::OK);
+    assert_eq!(body["accepted"], false);
+    assert_eq!(
+        body["message"],
+        "This song has no captured looks to clean up."
+    );
+}

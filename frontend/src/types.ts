@@ -442,6 +442,8 @@ export interface SongLightingCueMapInput extends SongLightingCueMap {
   revision?: number;
   /** Loops to remove from the song. Editing rows never changes loops; only this list does. */
   remove_effect_ids?: string[];
+  /** The song's "captured looks were changed by hand" flag after this save (an Undo that restores rows sends the flag they had). */
+  captured_edited?: boolean;
 }
 
 export type LightkeyFixtureLink = "waiting" | "live" | "lost";
@@ -643,6 +645,21 @@ export type LightsSettingsInput = Pick<
   LightsSettings,
   "enabled" | "output_name" | "channel" | "pulse_ms"
 > & Partial<Pick<LightsSettings, "method" | "osc_host" | "osc_port">>;
+
+/** `POST /api/v1/lights/lightkey/clean-glitches`: what Clean up glitches found in a song (`applied` false) or did. */
+export interface LightkeyCleanGlitchesResponse {
+  accepted: boolean;
+  applied: boolean;
+  message: string;
+  flashes: number;
+  lights: number;
+  flashes_after: number;
+  rows_before: number;
+  rows_after: number;
+  messages_before: number;
+  messages_after: number;
+  loops: number;
+}
 
 export interface LightsOperationResponse {
   accepted: boolean;
