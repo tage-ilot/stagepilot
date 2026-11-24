@@ -981,6 +981,14 @@ host (not every address), on a random port, and closes it when the session ends.
 (`crates/stagepilot-lights/assets/lightkey-helper/`, refreshed with `node scripts/vendor-lightkey-helper.mjs <tag>`),
 so the installer always matches the StagePilot that offers it.
 
+**When a change is stamped.** From helper 0.6.1 one thread of the helper only reads the sACN socket: it stamps every frame with
+the time it arrived (the kernel's receive time where macOS gives it, otherwise the moment of the read) and queues it. A second
+thread takes the frames out in order, decodes them and builds the OSC, and every event (`/fixtures/log`, the relay packets, the
+cue hooks, a recording) carries the arrival time of its frame, however long the decoding or another request kept the helper busy.
+Before, the time was taken after the frame was read, so a frame that waited its turn was stamped late and the events of one
+address came bunched. If the decoder ever falls so far behind that 4096 frames wait (about 50 s of two universes at 40 Hz), the
+oldest frame is dropped and counted in `/health` as `dmx_dropped` (normally `0`). No other output changed.
+
 **Updating it.** From helper 0.6.0 the helper updates itself: when StagePilot starts (and again whenever the helper was silent and
 answers), if the helper is older than the one StagePilot carries, StagePilot sends it the new `lightkey_api.py` and
 `lightkey_cues.py` (`POST /update`, at most 2 MB, one JSON body with the files, `SHA256SUMS` and its signature) while nothing is
