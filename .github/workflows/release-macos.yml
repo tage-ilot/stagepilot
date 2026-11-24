@@ -74,11 +74,13 @@ jobs:
             runner: macos-15
             platform: darwin-aarch64
             suffix: macOS-silicon-aarch64
+            archive: aarch64
             command: build:mac
           - name: macOS Intel
             runner: macos-15-intel
             platform: darwin-x86_64
             suffix: macOS-intel-x64
+            archive: x64
             command: build:mac
           - name: Windows x64
             runner: windows-latest
@@ -180,8 +182,8 @@ jobs:
           VERSION="${RELEASE_TAG#v}"
           mkdir -p release-assets
           cp desktop/src-tauri/target/release/bundle/dmg/*.dmg "release-assets/StagePilot_${VERSION}_${{ matrix.suffix }}.dmg"
-          cp desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz "release-assets/StagePilot_${VERSION}_${{ matrix.suffix }}.app.tar.gz"
-          cp desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz.sig "release-assets/StagePilot_${VERSION}_${{ matrix.suffix }}.app.tar.gz.sig"
+          cp desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz "release-assets/StagePilot_${VERSION}_${{ matrix.archive }}.app.tar.gz"
+          cp desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz.sig "release-assets/StagePilot_${VERSION}_${{ matrix.archive }}.app.tar.gz.sig"
       - name: Collect Windows release assets
         if: runner.os == 'Windows'
         shell: pwsh

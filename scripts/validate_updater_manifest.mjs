@@ -9,8 +9,8 @@ if (!Date.parse(manifest.pub_date)) throw new Error("Invalid manifest publicatio
 const base = new URL(downloadBase);
 if (base.protocol !== "https:" || base.search || base.hash) throw new Error("Download base must be an HTTPS URL without query or fragment.");
 const filenames = {
-  "darwin-aarch64": `StagePilot_${manifest.version}_macOS-silicon-aarch64.app.tar.gz`,
-  "darwin-x86_64": `StagePilot_${manifest.version}_macOS-intel-x64.app.tar.gz`,
+  "darwin-aarch64": `StagePilot_${manifest.version}_aarch64.app.tar.gz`,
+  "darwin-x86_64": `StagePilot_${manifest.version}_x64.app.tar.gz`,
   "windows-x86_64": `StagePilot_${manifest.version}_Windows-x64-setup.exe`,
 };
 if (Object.keys(manifest.platforms ?? {}).sort().join(",") !== Object.keys(filenames).sort().join(",")) {

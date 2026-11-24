@@ -31,8 +31,8 @@ const rejects = (run, because) => {
 const stage = (version) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "stagepilot-updater-chain-"));
   for (const file of [
-    `StagePilot_${version}_macOS-silicon-aarch64.app.tar.gz`,
-    `StagePilot_${version}_macOS-intel-x64.app.tar.gz`,
+    `StagePilot_${version}_aarch64.app.tar.gz`,
+    `StagePilot_${version}_x64.app.tar.gz`,
     `StagePilot_${version}_Windows-x64-setup.exe`,
   ]) {
     // Placeholder bytes. These are not, and must never be presented as, real
@@ -63,8 +63,8 @@ try {
 
   // 2. Every signature is embedded from its .sig sidecar, not invented.
   for (const [platform, filename] of Object.entries({
-    "darwin-aarch64": `StagePilot_${version}_macOS-silicon-aarch64.app.tar.gz`,
-    "darwin-x86_64": `StagePilot_${version}_macOS-intel-x64.app.tar.gz`,
+    "darwin-aarch64": `StagePilot_${version}_aarch64.app.tar.gz`,
+    "darwin-x86_64": `StagePilot_${version}_x64.app.tar.gz`,
     "windows-x86_64": `StagePilot_${version}_Windows-x64-setup.exe`,
   })) {
     const sidecar = fs.readFileSync(path.join(release, `${filename}.sig`), "utf8").trim();
@@ -83,14 +83,14 @@ try {
   // 4. An empty signature must stop manifest generation.
   const empty = stage(version);
   directories.push(empty);
-  fs.writeFileSync(path.join(empty, `StagePilot_${version}_macOS-silicon-aarch64.app.tar.gz.sig`), "   \n");
+  fs.writeFileSync(path.join(empty, `StagePilot_${version}_aarch64.app.tar.gz.sig`), "   \n");
   rejects(() => generate(empty, `v${version}`, BASE), /Empty updater signature/);
   proven.push("empty_signature_rejected");
 
   // 5. A missing artifact must stop manifest generation.
   const incomplete = stage(version);
   directories.push(incomplete);
-  fs.rmSync(path.join(incomplete, `StagePilot_${version}_macOS-intel-x64.app.tar.gz`));
+  fs.rmSync(path.join(incomplete, `StagePilot_${version}_x64.app.tar.gz`));
   rejects(() => generate(incomplete, `v${version}`, BASE), /Missing updater artifact/);
   proven.push("missing_artifact_rejected");
 

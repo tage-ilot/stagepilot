@@ -758,15 +758,15 @@ describe('private-beta control plane', () => {
     expect(github).toHaveBeenCalledTimes(3);
   });
 
-  it('serves a release whose files are named after the system (2.45.0 on)', async () => {
+  it('serves a release whose Windows installer is named after the system (2.45.0 on)', async () => {
     const version = '1.1.103-beta.1';
     const broker = 'https://stagepilot-beta-control-plane.stagepilot-illuminary-beta.workers.dev/v1/releases';
     const manifest = JSON.stringify({
       version,
       pub_date: '2026-09-15T00:00:00Z',
       platforms: {
-        'darwin-aarch64': { url: `${broker}/v${version}/StagePilot_${version}_macOS-silicon-aarch64.app.tar.gz`, signature: 'a' },
-        'darwin-x86_64': { url: `${broker}/v${version}/StagePilot_${version}_macOS-intel-x64.app.tar.gz`, signature: 'b' },
+        'darwin-aarch64': { url: `${broker}/v${version}/StagePilot_${version}_aarch64.app.tar.gz`, signature: 'a' },
+        'darwin-x86_64': { url: `${broker}/v${version}/StagePilot_${version}_x64.app.tar.gz`, signature: 'b' },
         'windows-x86_64': { url: `${broker}/v${version}/StagePilot_${version}_Windows-x64-setup.exe`, signature: 'c' },
       },
     });

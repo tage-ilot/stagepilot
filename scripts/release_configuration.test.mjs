@@ -246,8 +246,8 @@ test("manifest generator requires artifacts and signatures for every platform", 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "stagepilot-updater-"));
   try {
     for (const file of [
-      "StagePilot_1.2.0_macOS-silicon-aarch64.app.tar.gz",
-      "StagePilot_1.2.0_macOS-intel-x64.app.tar.gz",
+      "StagePilot_1.2.0_aarch64.app.tar.gz",
+      "StagePilot_1.2.0_x64.app.tar.gz",
       "StagePilot_1.2.0_Windows-x64-setup.exe",
     ]) {
       fs.writeFileSync(path.join(directory, file), "artifact");
@@ -307,8 +307,8 @@ test("updater manifest tooling accepts a pre-release version and keeps it under 
   try {
     const version = "2.42.0-rc.1";
     for (const file of [
-      `StagePilot_${version}_macOS-silicon-aarch64.app.tar.gz`,
-      `StagePilot_${version}_macOS-intel-x64.app.tar.gz`,
+      `StagePilot_${version}_aarch64.app.tar.gz`,
+      `StagePilot_${version}_x64.app.tar.gz`,
       `StagePilot_${version}_Windows-x64-setup.exe`,
     ]) {
       fs.writeFileSync(path.join(directory, file), "artifact");
