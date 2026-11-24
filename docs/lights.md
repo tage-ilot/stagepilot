@@ -1093,6 +1093,16 @@ fills it in, and before that the line says `Project not reported yet`.
   next time.` Replay is not affected. A hello sent again with the same map id and name is not a change, so the
   helper's repeated hellos and a project saved without changing its fixtures do nothing.
 
+### Checking a replay against the original (tool, not part of the app)
+
+`scripts/lightkey-fidelity/` judges record and replay by Lightkey's own raw sACN output instead of the helper's log
+(whose timestamps smear): `sniff.py` records the sACN frames on the Lighting computer (listen only), and `compare.py`
+decodes the original run and the replay (or a saved song's grid, from `examples/dump_song.rs`) with the helper's own
+decoder, lines them up by one constant offset and reports, per kind of property, how far apart they are in DMX steps,
+the one-frame flashes of each, and the worst addresses. "Indistinguishable" means at most one DMX step apart for 99%
+of samples, no flashes the original does not have, and an offset under 25 ms. The README in that folder has the
+procedure.
+
 ### Wired network
 
 The fixture relay uses plain unicast UDP on port 21700, so it crosses the wired
