@@ -66,10 +66,14 @@ export const assignEffectLanes = (effects: Pick<LightingEffect, "id" | "start_se
 
 export const effectFixtureCount = (effect: Pick<LightingEffect, "members">): number => effect.members.length;
 
-/** `4.0 s loop x 16 fixtures`. */
-export const effectLabel = (effect: Pick<LightingEffect, "period_seconds" | "members">): string => {
+/** How many small corrections (patches) a loop carries. */
+export const effectPatchCount = (effect: Partial<Pick<LightingEffect, "patches">>): number => effect.patches?.length ?? 0;
+
+/** `4.0 s loop x 16 fixtures`, and `4.0 s loop x 16 fixtures (+12 changes)` when the loop carries corrections. */
+export const effectLabel = (effect: Pick<LightingEffect, "period_seconds" | "members"> & Partial<Pick<LightingEffect, "patches">>): string => {
   const count = effectFixtureCount(effect);
-  return `${effect.period_seconds.toFixed(1)} s loop x ${count} fixture${count === 1 ? "" : "s"}`;
+  const changes = effectPatchCount(effect);
+  return `${effect.period_seconds.toFixed(1)} s loop x ${count} fixture${count === 1 ? "" : "s"}${changes > 0 ? ` (+${changes} change${changes === 1 ? "" : "s"})` : ""}`;
 };
 
 /** The distinct properties an effect drives, in the order its cycle names them. */

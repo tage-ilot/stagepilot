@@ -1,7 +1,10 @@
 import type { LightingEffect } from "../types";
 import { formatElapsed } from "./lightingOsc";
-import { effectCycleSamples, effectLabel, effectProperties, sparklinePoints } from "./lightingSmooth";
+import { effectCycleSamples, effectLabel, effectPatchCount, effectProperties, sparklinePoints } from "./lightingSmooth";
 import { Button } from "./ui/Button";
+
+/** The most changes listed under a loop (a long chase can carry hundreds; the rest are counted). */
+const MAX_CHANGES_LISTED = 200;
 
 const SPARK_W = 168;
 const SPARK_H = 34;
@@ -20,6 +23,31 @@ function CycleSparkline({ effect, property }: { effect: LightingEffect; property
       </svg>
       <figcaption className="text-type-body-sm text-ink-muted">{property}</figcaption>
     </figure>
+  );
+}
+
+/**
+ * The small corrections a loop carries (a cycle that is brighter, a pulse that is dropped once, a fixture that joins late), one
+ * line each under the loop like its own steps: the fixture and property, when it plays and for how long, and how many steps it has.
+ */
+function EffectChanges({ effect }: { effect: LightingEffect }) {
+  const patches = [...(effect.patches ?? [])].sort((a, b) => a.from_seconds - b.from_seconds || a.fixture.localeCompare(b.fixture));
+  if (!patches.length) return null;
+  const listed = patches.slice(0, MAX_CHANGES_LISTED);
+  const count = effectPatchCount(effect);
+  return (
+    <div>
+      <h4 className="text-type-body-sm font-semibold text-ink">Changes on top of the loop ({count})</h4>
+      <ul aria-label="Loop changes" className="mt-1 max-h-28 overflow-y-auto overscroll-contain text-type-body-sm tabular-nums text-ink-body" data-testid="effect-changes">
+        {listed.map((patch, index) => (
+          <li data-testid="effect-change" key={`${patch.fixture}-${patch.property}-${patch.from_seconds}-${index}`}>
+            {patch.fixture} {patch.property}, {formatElapsed(patch.from_seconds)} to {formatElapsed(patch.to_seconds)}
+            <span className="text-ink-muted"> ({patch.steps.length} step{patch.steps.length === 1 ? "" : "s"})</span>
+          </li>
+        ))}
+        {patches.length > listed.length && <li className="text-ink-muted">and {patches.length - listed.length} more</li>}
+      </ul>
+    </div>
   );
 }
 
@@ -62,6 +90,7 @@ export function EffectDetail({ effect, disabled = false, onRemove, className = "
           ))}
         </ul>
       </div>
+      <EffectChanges effect={effect} />
       <p className="text-type-body-sm text-ink-muted">A loop is played as one item. It is not changed by editing the rows; to get a different one, remove it and record the song again.</p>
       {onRemove && (
         <div>

@@ -411,13 +411,15 @@ export function LookRow({
  * One loop of the song: a single line (closed) with what it is and when it plays, and Show / Hide for the details. It has no
  * checkbox and no fields: loops are never merged, never edited by the rows, and removed only after a question.
  */
-export function EffectRow({ effect, disabled, highlight = false, onRemove }: {
+export function EffectRow({ effect, disabled, highlight = false, startOpen = false, onRemove }: {
   effect: LightingEffect;
   disabled: boolean;
   highlight?: boolean;
+  /** Drawn with its details showing (the gallery's picture of a loop with changes). */
+  startOpen?: boolean;
   onRemove: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const text = effectLabel(effect);
   const from = formatElapsed(effect.start_seconds);
   return (

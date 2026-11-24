@@ -62,6 +62,12 @@ describe("effect band geometry and lanes", () => {
     expect(effectLabel(effect("a", 0, 10, 16))).toBe("4.0 s loop x 16 fixtures");
     expect(effectLabel(effect("a", 0, 10, 1, 7.95))).toBe("8.0 s loop x 1 fixture");
   });
+  it("adds how many changes a loop carries when it carries any", () => {
+    const patch = { fixture: "P1", property: "dimmer", from_seconds: 1, to_seconds: 2, steps: [{ at_seconds: 0, value: [1] }] };
+    expect(effectLabel({ ...effect("a", 0, 10, 16), patches: [patch] })).toBe("4.0 s loop x 16 fixtures (+1 change)");
+    expect(effectLabel({ ...effect("a", 0, 10, 16), patches: [patch, patch, patch] })).toBe("4.0 s loop x 16 fixtures (+3 changes)");
+    expect(effectLabel({ ...effect("a", 0, 10, 16), patches: [] })).toBe("4.0 s loop x 16 fixtures");
+  });
 });
 
 describe("one cycle of a loop", () => {

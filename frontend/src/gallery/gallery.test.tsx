@@ -24,7 +24,7 @@ describe("the section gallery page", () => {
 
   it("shows every state the review asked for, for Lighting", () => {
     render(<Frame />);
-    expect(ids("lighting")).toEqual(["ready", "one-fixture", "dmx-waiting", "dmx-lost", "searching", "found-one", "found-many", "address-list", "not-found", "not-connected", "host-error", "held", "closed", "update-by-hand", "update-by-itself", "replay-off", "timeline-waveform", "timeline-loudness", "off"]);
+    expect(ids("lighting")).toEqual(["ready", "one-fixture", "dmx-waiting", "dmx-lost", "searching", "found-one", "found-many", "address-list", "not-found", "not-connected", "host-error", "held", "closed", "update-by-hand", "update-by-itself", "replay-off", "timeline-waveform", "timeline-loudness", "timeline-loop-changes", "off"]);
   });
 
   it("shows the two Lighting pills in every state: sACN, then DMX, always both", async () => {
