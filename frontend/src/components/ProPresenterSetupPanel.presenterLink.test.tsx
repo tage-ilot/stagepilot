@@ -70,11 +70,14 @@ describe("the Presenter Link section in the ProPresenter panel", () => {
     ["no Link controller (a page that does not know it)", { link: undefined }],
     ["not installed", { link: linkController(helperStatus("not_installed")) }],
     ["not answering", { link: linkController(helperStatus("not_answering")) }],
-  ])("is not drawn, and says nothing about it, when the Link is %s", (_name, over) => {
+  ])("is drawn locked when the Link is %s", (name, over) => {
     panel(over);
-    expect(screen.queryByTestId("presenter-link-section")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Import songs to ProPresenter" })).toBeNull();
-    expect(screen.queryByText("Presenter Link", { selector: "h3" })).toBeNull();
+    if (name.startsWith("no Link controller")) {
+      expect(screen.queryByTestId("presenter-link-section")).toBeNull();
+    } else {
+      expect(screen.getByTestId("presenter-link-section")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Import songs to ProPresenter" })).toBeDisabled();
+    }
     expect(api.getProPresenterPlaylists).not.toHaveBeenCalled();
   });
 

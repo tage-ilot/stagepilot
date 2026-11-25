@@ -16,6 +16,7 @@
 ### Changed
 
 - **The Presenter Link and Song order sections look like the Song lighting timeline.** The same card in their own accent colour (a rail and a soft wash, the title in the accent with the status line under it, a rule above the open part), collapsed and open.
+- **The Presenter Link section is always drawn.** With no ProPresenter connection (or a Presenter Link that is not ready) it shows greyed, nothing inside it can be pressed, and the Import button says "Presenter Link not ready". It unlocks by itself when the Link is ready.
 
 - **The installer file names in a release now say which system they are for.** `StagePilot_<version>_macOS-silicon-aarch64.dmg`, `StagePilot_<version>_macOS-intel-x64.dmg` and `StagePilot_<version>_Windows-x64-setup.exe`. The update packages (`.app.tar.gz` and `.sig`) keep their names. Updates from an installed app are unaffected (they follow `latest.json`); older releases keep their old names.
 

@@ -60,8 +60,9 @@ function PresenterLinkBody({ library, link, plan, playing }: { library?: Playbac
   const locked = running || working;
   const forceOpen = locked || ((phase !== "choose" || problem !== null) && foldedAt !== key);
 
-  // The section never outlives the state that allowed it, unless it is running a job (it stays to say how it ended).
-  if (!add.linkReady && !running && !finished) return null;
+  // The section is always drawn. While the Link is not ready (no ProPresenter connection, or no Link) it shows, greyed, what it will
+  // do and nothing in it can be pressed; only its own open/close header works. A job that is running or has ended is never locked.
+  const notReady = !add.linkReady && !running && !finished;
 
   const reason = running ? "Importing: wait here" : finished ? null : add.blockedBy ?? add.stopped;
   const summary = presenterSummary({
@@ -73,9 +74,9 @@ function PresenterLinkBody({ library, link, plan, playing }: { library?: Playbac
     <div data-phase={phase} data-testid="presenter-link-section">
       <p aria-live="polite" className="sr-only" data-testid="add-songs-live" role="status">{add.announcement}</p>
       <OptionalBand defaultOpen={false} forceOpen={forceOpen} headingId={ids.heading} onOpenChange={(next) => setFoldedAt(next ? null : key)} persistKey={PRESENTER_LINK_OPEN_KEY} summary={summary} summaryTestId="presenter-link-summary" title={PRESENTER_LINK_NAME} tone="presentation">
-        <div className="space-y-4">
+        <fieldset className={`m-0 min-w-0 space-y-4 border-0 p-0${notReady ? " opacity-60" : ""}`} data-locked={notReady || undefined} disabled={notReady}>
           <PlaylistPicker add={add} />
-          {!add.linkReady && <SectionNotice tone="warning"><span data-testid="add-songs-link-gone" title="Nothing was changed.">{`${PRESENTER_LINK_NAME} not ready: nothing changed`}</span></SectionNotice>}
+          {!add.linkReady && !notReady && <SectionNotice tone="warning"><span data-testid="add-songs-link-gone" title="Nothing was changed.">{`${PRESENTER_LINK_NAME} not ready: nothing changed`}</span></SectionNotice>}
           {/* The one line at the top when a song is playing; once the preview has stopped for it, the same words are the reason above the button. */}
           {playing && !running && !finished && reason !== PLAYING_WORDS && <SectionNotice tone="info"><span data-testid="add-songs-playing">{PLAYING_WORDS}</span></SectionNotice>}
           {add.problem && <SectionNotice tone="danger"><span data-code={add.problem.code ?? undefined} data-testid="add-songs-problem">{add.problem.message}</span></SectionNotice>}
@@ -98,7 +99,7 @@ function PresenterLinkBody({ library, link, plan, playing }: { library?: Playbac
               {report && canTryAgain(report.outcome) && <ActionRow><ActionButton label="Try again" onClick={add.tryAgain} tone="presentation" /></ActionRow>}
             </>
           )}
-        </div>
+        </fieldset>
       </OptionalBand>
     </div>
   );

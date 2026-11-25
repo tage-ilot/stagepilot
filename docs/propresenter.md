@@ -296,8 +296,9 @@ the Link shows no warning anywhere, and the Link never changes the header's Read
 
 ### Presenter Link (Configuration, Presentation, after the settings and before the Save bar)
 
-The section is drawn **only while the Presenter Link is Ready** (this computer, or the helper). Otherwise nothing is drawn and nothing is
-said: the feature is optional. It is built from the section templates (a settings group for the options, the notices, the action row) and
+The section is **always drawn**. While the Presenter Link is not Ready (no ProPresenter connection, or no Link on this computer or the
+helper) it is greyed, nothing inside it can be pressed (the Import button reads "Presenter Link not ready") and nothing is asked of
+ProPresenter; it unlocks by itself when the Link is Ready. It is built from the section templates (a settings group for the options, the notices, the action row) and
 has no window; everything, including progress and the result, happens in place, under the button.
 
 The section **starts folded**, and its header says whether the songs can be imported (`4 songs ready to import`, `3 of 4 songs can be imported`, `No songs can be imported`, `Not while a song plays`, `No songs in the plan`); a preview, an import, its result or a problem opens it by itself, and it stays open until you fold it.

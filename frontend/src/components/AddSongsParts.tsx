@@ -30,7 +30,7 @@ export function PlaylistPicker({ add, title }: { add: AddSongsController; title?
     <>
       <SettingsSection aria-label={title ? undefined : "Where the songs go"} busy={busy} columns="pair" testId="add-songs-where" title={title}>
         <Field label="Playlist">
-          <Select disabled={!playlists} loading={!playlists && !playlistsError} loadingLabel={"Loading playlists\u2026"} onChange={(event) => add.choosePlaylist(event.target.value)} placeholder={"Choose a playlist\u2026"} value={playlistId}>
+          <Select disabled={!playlists} loading={!playlists && !playlistsError && add.linkReady} loadingLabel={"Loading playlists\u2026"} onChange={(event) => add.choosePlaylist(event.target.value)} placeholder={"Choose a playlist\u2026"} value={playlistId}>
             {playlists?.map((candidate) => <option key={candidate.id} value={candidate.id}>{playlistLabel(candidate)}</option>)}
           </Select>
         </Field>

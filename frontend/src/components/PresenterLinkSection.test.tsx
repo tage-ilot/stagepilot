@@ -96,7 +96,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); window.localStorage.clear(); });
 
-describe("when the section is drawn: only while the Presenter Link is ready", () => {
+describe("when the section is drawn: always, and only usable while the Presenter Link is ready", () => {
   it("is there for another computer and for this one, with or without the Playback library", async () => {
     const { unmount } = view();
     expect(screen.getByRole("region", { name: "Presenter Link" })).toBeInTheDocument();
@@ -117,9 +117,14 @@ describe("when the section is drawn: only while the Presenter Link is ready", ()
     ["Link needs the command again", { link: linkController(helperStatus("needs_command")) }],
     ["Link not answering", { link: linkController(helperStatus("not_answering")) }],
     ["Link being checked", { link: linkController(helperStatus("checking")) }],
-  ] as [string, Setup][])("draws nothing, asks nothing and warns about nothing when: %s", (_name, setup) => {
-    const { container } = view(setup);
-    expect(container).toBeEmptyDOMElement();
+  ] as [string, Setup][])("is drawn but locked, asks nothing and warns about nothing when: %s", (_name, setup) => {
+    view(setup);
+    expect(screen.getByRole("region", { name: "Presenter Link" })).toBeInTheDocument();
+    const section = screen.getByTestId("presenter-link-section");
+    expect(section.querySelector("fieldset")).toBeDisabled();
+    expect(addButton()).toBeDisabled();
+    expect(screen.queryByTestId("add-songs-link-gone")).toBeNull();
+    for (const control of section.querySelectorAll("fieldset button, fieldset select, fieldset input")) expect(control).toBeDisabled();
     expect(api.getProPresenterPlaylists).not.toHaveBeenCalled();
     expect(api.lookupAddSongsTitles).not.toHaveBeenCalled();
   });
@@ -129,14 +134,15 @@ describe("when the section is drawn: only while the Presenter Link is ready", ()
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("appears and goes with the Link, with no warning when it goes", async () => {
-    const { again, container } = view({ link: linkController(helperStatus("not_installed")) });
-    expect(container).toBeEmptyDOMElement();
+  it("unlocks with the Link and locks again, with no warning, when it goes", async () => {
+    const { again } = view({ link: linkController(helperStatus("not_installed")) });
+    expect(screen.getByRole("button", ADD)).toBeDisabled();
     again({ link: linkController(helperStatus("ready")) });
     await ready();
-    expect(screen.getByRole("button", ADD)).toBeInTheDocument();
+    expect(screen.getByTestId("presenter-link-section").querySelector("fieldset")).not.toBeDisabled();
     again({ link: linkController(helperStatus("not_answering")) });
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByRole("button", ADD)).toBeDisabled();
+    expect(screen.queryByTestId("add-songs-link-gone")).toBeNull();
   });
 });
 
