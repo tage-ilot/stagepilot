@@ -1,9 +1,9 @@
 import { useId, type ReactNode } from "react";
 
 import { usePersistedFlag } from "../../hooks/usePersistedFlag";
-import { accentClasses, useAccent } from "../ui/accent";
 import { cx } from "../ui/cx";
 import type { DisclosureTone } from "../ui/Disclosure";
+import { featureTone } from "../ui/featureTone";
 
 export interface OptionalBandProps {
   /** The heading inside the button (`Song order`). */
@@ -25,35 +25,36 @@ export interface OptionalBandProps {
   children: ReactNode;
 }
 
-const bandTone: Record<string, string> = { playback: "bg-integration-playback-soft/5", presentation: "bg-integration-presentation-soft/5" };
-
 /**
- * An OPTIONAL section whose header also carries buttons (Playback's Song order and its Scan button). A tinted band: the toggle
- * (chevron, heading, one-line summary) and the actions share the header row; the body folds in 300ms and is `inert` while closed.
+ * An OPTIONAL section whose header also carries buttons (Playback's Song order and its Scan button, the Presenter Link). It wears the
+ * same card as a feature section (the Song lighting timeline): a rail and a soft wash in the connection's colour, the title in the
+ * accent with the one-line summary under it, and the open area divided by a rule. The toggle (chevron, title, summary) and the actions
+ * share the header row; the body folds in 300ms and is `inert` while closed.
  */
 export function OptionalBand({ title, summary, summaryTestId, actions, persistKey, defaultOpen = true, forceOpen = false, onOpenChange, tone = "playback", headingId, children }: OptionalBandProps) {
   const [saved, setSaved] = usePersistedFlag(persistKey, defaultOpen);
   const open = saved || forceOpen;
   const bodyId = useId();
-  const accent = useAccent();
-  const chevron = accent ? accentClasses[accent].text : "text-integration-playback-text";
+  const look = featureTone[tone];
   return (
-    <section aria-labelledby={headingId} className={cx("space-y-2 rounded-ds-xl p-4", bandTone[tone] ?? bandTone.playback)} data-section="band">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2" data-part="band-header">
-        <button aria-controls={bodyId} aria-expanded={open} className="flex min-h-ds-touch-target min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-ds-lg text-left can-hover:bg-surface-900/40" onClick={() => { setSaved(!open); onOpenChange?.(!open); }} type="button">
-          <svg aria-hidden="true" className={cx("size-3.5 shrink-0 transition-transform duration-[140ms] motion-reduce:transition-none", chevron, open && "rotate-90")} data-part="chevron" viewBox="0 0 12 12">
+    <section aria-labelledby={headingId} className={cx("min-w-0 overflow-hidden rounded-ds-lg border border-l-[5px]", look.card, look.rail)} data-section="band" data-state={open ? "open" : "closed"} data-tone={tone}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pr-3" data-part="band-header">
+        <button aria-controls={bodyId} aria-expanded={open} className={cx("flex min-h-[4.25rem] min-w-0 flex-1 touch-manipulation items-center gap-3 py-3.5 pl-4 text-left transition-colors motion-reduce:transition-none", look.hover)} onClick={() => { setSaved(!open); onOpenChange?.(!open); }} type="button">
+          <svg aria-hidden="true" className={cx("size-3.5 shrink-0 transition-transform duration-[140ms] motion-reduce:transition-none", look.sub, open && "rotate-90")} data-part="chevron" viewBox="0 0 12 12">
             <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
           </svg>
-          {/* The heading and the one-line summary, side by side. With buttons beside the toggle the summary is cut off when there is no room; a band with none (the Presenter Link) drops it under the heading on a phone instead, because it is the status. */}
-          <span className={cx("flex min-w-0 flex-1 items-center gap-x-3 gap-y-0.5", !actions && "flex-wrap")}>
-            <h3 className="shrink-0 font-bold text-ink" id={headingId}>{title}</h3>
-            {summary !== undefined && <span className={cx("min-w-0 text-sm text-ink-body", actions ? "truncate" : "sm:truncate")} data-part="summary" data-testid={summaryTestId}>{summary}</span>}
+          {/* The title, and the one-line summary under it (the status). With buttons beside the toggle the summary is cut off when there is no room; a band with none (the Presenter Link) lets it wrap on a phone. */}
+          <span className="flex min-w-0 flex-1 flex-col">
+            <h3 className={cx("font-type-body-md text-lg font-bold", look.title)} data-part="title" id={headingId}>{title}</h3>
+            {summary !== undefined && <span className={cx("mt-0.5 min-w-0 text-sm text-ink-body", actions ? "truncate" : "sm:truncate")} data-part="summary" data-testid={summaryTestId}>{summary}</span>}
           </span>
         </button>
         {actions}
       </div>
       <div className={cx("grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none", open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")} data-part="region" data-state={open ? "open" : "closed"} id={bodyId}>
-        <div className="min-h-0 space-y-2 overflow-hidden" inert={!open}>{children}</div>
+        <div className="min-h-0 overflow-hidden" inert={!open}>
+          <div className={cx("space-y-2 border-t p-4", look.rule)} data-part="body">{children}</div>
+        </div>
       </div>
     </section>
   );

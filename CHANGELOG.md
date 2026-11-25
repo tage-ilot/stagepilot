@@ -15,6 +15,8 @@
 
 ### Changed
 
+- **The Presenter Link and Song order sections look like the Song lighting timeline.** The same card in their own accent colour (a rail and a soft wash, the title in the accent with the status line under it, a rule above the open part), collapsed and open.
+
 - **The installer file names in a release now say which system they are for.** `StagePilot_<version>_macOS-silicon-aarch64.dmg`, `StagePilot_<version>_macOS-intel-x64.dmg` and `StagePilot_<version>_Windows-x64-setup.exe`. The update packages (`.app.tar.gz` and `.sig`) keep their names. Updates from an installed app are unaffected (they follow `latest.json`); older releases keep their old names.
 
 - **A chase that repeats mostly cleanly is now saved as one loop plus small changes,** instead of thousands of rows. A cycle that is brighter, a pulse that is dropped once, a light that joins late or a hit between two cycles no longer stops the loop: the loop plays, and a small change on top (a "patch") corrects the few seconds that differ. A loop is looked for where 60 % of the points repeat (it was 90 %) and kept when the loop and its changes cost at most 60 % of the plain ramps. The Lighting timeline says how many changes a loop has (`4.0 s loop x 16 fixtures (+12 changes)`) and the loop's row lists them. Songs saved before this change are unchanged, and a loop with no changes is saved exactly as before. A StagePilot from before this change plays such a song's loops without their changes.
