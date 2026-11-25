@@ -174,6 +174,10 @@ if (-not $Yes) {
 Invoke-Checked "Update all StagePilot version sources" {
     node scripts/set-release-version.mjs $Version
 }
+# VerseVision is built into StagePilot and follows the newest VerseVision release (docs/versevision.md): re-resolve both Cargo.lock files.
+Invoke-Checked "Take the newest VerseVision release" {
+    node scripts/update-versevision.mjs
+}
 Invoke-Checked "Refresh the frontend lockfile" {
     Invoke-NpmPackage "frontend" @("install", "--package-lock-only", "--ignore-scripts")
 }

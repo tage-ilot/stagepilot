@@ -53,13 +53,14 @@ percent-encoding = "2"
 # Diagnostics upload (rustls with the pure `ring` provider, as the other HTTP clients here).
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-# VerseVision, an in-process add-on served at /versevision/ (docs/versevision.md). One pinned commit of
-# huntrw6/versevision main; a crate there never depends on StagePilot. To bump: change `rev` in all four lines to
-# the new commit, run `cargo update -p versevision-web`, and run the gates.
-versevision-web = { git = "https://github.com/huntrw6/versevision", rev = "081db43e27070746d96ff6b56b2159a7acc1a3a0" }
-versevision-core = { git = "https://github.com/huntrw6/versevision", rev = "081db43e27070746d96ff6b56b2159a7acc1a3a0" }
-versevision-bible = { git = "https://github.com/huntrw6/versevision", rev = "081db43e27070746d96ff6b56b2159a7acc1a3a0" }
-versevision-pp = { git = "https://github.com/huntrw6/versevision", rev = "081db43e27070746d96ff6b56b2159a7acc1a3a0" }
+# VerseVision, an in-process add-on served at /versevision/ (docs/versevision.md). It follows the branch `stable` of
+# huntrw6/versevision, which VerseVision's release workflow moves to each final release; Cargo.lock pins the exact commit a build uses and
+# `node scripts/update-versevision.mjs` (run by scripts/create-release.ps1) re-resolves it, so nobody edits a version or a commit here.
+# A crate there never depends on StagePilot.
+versevision-web = { git = "https://github.com/huntrw6/versevision", branch = "stable" }
+versevision-core = { git = "https://github.com/huntrw6/versevision", branch = "stable" }
+versevision-bible = { git = "https://github.com/huntrw6/versevision", branch = "stable" }
+versevision-pp = { git = "https://github.com/huntrw6/versevision", branch = "stable" }
 # The one theme-picture request VerseVision makes to ProPresenter (plain HTTP; already in the build through versevision-web).
 ureq = { version = "3", default-features = false }
 sha2 = "0.10.9"
