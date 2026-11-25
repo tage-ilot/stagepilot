@@ -228,10 +228,12 @@ describe("the Presenter Link states", { timeout: 200000 }, () => {
     expect(within(sample("try-again")).queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
-  it("on this computer the section is the same, and with the Link not ready nothing is drawn", async () => {
+  it("on this computer the section is the same, and with the Link not ready it is drawn locked", async () => {
     draw();
     await waitFor(() => expect(within(sample("this-computer")).getByLabelText("Section")).toHaveValue("Worship"), WAIT);
-    expect(sample("not-ready").querySelector('[data-testid="presenter-link-section"]')).toBeNull();
-    expect(sample("not-ready").textContent).not.toMatch(/Import songs to ProPresenter/);
+    const locked = sample("not-ready").querySelector('[data-testid="presenter-link-section"]');
+    expect(locked).not.toBeNull();
+    expect(locked?.querySelector("fieldset")).toBeDisabled();
+    expect(within(sample("not-ready")).getByRole("button", { name: "Import songs to ProPresenter" })).toBeDisabled();
   });
 });
