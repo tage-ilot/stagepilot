@@ -27,6 +27,7 @@ describe("VerseVisionButton", () => {
     expect(link).toHaveAttribute("href", `${apiOrigin}/versevision/`);
     expect(link).toHaveAttribute("target", "_blank");
     expect(screen.getByTestId("versevision-button")).toBe(link);
+    expect(link.querySelector('[data-part="logo"]')).toBeInTheDocument();
   });
 
   it("hands the address to the system browser in the desktop app, and does not navigate the dashboard", async () => {

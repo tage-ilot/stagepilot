@@ -1,4 +1,5 @@
 import { apiOrigin } from "../api";
+import logo from "../assets/versevision-logo.svg";
 import { isDesktopShell, openExternalUrl } from "../desktop";
 import { useDashboardAccess } from "../access/AccessContext";
 import { SectionButton } from "./sections";
@@ -18,6 +19,7 @@ export function VerseVisionButton() {
     <SectionButton
       description="Verse slides from your notes"
       href={`${apiOrigin}${VERSEVISION_PATH}`}
+      logo={<img alt="" className="size-12" data-part="logo" height={48} src={logo} width={48} />}
       onOpen={isDesktopShell() ? (href) => void openExternalUrl(href) : undefined}
       testId="versevision-button"
       title="VerseVision"
