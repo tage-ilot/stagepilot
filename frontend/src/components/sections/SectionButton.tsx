@@ -40,7 +40,7 @@ export function SectionButton({ title, description, href, onOpen, logo, classNam
         {logo && <span className="flex size-12 shrink-0 items-center justify-center" data-part="logo-tile">{logo}</span>}
         <span className="flex min-w-0 flex-1 flex-col" data-part="words">
           <span className="font-type-body-md text-lg font-bold text-ink" data-part="title">{title}</span>
-          {description && <>{" "}<span className="mt-0.5 min-w-0 text-sm text-ink-body" data-part="description">{description}</span></>}
+          {description && <>{" "}<span className="mt-0.5 min-w-0 text-balance text-sm text-ink-body" data-part="description">{description}</span></>}
           {" "}
           <span className="sr-only">(opens in a new window)</span>
         </span>
