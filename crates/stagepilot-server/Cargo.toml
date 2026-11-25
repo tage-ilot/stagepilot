@@ -56,10 +56,10 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # VerseVision, an in-process add-on served at /versevision/ (docs/versevision.md). One pinned commit of
 # huntrw6/versevision main; a crate there never depends on StagePilot. To bump: change `rev` in all four lines to
 # the new commit, run `cargo update -p versevision-web`, and run the gates.
-versevision-web = { git = "https://github.com/huntrw6/versevision", rev = "5a92d9ade25a8f38ac96ccb99cdb8c97035ad8dc" }
-versevision-core = { git = "https://github.com/huntrw6/versevision", rev = "5a92d9ade25a8f38ac96ccb99cdb8c97035ad8dc" }
-versevision-bible = { git = "https://github.com/huntrw6/versevision", rev = "5a92d9ade25a8f38ac96ccb99cdb8c97035ad8dc" }
-versevision-pp = { git = "https://github.com/huntrw6/versevision", rev = "5a92d9ade25a8f38ac96ccb99cdb8c97035ad8dc" }
+versevision-web = { git = "https://github.com/huntrw6/versevision", rev = "081db43e27070746d96ff6b56b2159a7acc1a3a0" }
+versevision-core = { git = "https://github.com/huntrw6/versevision", rev = "081db43e27070746d96ff6b56b2159a7acc1a3a0" }
+versevision-bible = { git = "https://github.com/huntrw6/versevision", rev = "081db43e27070746d96ff6b56b2159a7acc1a3a0" }
+versevision-pp = { git = "https://github.com/huntrw6/versevision", rev = "081db43e27070746d96ff6b56b2159a7acc1a3a0" }
 # The one theme-picture request VerseVision makes to ProPresenter (plain HTTP; already in the build through versevision-web).
 ureq = { version = "3", default-features = false }
 sha2 = "0.10.9"
