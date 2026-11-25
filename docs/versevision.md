@@ -59,7 +59,7 @@ there goes to `keys/keys.env` and nowhere else: not to StagePilot's settings, lo
   `Cargo.lock` still pins one exact commit, so a build is reproducible and every tag shows which VerseVision it holds.
   `node scripts/update-versevision.mjs --check` says whether the lockfiles are behind (exit 1) without changing anything. A
   VerseVision release reaches users with the next StagePilot release, not in between. Nothing in the VerseVision repository depends on
-  StagePilot. If a VerseVision release must not ship yet, do not tag it; the release gates here also run on the commit the lockfile holds.
+  StagePilot. A VerseVision release that is not ready to ship should not be tagged; `stable` only ever points at a published release.
 - The code is `crates/stagepilot-server/src/versevision_addon.rs`; its tests are
   `crates/stagepilot-server/tests/versevision_addon.rs`. The page's own Content-Security-Policy is
   kept for `/versevision/` (it has inline script); every other header is StagePilot's.

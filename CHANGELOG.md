@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **StagePilot is always built with the newest VerseVision release.** VerseVision is followed through the `stable` branch of its repository, which its release workflow moves to each final release, and the release script refreshes both lockfiles from it (`node scripts/update-versevision.mjs`). No version or commit has to be edited by hand. This build takes VerseVision 1.0.0: the Rust app with the "Add a Bible key first" card on a computer that has no key and no StagePilot service (inside StagePilot the shared service counts, so nothing changes there).
+
 ## [2.45.0] - 2026-11-24
 
 StagePilot 2.45.0 builds VerseVision into StagePilot, lets the Services calendar review past plans, repairs saved lighting songs and makes the Presenter Link always visible.
