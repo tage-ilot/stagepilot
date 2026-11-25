@@ -403,3 +403,17 @@ test("macOS verifier requires the in-process server and rejects any Python backe
   assert.match(verifier, /A Python backend process was spawned by StagePilot/);
   assert.match(verifier, /Application unexpectedly has the Hardened Runtime flag/);
 });
+
+test("VerseVision follows the newest VerseVision release, and both lockfiles hold the same commit", () => {
+  const manifest = read("crates/stagepilot-server/Cargo.toml");
+  const lines = manifest.split("\n").filter((l) => /^versevision-(web|core|bible|pp) = /.test(l));
+  assert.equal(lines.length, 4);
+  for (const line of lines) {
+    assert.match(line, /branch = "stable"/, line);
+    assert.doesNotMatch(line, /\brev\s*=|\btag\s*=/, line);
+  }
+  assert.match(read("scripts/create-release.ps1"), /node scripts\/update-versevision\.mjs/);
+  const commit = (file) => read(file).match(/name = "versevision-web"\nversion = "[^"]+"\nsource = "git\+[^"#]*huntrw6\/versevision\?branch=stable#([0-9a-f]{40})"/)?.[1];
+  assert.ok(commit("Cargo.lock"), "Cargo.lock pins a VerseVision commit");
+  assert.equal(commit("desktop/src-tauri/Cargo.lock"), commit("Cargo.lock"));
+});

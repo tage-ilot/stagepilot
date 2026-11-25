@@ -51,11 +51,15 @@ there goes to `keys/keys.env` and nowhere else: not to StagePilot's settings, lo
 
 ## For the person who builds StagePilot
 
-- `stagepilot-server` depends on four crates of `github.com/huntrw6/versevision` by one pinned `rev`
-  (see the comment in `crates/stagepilot-server/Cargo.toml`). Nothing in that repository depends on
-  StagePilot. To take a newer VerseVision: change `rev` on all four lines, run
-  `cargo update -p versevision-web` (and the same in `desktop/src-tauri`), run the gates, and note the
-  commit in the pull request. A release tag will replace the `rev` once VerseVision has one.
+- **Which VerseVision a StagePilot release carries:** always the newest VerseVision release. `stagepilot-server` depends on four
+  crates of `github.com/huntrw6/versevision` through the branch `stable` (see the comment in
+  `crates/stagepilot-server/Cargo.toml`). VerseVision's release workflow moves `stable` to each final release tag (a pre-release tag
+  like `v1.2.0-rc1` leaves it alone), and `scripts/create-release.ps1` runs `node scripts/update-versevision.mjs` before it builds,
+  which re-resolves both `Cargo.lock` files (the workspace and `desktop/src-tauri`) to that commit. Nobody edits a version or a commit.
+  `Cargo.lock` still pins one exact commit, so a build is reproducible and every tag shows which VerseVision it holds.
+  `node scripts/update-versevision.mjs --check` says whether the lockfiles are behind (exit 1) without changing anything. A
+  VerseVision release reaches users with the next StagePilot release, not in between. Nothing in the VerseVision repository depends on
+  StagePilot. If a VerseVision release must not ship yet, do not tag it; the release gates here also run on the commit the lockfile holds.
 - The code is `crates/stagepilot-server/src/versevision_addon.rs`; its tests are
   `crates/stagepilot-server/tests/versevision_addon.rs`. The page's own Content-Security-Policy is
   kept for `/versevision/` (it has inline script); every other header is StagePilot's.
