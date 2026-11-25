@@ -7,8 +7,8 @@ import { SectionButton } from "./SectionButton";
 
 describe("SectionButton", () => {
   it("is one wide link in a new window, named by its title and its line", () => {
-    render(<SectionButton description="Verse slides from your notes" href="http://127.0.0.1:8765/versevision/" logo={<svg data-testid="logo" />} testId="b" title="VerseVision" />);
-    const link = screen.getByRole("link", { name: "VerseVision Verse slides from your notes (opens in a new window)" });
+    render(<SectionButton description="Import sermon points and verses" href="http://127.0.0.1:8765/versevision/" logo={<svg data-testid="logo" />} testId="b" title="VerseVision" />);
+    const link = screen.getByRole("link", { name: "VerseVision Import sermon points and verses (opens in a new window)" });
     expect(link).toHaveAttribute("href", "http://127.0.0.1:8765/versevision/");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
@@ -29,15 +29,15 @@ describe("SectionButton", () => {
   it("is a flat card, not the feature card of the band beside it, with the Open pill in the connection's colour", () => {
     const { rerender } = render(<SectionButton href="/x/" title="Page" />);
     const link = screen.getByRole("link");
-    expect(link).toHaveClass("border", "border-integration-presentation-soft/75");
+    expect(link).toHaveClass("border", "border-edge");
     expect(link).not.toHaveClass("border-l-[5px]");
     expect(link.querySelector('[data-part="logo-tile"]')).toBeNull();
     expect(link.querySelector('[data-part="glow"]')).toBeNull();
     expect(link.querySelector('[data-part="open"]')).toHaveClass("text-integration-presentation-text");
     rerender(<Panel tone="playback"><SectionButton href="/x/" logo={<svg />} title="Page" /></Panel>);
     expect(screen.getByRole("link").querySelector('[data-part="open"]')).toHaveClass("text-integration-playback-text");
-    // The outline and the glow behind the logo wear the connection's colour too.
-    expect(screen.getByRole("link")).toHaveClass("border-integration-playback-soft/75");
+    // The glow behind the logo wears the connection's colour too; the outline stays the neutral dark one.
+    expect(screen.getByRole("link")).toHaveClass("border-edge");
     expect(screen.getByRole("link").querySelector('[data-part="glow"]')).toHaveClass("bg-integration-playback-soft", "blur-md");
   });
 

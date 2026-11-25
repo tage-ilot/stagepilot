@@ -17,7 +17,7 @@ export function VerseVisionButton() {
   if (access.mode === "remote") return null;
   return (
     <SectionButton
-      description="Verse slides from your notes"
+      description="Import sermon points and verses"
       href={`${apiOrigin}${VERSEVISION_PATH}`}
       logo={<img alt="" className="size-12" data-part="logo" height={48} src={logo} width={48} />}
       onOpen={isDesktopShell() ? (href) => void openExternalUrl(href) : undefined}

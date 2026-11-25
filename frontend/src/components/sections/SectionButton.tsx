@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
 import { accentClasses, useAccent } from "../ui/accent";
-import type { PanelIdentity } from "../ui/Panel";
 import { cx } from "../ui/cx";
 
 export interface SectionButtonProps {
@@ -19,30 +18,19 @@ export interface SectionButtonProps {
   testId?: string;
 }
 
-// The thin accent outline of the card and the glow behind the logo, in the connection's colour (written out in full so Tailwind sees them).
-const outline: Record<PanelIdentity, string> = {
-  services: "border-integration-services-soft/75 can-hover:border-integration-services-soft",
-  presentation: "border-integration-presentation-soft/75 can-hover:border-integration-presentation-soft",
-  playback: "border-integration-playback-soft/75 can-hover:border-integration-playback-soft",
-  midi: "border-integration-playback-midi-soft/75 can-hover:border-integration-playback-midi-soft",
-  lighting: "border-integration-lighting-soft/75 can-hover:border-integration-lighting-soft",
-  backend: "border-integration-backend-soft/75 can-hover:border-integration-backend-soft",
-};
-
 /**
  * The SECTION BUTTON: a card of its own that opens a page of its own (VerseVision, from the Presentation panel) instead of changing
  * anything on this one. It is deliberately NOT the feature card of the band beside it (the Presenter Link folds open here; this goes
- * somewhere else): a flat dark card with a thin outline in the connection's colour, the page's logo in a tile with a soft glow of that colour behind it, the title in plain ink, one line under it, and an "Open" pill with an
+ * somewhere else): a flat dark card with the neutral dark outline, the page's logo in a tile with a soft glow of that colour behind it, the title in plain ink, one line under it, and an "Open" pill with an
  * up-right arrow in the connection's colour at the right. It is one real link, so it can be opened in a new tab, copied or
  * middle-clicked; it never saves or changes a setting, so it sits with the page's own content and not with the Save bar.
  */
 export function SectionButton({ title, description, href, onOpen, logo, className, testId }: SectionButtonProps) {
-  const identity = useAccent() ?? "presentation";
-  const colour = accentClasses[identity];
+  const colour = accentClasses[useAccent() ?? "presentation"];
   return (
     <div className={cx("min-w-0", className)} data-section="section-button">
       <a
-        className={cx("group flex min-h-[4.25rem] w-full min-w-0 touch-manipulation items-center gap-4 rounded-ds-lg border bg-surface-900/60 py-3 pl-5 pr-4 text-left transition-colors motion-reduce:transition-none can-hover:bg-surface-900", outline[identity])}
+        className="group flex min-h-[4.25rem] w-full min-w-0 touch-manipulation items-center gap-4 rounded-ds-lg border border-edge bg-surface-900/60 py-3 pl-5 pr-4 text-left transition-colors motion-reduce:transition-none can-hover:border-ink-muted/60 can-hover:bg-surface-900"
         data-testid={testId}
         href={href}
         onClick={onOpen ? (event) => { event.preventDefault(); onOpen(href); } : undefined}

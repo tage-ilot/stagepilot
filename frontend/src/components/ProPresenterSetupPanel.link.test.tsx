@@ -142,7 +142,7 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
       // The Presenter Link section sits between the settings and the Save bar: its toggle (heading and header line), then the body (it has no list to tick without a plan).
       "Presenter LinkNo songs in the plan", "Playlist",
       // The VerseVision card comes after the Presenter Link section, still before the Save bar.
-      "VerseVision Verse slides from your notes (opens in a new window)Open",
+      "VerseVision Import sermon points and verses (opens in a new window)Open",
       "Save configuration",
     ]);
   });
