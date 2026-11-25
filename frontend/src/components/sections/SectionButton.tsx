@@ -21,12 +21,12 @@ export interface SectionButtonProps {
 
 // The thin accent outline of the card and the glow behind the logo, in the connection's colour (written out in full so Tailwind sees them).
 const outline: Record<PanelIdentity, string> = {
-  services: "border-integration-services-soft/45 can-hover:border-integration-services-soft/70",
-  presentation: "border-integration-presentation-soft/45 can-hover:border-integration-presentation-soft/70",
-  playback: "border-integration-playback-soft/45 can-hover:border-integration-playback-soft/70",
-  midi: "border-integration-playback-midi-soft/45 can-hover:border-integration-playback-midi-soft/70",
-  lighting: "border-integration-lighting-soft/45 can-hover:border-integration-lighting-soft/70",
-  backend: "border-integration-backend-soft/45 can-hover:border-integration-backend-soft/70",
+  services: "border-integration-services-soft/75 can-hover:border-integration-services-soft",
+  presentation: "border-integration-presentation-soft/75 can-hover:border-integration-presentation-soft",
+  playback: "border-integration-playback-soft/75 can-hover:border-integration-playback-soft",
+  midi: "border-integration-playback-midi-soft/75 can-hover:border-integration-playback-midi-soft",
+  lighting: "border-integration-lighting-soft/75 can-hover:border-integration-lighting-soft",
+  backend: "border-integration-backend-soft/75 can-hover:border-integration-backend-soft",
 };
 
 /**
@@ -42,7 +42,7 @@ export function SectionButton({ title, description, href, onOpen, logo, classNam
   return (
     <div className={cx("min-w-0", className)} data-section="section-button">
       <a
-        className={cx("group flex min-h-[4.25rem] w-full min-w-0 touch-manipulation items-center gap-4 rounded-ds-lg border bg-surface-900/60 px-4 py-3 text-left transition-colors motion-reduce:transition-none can-hover:bg-surface-900", outline[identity])}
+        className={cx("group flex min-h-[4.25rem] w-full min-w-0 touch-manipulation items-center gap-4 rounded-ds-lg border bg-surface-900/60 py-3 pl-5 pr-4 text-left transition-colors motion-reduce:transition-none can-hover:bg-surface-900", outline[identity])}
         data-testid={testId}
         href={href}
         onClick={onOpen ? (event) => { event.preventDefault(); onOpen(href); } : undefined}
@@ -51,7 +51,7 @@ export function SectionButton({ title, description, href, onOpen, logo, classNam
       >
         {logo && (
           <span className="relative flex size-12 shrink-0 items-center justify-center" data-part="logo-tile">
-            <span aria-hidden="true" className={cx("absolute -inset-2 rounded-ds-full opacity-60 blur-lg", colour.dot)} data-part="glow" />
+            <span aria-hidden="true" className={cx("absolute inset-0 rounded-ds-full opacity-70 blur-md", colour.dot)} data-part="glow" />
             <span className="relative flex size-12 items-center justify-center">{logo}</span>
           </span>
         )}

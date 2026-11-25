@@ -29,7 +29,7 @@ describe("SectionButton", () => {
   it("is a flat card, not the feature card of the band beside it, with the Open pill in the connection's colour", () => {
     const { rerender } = render(<SectionButton href="/x/" title="Page" />);
     const link = screen.getByRole("link");
-    expect(link).toHaveClass("border", "border-integration-presentation-soft/45");
+    expect(link).toHaveClass("border", "border-integration-presentation-soft/75");
     expect(link).not.toHaveClass("border-l-[5px]");
     expect(link.querySelector('[data-part="logo-tile"]')).toBeNull();
     expect(link.querySelector('[data-part="glow"]')).toBeNull();
@@ -37,8 +37,8 @@ describe("SectionButton", () => {
     rerender(<Panel tone="playback"><SectionButton href="/x/" logo={<svg />} title="Page" /></Panel>);
     expect(screen.getByRole("link").querySelector('[data-part="open"]')).toHaveClass("text-integration-playback-text");
     // The outline and the glow behind the logo wear the connection's colour too.
-    expect(screen.getByRole("link")).toHaveClass("border-integration-playback-soft/45");
-    expect(screen.getByRole("link").querySelector('[data-part="glow"]')).toHaveClass("bg-integration-playback-soft", "blur-lg");
+    expect(screen.getByRole("link")).toHaveClass("border-integration-playback-soft/75");
+    expect(screen.getByRole("link").querySelector('[data-part="glow"]')).toHaveClass("bg-integration-playback-soft", "blur-md");
   });
 
   it("leaves the click to the browser unless the page hands it over", async () => {
