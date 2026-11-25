@@ -2,6 +2,7 @@ import { useId, useState, type ComponentPropsWithoutRef, type ReactNode } from "
 
 import { accentClasses, useAccent } from "./accent";
 import { cx } from "./cx";
+import { featureTone } from "./featureTone";
 
 export type DisclosureVariant = "advanced" | "activity" | "feature";
 export type DisclosureTone = "services" | "presentation" | "playback" | "midi" | "lighting" | "backend";
@@ -42,18 +43,6 @@ const advancedTone: Record<DisclosureTone, { row: string; bar: string }> = {
   midi: { row: "bg-advanced-playback-midi/10 text-advanced-playback-midi can-hover:bg-advanced-playback-midi/20", bar: "border-advanced-playback-midi" },
   lighting: { row: "bg-advanced-lighting/10 text-advanced-lighting can-hover:bg-advanced-lighting/20", bar: "border-advanced-lighting" },
   backend: { row: "bg-advanced-backend/10 text-advanced-backend can-hover:bg-advanced-backend/20", bar: "border-advanced-backend" },
-};
-
-// A "feature" section is a major part of a panel that some people never use, so it folds away but still reads as a destination:
-// a card with a 3px rail and a soft wash in the connection's colour, a two-line header, and the open area divided by a rule.
-// The Save bar below it is a flat full tint with no rail, so the two sit together without looking the same.
-const featureTone: Record<DisclosureTone, { card: string; rail: string; title: string; sub: string; rule: string; hover: string }> = {
-  services: { card: "border-integration-services-soft/70 bg-gradient-to-r from-integration-services-soft/[0.26] via-integration-services-soft/[0.10] to-integration-services-soft/[0.03]", rail: "border-l-integration-services-soft", title: "text-integration-services-soft", sub: "text-integration-services-text", rule: "border-integration-services-soft/25", hover: "can-hover:bg-integration-services-soft/10" },
-  presentation: { card: "border-integration-presentation-soft/70 bg-gradient-to-r from-integration-presentation-soft/[0.26] via-integration-presentation-soft/[0.10] to-integration-presentation-soft/[0.03]", rail: "border-l-integration-presentation-soft", title: "text-integration-presentation-soft", sub: "text-integration-presentation-text", rule: "border-integration-presentation-soft/25", hover: "can-hover:bg-integration-presentation-soft/10" },
-  playback: { card: "border-integration-playback-soft/70 bg-gradient-to-r from-integration-playback-soft/[0.26] via-integration-playback-soft/[0.10] to-integration-playback-soft/[0.03]", rail: "border-l-integration-playback-soft", title: "text-integration-playback-text", sub: "text-integration-playback-text", rule: "border-integration-playback-soft/25", hover: "can-hover:bg-integration-playback-soft/10" },
-  midi: { card: "border-integration-playback-midi-soft/70 bg-gradient-to-r from-integration-playback-midi-soft/[0.26] via-integration-playback-midi-soft/[0.10] to-integration-playback-midi-soft/[0.03]", rail: "border-l-integration-playback-midi-soft", title: "text-integration-playback-midi-text", sub: "text-integration-playback-midi-text", rule: "border-integration-playback-midi-soft/25", hover: "can-hover:bg-integration-playback-midi-soft/10" },
-  lighting: { card: "border-integration-lighting-soft/70 bg-gradient-to-r from-integration-lighting-soft/[0.26] via-integration-lighting-soft/[0.10] to-integration-lighting-soft/[0.03]", rail: "border-l-integration-lighting-soft", title: "text-integration-lighting-soft", sub: "text-integration-lighting-text", rule: "border-integration-lighting-soft/25", hover: "can-hover:bg-integration-lighting-soft/10" },
-  backend: { card: "border-integration-backend-soft/70 bg-gradient-to-r from-integration-backend-soft/[0.26] via-integration-backend-soft/[0.10] to-integration-backend-soft/[0.03]", rail: "border-l-integration-backend-soft", title: "text-integration-backend-text", sub: "text-integration-backend-text", rule: "border-integration-backend-soft/25", hover: "can-hover:bg-integration-backend-soft/10" },
 };
 
 function summaryText(summary: ReactNode) {

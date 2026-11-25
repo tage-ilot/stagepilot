@@ -79,8 +79,16 @@ describe("OptionalBand", () => {
     expect(toggle()).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("takes the Presentation tint", () => {
+  it("wears the feature card in the Presentation accent: a rail and a wash, like the Song lighting timeline", () => {
     const { container } = render(band({ tone: "presentation" }));
-    expect(container.firstElementChild?.className).toContain("bg-integration-presentation-soft/5");
+    const card = container.firstElementChild as HTMLElement;
+    expect(card.className).toContain("border-l-integration-presentation-soft");
+    expect(card.className).toContain("from-integration-presentation-soft");
+    expect(card).toHaveAttribute("data-tone", "presentation");
+  });
+
+  it("wears the Playback accent by default", () => {
+    const { container } = render(band());
+    expect((container.firstElementChild as HTMLElement).className).toContain("border-l-integration-playback-soft");
   });
 });
