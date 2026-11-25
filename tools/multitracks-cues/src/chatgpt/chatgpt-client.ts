@@ -280,3 +280,4 @@ export async function shutdownBrowser(): Promise<void> {
   sessionInitialized = false;
   sessionState = { isLoggedIn: false, currentModel: null, conversationId: null };
 }
+

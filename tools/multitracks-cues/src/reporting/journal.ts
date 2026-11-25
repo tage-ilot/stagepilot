@@ -31,3 +31,4 @@ export class OperationJournal {
     await rename(temporary, this.filePath);
   }
 }
+

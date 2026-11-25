@@ -15,3 +15,4 @@ export class AmbiguityError extends StagePilotCuesError {}
 export class SchemaError extends StagePilotCuesError {}
 export class CredentialStoreError extends StagePilotCuesError {}
 export class VerificationError extends StagePilotCuesError {}
+

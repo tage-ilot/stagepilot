@@ -63,3 +63,4 @@ export class ConfigurationStore {
     await rename(temporary, this.filePath);
   }
 }
+

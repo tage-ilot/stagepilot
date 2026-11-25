@@ -6,3 +6,4 @@ describe("runner", () => {
     expect(codexVersionLabel()).toBe("openai-oauth");
   });
 });
+

@@ -78,3 +78,4 @@ export async function discoverOAuth(
     authorizationServers: resource.data.authorization_servers,
   };
 }
+

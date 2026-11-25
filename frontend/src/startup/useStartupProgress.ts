@@ -148,3 +148,4 @@ export const useStartupProgress = (
 
   return view;
 };
+

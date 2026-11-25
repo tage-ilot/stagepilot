@@ -86,3 +86,4 @@ describe("agent security boundaries", () => {
     expect(close).toHaveBeenCalledTimes(2);
   });
 });
+

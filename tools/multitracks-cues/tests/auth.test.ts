@@ -126,3 +126,4 @@ describe("OAuth and credential safety", () => {
     expect(source).not.toMatch(/chatgpt|claude|openai/i);
   });
 });
+

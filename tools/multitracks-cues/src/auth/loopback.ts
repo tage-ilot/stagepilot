@@ -50,3 +50,4 @@ export async function listenForAuthorizationCallback(timeoutMs = 180_000, port =
       new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
 }
+

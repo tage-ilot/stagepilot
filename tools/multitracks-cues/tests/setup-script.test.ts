@@ -29,3 +29,4 @@ describe("macOS repository-local setup", () => {
     expect(launcher).toContain("dist/cli/main.js");
   });
 });
+

@@ -155,3 +155,4 @@ Do not open a public issue containing credentials, tokens, private network
 details, or an exploitable vulnerability. Until a dedicated private reporting
 channel is published, remove all sensitive data from a minimal report and ask a
 maintainer for a private contact path.
+

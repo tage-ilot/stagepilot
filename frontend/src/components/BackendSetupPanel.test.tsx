@@ -897,3 +897,4 @@ describe("StagePilot hold-until-saved conformance (guard)", () => {
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 });
+

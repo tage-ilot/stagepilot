@@ -31,3 +31,4 @@ export function redact(value: unknown): unknown {
 export function sanitizedError(error: unknown): string {
   return redactString(error instanceof Error ? error.message : String(error));
 }
+

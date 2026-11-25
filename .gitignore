@@ -7,3 +7,4 @@ frontend/dist/
 
 # A local symlink to a shared cargo target dir must never be committed (it broke the rc.1 release audit)
 /target
+

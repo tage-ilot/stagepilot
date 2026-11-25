@@ -163,3 +163,4 @@ export function songOrderSummary(status: PlaybackStatusResponse, running: boolea
   if (orderIsSaved(status)) return `Order saved (${songs})`;
   return status.song_order.length > 0 ? "Needs a new scan" : "No order yet";
 }
+

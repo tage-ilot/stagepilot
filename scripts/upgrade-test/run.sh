@@ -38,3 +38,4 @@ new_label="$(git -C "$repo" rev-parse --abbrev-ref HEAD) $(git -C "$repo" rev-pa
 args=(--old "$OLD_BIN" --new "$NEW_BIN" --report "$report" --old-label "$old_label" --new-label "$new_label")
 [ -n "${KEEP:-}" ] && args+=(--keep)
 exec python3 "$here/upgrade_test.py" "${args[@]}"
+

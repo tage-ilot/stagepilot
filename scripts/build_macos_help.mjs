@@ -264,3 +264,4 @@ if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
   });
   console.log(`Built searchable StagePilot Help from ${result.files} Markdown files.`);
 }
+

@@ -142,3 +142,4 @@ export async function clickElement(selectors: readonly string[]): Promise<boolea
 export async function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+

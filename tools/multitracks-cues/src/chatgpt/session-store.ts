@@ -57,3 +57,4 @@ export async function setConversationId(id: string, url: string): Promise<void> 
 export async function clearConversation(): Promise<void> {
   await saveSession({ conversationId: null, conversationUrl: null, lastUsed: "" });
 }
+

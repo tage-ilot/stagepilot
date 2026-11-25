@@ -22,3 +22,4 @@ export const connectionWord: Record<ConnectionState, StatusWord> = {
   ready: "Ready",
   loading: "Not connected",
 };
+

@@ -70,3 +70,4 @@ describe("dashboard layout storage", () => {
     expect(saveDashboardLayout(storage, createDefaultDashboardLayout())).toBe(false);
   });
 });
+

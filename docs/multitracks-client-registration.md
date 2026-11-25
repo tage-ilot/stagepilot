@@ -26,3 +26,4 @@ The utility therefore needs a client ID issued by MultiTracks. It does not reuse
 Submit this message through the official [MultiTracks contact form](https://www.multitracks.com/contact/). Choose the closest support/developer-integration category available and include a link to the StagePilot repository if the form permits it. Do not send StagePilot’s Planning Center credentials or any existing OAuth token.
 
 After MultiTracks issues the client configuration, run `stagepilot-cues configure`, enter the issued values, and then run `stagepilot-cues auth login`.
+

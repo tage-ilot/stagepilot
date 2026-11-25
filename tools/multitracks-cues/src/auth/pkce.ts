@@ -20,3 +20,4 @@ export function verifyState(expected: string, received: string | null): void {
     throw new Error("OAuth state mismatch; authorization was rejected.");
   }
 }
+

@@ -76,3 +76,4 @@ rm -rf "$SCHEMA_TMP"
 trap - EXIT INT TERM
 chmod +x "$ROOT/bin/stagepilot-cues"
 echo "Ready: $ROOT/bin/stagepilot-cues (Codex $CODEX_VERSION)"
+

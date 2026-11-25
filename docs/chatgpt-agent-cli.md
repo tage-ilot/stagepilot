@@ -82,3 +82,4 @@ Dynamic tools are experimental in Codex 0.146.0. Updating Codex requires:
 If dynamic tools become incompatible, agent mode fails closed while deterministic mode remains available. If MultiTracks rejects the loopback callback, request a dedicated StagePilot native OAuth registration; never reuse ChatGPT connector tokens or impersonate its redirect URI.
 
 The pinned schema exposes `mcpServer/oauth/login`, `mcpServerStatus/list`, and `mcpServer/tool/call`, but the supported Codex configuration does not expose documented fields for supplying an arbitrary MCP OAuth client ID, client secret, scopes, and callback registration as one static native-client configuration. Direct Codex-to-MultiTracks OAuth is therefore not enabled. The production path remains Codex → StagePilot dynamic tools → StagePilot OAuth gateway → MultiTracks MCP.
+

@@ -53,3 +53,4 @@ describe("compareEvent", () => {
     expect(compareEvent(actual, expected, "aux-1")).toBe("exact");
   });
 });
+

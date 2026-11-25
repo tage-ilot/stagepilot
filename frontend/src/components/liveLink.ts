@@ -48,3 +48,4 @@ export function liveLinkPills(status: LightkeyStatus): LiveLinkPills {
 export function shortLightingMessage(message: string): string {
   return message.replace(/\. Nothing sent yet; UDP does not confirm delivery\.$/, ". UDP does not confirm delivery.");
 }
+

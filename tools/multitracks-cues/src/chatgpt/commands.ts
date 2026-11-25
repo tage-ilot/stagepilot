@@ -461,3 +461,4 @@ export function createMultitracksCommand(): Command {
 export async function shutdownMultitracks(): Promise<void> {
   await shutdownBrowser();
 }
+

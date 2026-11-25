@@ -27,3 +27,4 @@ Exit code 0 = every check passed, 1 = a check failed, 2 = harness or build error
 - Remote users can be listed and bootstrapped locally but only log in through the remote ingress; "users still work" means the same users, roles and an unchanged `identity.sqlite3`.
 - The learned song order is written only by Discover Song Order (needs a real playback app); it is hand-written in the shape Discover writes.
 - Cue-map replay is checked over real loopback UDP at 1x speed (about 3 s per song), not on a simulated clock.
+

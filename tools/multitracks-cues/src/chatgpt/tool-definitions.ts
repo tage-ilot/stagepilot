@@ -393,3 +393,4 @@ export class MultiTracksMCPTools {
     return { tool: tool.name, input, description: tool.description };
   }
 }
+

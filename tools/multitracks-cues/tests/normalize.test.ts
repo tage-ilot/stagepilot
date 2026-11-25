@@ -14,3 +14,4 @@ describe("MultiTracks response normalization", () => {
     expect(result.items.map((item) => item.position)).toEqual([1, 2, 3, 4]);
   });
 });
+

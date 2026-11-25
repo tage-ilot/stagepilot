@@ -50,3 +50,4 @@ describe("agent redaction", () => {
     expect(output).not.toContain("Users\\human");
   });
 });
+

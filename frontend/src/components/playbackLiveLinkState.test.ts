@@ -91,3 +91,4 @@ describe("the note under the script line", () => {
     expect(scriptNote(null)).toBeNull();
   });
 });
+

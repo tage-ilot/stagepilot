@@ -401,3 +401,4 @@ describe("Lighting panel: each status fact once", () => {
     expect(within(group).getByRole("button", { name: "Send test cue" })).toBeVisible();
   });
 });
+

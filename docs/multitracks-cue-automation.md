@@ -29,3 +29,4 @@ atomic journal + sanitized text/JSON/CSV reports
 No bank or event is overwritten, moved, updated, or deleted. No MIDI file, copied bank, or production-cue import is used. Exact existing cues are idempotently skipped; every discrepancy becomes a conflict.
 
 Run `./scripts/setup-multitracks-cues.sh`, then follow the complete commands and recovery guidance in the [package guide](../tools/multitracks-cues/README.md).
+

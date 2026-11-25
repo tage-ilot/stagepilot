@@ -141,3 +141,4 @@ export class CodexAccountService {
     if ((await this.status()).authenticated) throw new Error("ChatGPT logout was not confirmed.");
   }
 }
+

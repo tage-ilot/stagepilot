@@ -71,3 +71,4 @@ describe("safe MCP client", () => {
     await expect(client.call("setlistsList", {}, "read")).rejects.toThrow("Unauthorized");
   });
 });
+

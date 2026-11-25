@@ -25,3 +25,4 @@ describe("picture size guard", () => {
     expect(tooBig).toEqual([]);
   });
 });
+

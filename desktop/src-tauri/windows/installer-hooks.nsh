@@ -11,3 +11,4 @@
 !macro NSIS_HOOK_PREUNINSTALL
   !insertmacro STAGEPILOT_STOP_BACKEND
 !macroend
+

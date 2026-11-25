@@ -58,3 +58,4 @@ jobs:
           REMOTE_HOST_SUFFIX: ${{ vars.REMOTE_HOST_SUFFIX }}
           RESIDUE_BASELINE: ${{ steps.baseline.outputs.counters }}
         run: npm --prefix control-plane run acceptance:residue
+

@@ -28,3 +28,4 @@ export class PrivacyStore {
   }
   async reset(): Promise<void> { await rm(this.filePath, { force: true }); }
 }
+

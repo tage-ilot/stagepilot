@@ -11,3 +11,4 @@ export async function ensureCodexHome(): Promise<string> {
   await mkdir(home, { recursive: true, mode: 0o700 });
   return home;
 }
+

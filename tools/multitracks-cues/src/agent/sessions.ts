@@ -34,3 +34,4 @@ export class SessionStore {
     await rename(temporary, this.filePath);
   }
 }
+

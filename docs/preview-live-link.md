@@ -112,3 +112,4 @@ python3 tools/preview_sections.py --bind 0.0.0.0 --port 8102
 
 Open `http://<this computer>:8102/`. It draws the real blocks with made-up data in every state (ready, searching, not connected, an error or a held change on the address, Link not installed, update available by hand and by itself, needs the command again, not answering, import blocked, on this computer, scanning) at 360 px or 1280 px (the buttons at the top). Press **Details** on a block to open or close it. `npm run gallery` runs the same page with the Vite dev server.
 
+

@@ -49,3 +49,4 @@ describe("OperationJournal", () => {
     expect(data.entries[0].outcome).toBe("verified");
   });
 });
+

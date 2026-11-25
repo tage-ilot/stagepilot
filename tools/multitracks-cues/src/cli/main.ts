@@ -448,3 +448,4 @@ program.parseAsync(process.argv).catch((error: unknown) => {
 }).finally(async () => {
   await shutdownMultitracks();
 });
+

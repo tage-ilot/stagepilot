@@ -12,3 +12,4 @@ export interface ToolTransport {
 }
 
 export type InvocationMode = "read" | "apply";
+

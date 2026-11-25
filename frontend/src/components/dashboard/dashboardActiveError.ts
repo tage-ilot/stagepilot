@@ -32,3 +32,4 @@ export function latestActiveError(state: ApplicationState): ErrorSummary | null 
   }
   return null;
 }
+

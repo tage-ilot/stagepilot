@@ -43,3 +43,4 @@ test("help builder converts repository Markdown into an Apple Help Book", () => 
     fs.rmSync(fixture, { recursive: true, force: true });
   }
 });
+

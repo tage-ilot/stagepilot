@@ -84,3 +84,4 @@ describe("SessionStore", () => {
     expect(sessions[0]!.promptVersion).toBe(AGENT_PROMPT_VERSION);
   });
 });
+

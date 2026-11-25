@@ -22,3 +22,4 @@ export const configurationSchema = z.object({
 
 export type Configuration = z.infer<typeof configurationSchema>;
 export const defaultConfiguration = configurationSchema.parse({});
+

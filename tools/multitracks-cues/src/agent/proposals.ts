@@ -70,3 +70,4 @@ export class ProposalStore {
 
   invalidate(id: string): void { this.#proposals.delete(id); }
 }
+

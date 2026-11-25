@@ -33,3 +33,4 @@ describe("doctor", () => {
     expect(privacyCheck).toBeDefined();
   });
 });
+
