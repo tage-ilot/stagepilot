@@ -67,7 +67,7 @@ describe("every configuration page follows PanelLayout's order", () => {
     const parts = partsOf(panel);
     expectPanelOrder(parts);
     // Refresh sits inside the Timer field, so the page has no actions slot of its own (and draws no empty band for it). The Presenter Link
-    // section and the VerseVision button (the page's own content, the button first) come after the settings and before the Save bar,
+    // section and the VerseVision card under it (the page's own content, the Link first) come after the settings and before the Save bar,
     // with the Link ready.
     expect(parts).toEqual(["connection", "settings", "content", "content", "saveBar", "summary"]);
   });

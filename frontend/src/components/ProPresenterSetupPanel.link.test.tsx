@@ -139,10 +139,10 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
       "Host", "ProPresenter API port", "Search", "Connect", "Presenter Link setup",
       "Timer", "Refresh timers and Looks", "Look",
-      // The VerseVision button is the first of the page's own content, ahead of the Presenter Link section.
-      "VerseVision Verse slides from your notes (opens in a new window)",
       // The Presenter Link section sits between the settings and the Save bar: its toggle (heading and header line), then the body (it has no list to tick without a plan).
       "Presenter LinkNo songs in the plan", "Playlist",
+      // The VerseVision card comes after the Presenter Link section, still before the Save bar.
+      "VerseVision Import sermon points and verses (opens in a new window)Open",
       "Save configuration",
     ]);
   });

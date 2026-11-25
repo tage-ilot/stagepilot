@@ -6,8 +6,7 @@ nothing to install, no second program and no second port.
 
 ## What the button is
 
-**Configuration → Presentation → VerseVision** (the big button in the Presentation panel, under the
-settings) opens VerseVision in a new browser tab. In the desktop app it opens your default
+**Configuration → Presentation → VerseVision** (the VerseVision card in the Presentation panel, under the Presenter Link) opens VerseVision in a new browser tab. In the desktop app it opens your default
 browser. The page is `http://<this computer>:8765/versevision/` (the same address and port as the
 dashboard), so you can also bookmark it.
 
