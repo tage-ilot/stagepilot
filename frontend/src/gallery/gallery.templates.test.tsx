@@ -36,8 +36,8 @@ describe("the section gallery: configuration pages", () => {
     render(<Frame />);
     const clean = sample("page-presentation-clean");
     const sections = Array.from(clean.querySelectorAll("[data-section]")).map((node) => node.getAttribute("data-section"));
-    // The Live Link block, the settings pair (Timer and Look), the actions, the Presenter Link band (it starts folded; inside: its own options, its song cards with no header row over them, and its button row), then the summary.
-    expect(sections).toEqual(["connection", "settings", "actions", "band", "settings", "actions", "summary"]);
+    // The Live Link block, the settings pair (Timer and Look), the actions, the big VerseVision button, the Presenter Link band (it starts folded; inside: its own options, its song cards with no header row over them, and its button row), then the summary.
+    expect(sections).toEqual(["connection", "settings", "actions", "section-button", "band", "settings", "actions", "summary"]);
     expect(clean.querySelector("[data-panel-body]")).toBeInTheDocument();
     await waitFor(() => expect(sample("page-presentation-held").querySelectorAll("[data-held-marker]").length).toBeGreaterThanOrEqual(2), WAIT);
     await waitFor(() => expect(Array.from(sample("page-presentation-error").querySelectorAll("[role=alert]")).some((node) => /Enter a host\./.test(node.textContent ?? ""))).toBe(true), WAIT);

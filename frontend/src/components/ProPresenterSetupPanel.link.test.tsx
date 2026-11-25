@@ -130,7 +130,7 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
     // (With Looks listed, so the Look box is a tab stop: without them it is disabled and tabbing skips it.)
     panel(linkController(helperStatus("ready")), { propresenter: presentation({ looks: [{ id: "l1", name: "Default", index: 0 }], current_look_id: "l1" }) });
     const seen: string[] = [];
-    for (let i = 0; i < 14; i += 1) {
+    for (let i = 0; i < 15; i += 1) {
       await user.tab();
       const active = document.activeElement as HTMLInputElement;
       seen.push(active.getAttribute("aria-label") ?? active.labels?.[0]?.textContent?.trim() ?? active.textContent?.replace(/[\u25B8\u25BE]/g, "").trim() ?? "");
@@ -139,6 +139,8 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
     expect(seen.filter((name) => !/^Close/.test(name))).toEqual([
       "Host", "ProPresenter API port", "Search", "Connect", "Presenter Link setup",
       "Timer", "Refresh timers and Looks", "Look",
+      // The VerseVision button is the first of the page's own content, ahead of the Presenter Link section.
+      "VerseVision Verse slides from your notes (opens in a new window)",
       // The Presenter Link section sits between the settings and the Save bar: its toggle (heading and header line), then the body (it has no list to tick without a plan).
       "Presenter LinkNo songs in the plan", "Playlist",
       "Save configuration",

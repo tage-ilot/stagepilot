@@ -34,6 +34,7 @@ pub mod security;
 pub mod startup_activation;
 pub mod static_files;
 pub mod validation;
+pub mod versevision_addon;
 
 pub use app::{build_app, default_web_root, AppOptions};
 pub use outputs::OutputBackends;

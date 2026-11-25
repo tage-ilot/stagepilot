@@ -192,8 +192,24 @@ connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; form-action 'se
 frame-ancestors 'none'";
 
 pub async fn security_headers(request: Request, next: Next) -> Response {
+    // VerseVision's page has inline script and style, so it keeps the policy it sends itself (`default-src 'self'`, no remote
+    // sources); every other header below still applies to it.
+    let versevision = crate::versevision_addon::is_versevision_path(request.uri().path());
     let mut response = next.run(request).await;
+    let own_policy = versevision
+        .then(|| {
+            response
+                .headers()
+                .get(header::CONTENT_SECURITY_POLICY)
+                .cloned()
+        })
+        .flatten();
     set_security_headers(response.headers_mut());
+    if let Some(policy) = own_policy {
+        response
+            .headers_mut()
+            .insert(header::CONTENT_SECURITY_POLICY, policy);
+    }
     response
 }
 

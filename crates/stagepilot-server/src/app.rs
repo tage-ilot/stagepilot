@@ -11,7 +11,7 @@ use axum::extract::{ConnectInfo, Path, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{any, get, post};
 use axum::Extension;
 use axum::Router;
 use chrono::Utc;
@@ -110,6 +110,20 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         ))
         .with_state(runtime.clone());
 
+    // VerseVision (docs/versevision.md): the page and its API in this process, behind the same guards as everything else.
+    let versevision = crate::versevision_addon::VerseVision::new(runtime.clone());
+    let versevision_route = move |request: Request| {
+        let versevision = versevision.clone();
+        async move { versevision.handle(request).await }
+    };
+    let api = api
+        .route(
+            crate::versevision_addon::PREFIX,
+            any(versevision_route.clone()),
+        )
+        .route("/versevision/", any(versevision_route.clone()))
+        .route("/versevision/{*rest}", any(versevision_route));
+
     let router = match options.web_root.filter(|r| r.join("index.html").is_file()) {
         Some(root) => {
             let root = Arc::new(root);
@@ -206,7 +220,8 @@ async fn dashboard_guard(State(rt): State<Rt>, request: Request, next: Next) -> 
         return next.run(request).await;
     }
     let path = request.uri().path().to_string();
-    let protected = (path.starts_with("/api/v1") || path == "/ws")
+    let versevision = crate::versevision_addon::is_versevision_path(&path);
+    let protected = (path.starts_with("/api/v1") || path == "/ws" || versevision)
         && !PUBLIC_PATHS.contains(&path.as_str())
         && !desktop_origin(request.headers(), peer_of(&request));
     if !protected
@@ -221,6 +236,9 @@ async fn dashboard_guard(State(rt): State<Rt>, request: Request, next: Next) -> 
     if path == "/ws" {
         // Starlette refuses the handshake when the socket is closed before accept.
         return StatusCode::FORBIDDEN.into_response();
+    }
+    if versevision {
+        return crate::versevision_addon::pin_required(request.headers());
     }
     http_error(401, "Dashboard PIN required.").into_response()
 }
