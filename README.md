@@ -3,7 +3,7 @@
   StagePilot
 </h1>
 
-**Your production tech, working as one.** StagePilot connects Planning Center, MultiTracks Playback, ProPresenter and Lightkey. Press play in Playback, and the countdown, the screens and the lights follow the song.
+**Your tech stack, working as one.** StagePilot connects Planning Center, MultiTracks Playback, ProPresenter and Lightkey. Press play in Playback, and the countdown, the screens and the lights follow the song.
 
 <p align="center"><img src="docs/img/now-playing.png" width="720" alt="Now Playing: the current song, time remaining, position in the set and the next song"></p>
 
