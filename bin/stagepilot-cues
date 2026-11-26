@@ -19,3 +19,4 @@ else
 fi
 
 exec "$NODE" "$ROOT/tools/multitracks-cues/dist/cli/main.js" "$@"
+
