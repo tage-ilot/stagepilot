@@ -1,7 +1,7 @@
-<h1>
-  <img src="https://avatars.githubusercontent.com/u/314876342?s=200&v=4" width="48" align="absmiddle">
-  StagePilot
-</h1>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/title-dark.png">
+  <img src="docs/img/title-light.png" height="52" alt="StagePilot">
+</picture>
 
 **Your production tech, working as one.**
 
@@ -33,8 +33,6 @@ Record your operator's lighting once, and StagePilot replays it in time with tha
 
 <img src="docs/img/lighting.png" width="100%" alt="sACN DMX Live Link: connected, 66 fixtures, songs captured for replay">
 
-## Try it
-
-Download StagePilot for Windows or Mac from the **[latest release](https://github.com/tage-ilot/stagepilot/releases/latest)**, then follow the [getting started guide](docs/getting-started.md).
+**Try it:** download StagePilot for Windows or Mac from the **[latest release](https://github.com/tage-ilot/stagepilot/releases/latest)**, then follow the [getting started guide](docs/getting-started.md).
 
 [Contributing](CONTRIBUTING.md) · [GPL-3.0 license](LICENSE)
