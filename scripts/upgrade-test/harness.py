@@ -135,3 +135,4 @@ class Server:
                 extra = extra.replace(self.dir, "<scratch>")
                 out.append(f"{rec['level']} {f.get('message', '')} {extra}"[:600])
         return out
+
