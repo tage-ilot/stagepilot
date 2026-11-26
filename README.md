@@ -13,7 +13,7 @@ A live service usually means four apps and several operators keeping them in ste
 
 StagePilot loads this week's service plan and keeps it up to date. It pairs each song in the plan with your Playback setlist, so the plan and the band always agree.
 
-<img src="docs/img/services.png" width="100%" alt="Services card: connected, with the last plan sync time">
+<img src="docs/img/services.png" width="30%" alt="Services card: connected, with the last plan sync time">
 
 ### Playback
 
