@@ -7,7 +7,7 @@
 
 A live service usually means four apps and several operators keeping them in step by hand. StagePilot connects Planning Center, MultiTracks Playback, ProPresenter and Lightkey, so they share one plan and follow one song. Press play in Playback, and the countdown, the screens and the lights follow. Everyone sees what's playing, how long is left and what's next, on the computer or in any browser on your network.
 
-<img src="docs/img/now-playing.png" width="100%" alt="Now Playing: the current song, time remaining, position in the set and the next song">
+<img src="docs/img/now-playing.png" width="50%" alt="Now Playing: the current song, time remaining, position in the set and the next song">
 
 ### Planning Center
 
