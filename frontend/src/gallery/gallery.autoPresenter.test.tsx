@@ -21,7 +21,7 @@ describe("the Auto-Presenter states", { timeout: 120000 }, () => {
   it("lists every state, as the task names them", () => {
     draw();
     const ids = Array.from(document.querySelectorAll('[data-group="auto-presenter"] [data-sample]')).map((node) => node.getAttribute("data-sample")?.replace("auto-presenter-", ""));
-    expect(ids).toEqual(["off", "starts-folded", "following", "folded", "held", "paused", "no-cues", "mismatch", "aligned", "not-followed", "locked-library", "locked-link", "waiting", "timing", "timing-error"]);
+    expect(ids).toEqual(["off", "starts-folded", "following", "folded", "held", "paused", "no-cues", "mismatch", "aligned", "not-followed", "locked-library", "locked-link", "waiting", "timing-changed", "timing", "timing-error"]);
   });
 
   it("off: Off, every row says the switch is off, nothing to press but the switch; a new install starts folded", async () => {
@@ -55,8 +55,9 @@ describe("the Auto-Presenter states", { timeout: 120000 }, () => {
 
   it("no cues, mismatch, aligned: the exact words, and the sentence that names the template", async () => {
     draw();
-    await waitFor(() => expect(chips("no-cues")).toEqual(["Following by bars (no Playback cues)", "Following by bars (no Playback cues)", "Following by Playback cues", "Following by bars (no Playback cues)"]), WAIT);
-    expect(within(sample("no-cues")).getAllByTestId("follow-song-no-cues")).toHaveLength(3);
+    await waitFor(() => expect(chips("no-cues")).toEqual(["No cues: following by bars", "No cues: following by bars", "Following by Playback cues", "No cues: following by bars"]), WAIT);
+    expect(within(sample("no-cues")).queryAllByTestId("follow-song-no-cues")).toHaveLength(0);
+    expect(within(sample("no-cues")).getAllByTestId("follow-song-chip")).toHaveLength(4);
     const fixes = within(sample("no-cues")).getAllByTestId("follow-song-fix").map((fix) => fix.textContent);
     expect(fixes[0]).toContain("Edit, the \u201C...\u201D on the song, MIDI OUT, Lyrics Bus, ProPresenter 1 Line Template, Update");
     expect(fixes[1]).toContain("Lyrics Bus, ProPresenter 2 Line Template, Update");
@@ -74,9 +75,21 @@ describe("the Auto-Presenter states", { timeout: 120000 }, () => {
       expect(box(id)).toBeDisabled();
       expect(within(sample(id)).getByTestId("auto-presenter")).toHaveAttribute("data-locked", "true");
     }
+    for (const id of ["locked-library", "locked-link"]) {
+      expect(within(sample(id)).queryAllByTestId("follow-song-chip")).toHaveLength(0);
+      expect(within(sample(id)).getAllByTestId("auto-presenter-song")).toHaveLength(4);
+      expect(within(sample(id)).getByTestId("presenter-follow-locked")).toHaveTextContent("Locked");
+    }
     await waitFor(() => expect(summary("waiting")).toHaveTextContent("Waiting for the Playback Library Link"), WAIT);
     expect(within(sample("waiting")).getByTestId("auto-presenter").textContent).not.toMatch(/Following/);
     expect(toggle("waiting")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("timing, folded with an offset that is not 0: the offset and a quiet changed mark", async () => {
+    draw();
+    await waitFor(() => expect(within(sample("timing-changed")).getByTestId("presenter-follow-timing-changed")).toHaveTextContent("changed"), WAIT);
+    expect(within(sample("timing-changed")).getByRole("button", { name: /^Timing/ })).toHaveTextContent("Offset 300 ms");
+    expect(within(sample("following")).queryByTestId("presenter-follow-timing-changed")).toBeNull();
   });
 
   it("timing: folded until pressed; a number out of range is refused under the box", async () => {

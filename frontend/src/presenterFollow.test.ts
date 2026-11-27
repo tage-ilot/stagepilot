@@ -47,7 +47,10 @@ describe("a song's chip", () => {
   it("wears the backend's words with a mark that says the state without colour", () => {
     const [cues, bars, mismatch, changed, , , off] = followSongs({}, NO_CUES_SONG, { code: "cues_do_not_match", text: "Cues do not match the file (cues go to slide 30, file has 54 cues)" }, { code: "arrangement_changed", text: "Arrangement was changed in ProPresenter" }, { code: "not_in_playlist", text: "Not in the ProPresenter playlist" }, { code: "link_not_ready", text: "ProPresenter Link not ready" }, { code: "switch_off", text: "Switch is off" });
     expect(songChipWords(cues!)).toEqual({ word: "Following by Playback cues", mark: "\u2713", tone: "success" });
-    expect(songChipWords(bars!)).toMatchObject({ word: "Following by bars (no Playback cues)", mark: "~", tone: "info" });
+    // No cues: ONE warning chip in the SPEC's words (the backend's long words stay in the hover text).
+    expect(songChipWords(bars!)).toEqual({ word: "No cues: following by bars", mark: "!", tone: "warning" });
+    // Followed by bars with nothing to fix (cues unusable, no advice) keeps the backend's own words.
+    expect(songChipWords({ code: "bars", text: "Following by bars (no Playback cues)" })).toEqual({ word: "Following by bars (no Playback cues)", mark: "~", tone: "info" });
     expect(songChipWords(mismatch!)).toMatchObject({ mark: "!", tone: "warning" });
     expect(songChipWords(changed!)).toMatchObject({ word: "Arrangement was changed in ProPresenter", mark: "!", tone: "danger" });
     expect(songChipWords(off ?? followSongs()[0]!)).toBeDefined();
@@ -102,11 +105,9 @@ describe("what locks the switch", () => {
     const link = followLock(false, "ready")!;
     expect(lockWords(link, false)).toBe("Needs the Presenter Link");
     expect(link.where).toContain("Configuration \u2192 Presentation");
-    expect(link.chip.text).toBe("ProPresenter Link not ready");
     const library = followLock(true, "missing")!;
     expect(lockWords(library, false)).toBe("Needs the Playback Library Link");
     expect(library.where).toContain("Configuration \u2192 Playback");
-    expect(library.chip.text).toBe("Playback's Library Link not ready");
     expect(lockWords(followLock(true, "stale")!, false)).toBe("Needs current data from the Playback Library Link");
     expect(lockWords(followLock(false, "missing")!, false)).toBe("Needs the Presenter Link and the Playback Library Link");
   });

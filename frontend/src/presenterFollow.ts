@@ -50,7 +50,10 @@ export const FOLLOW_OFF = "Off";
 /** Where this browser remembers whether the Auto-Presenter section is open. */
 export const AUTO_PRESENTER_OPEN_KEY = "stagepilot.presentation.auto-presenter-open";
 
-export const NO_CUES_WORD = "No cues";
+/** The ONE chip of a song followed by bars for want of cues (the backend's long words stay in its hover text). */
+export const NO_CUES_WORD = "No cues: following by bars";
+/** The mark of a line with nothing to follow now (off, ready, idle, needs a link): a hollow circle, never a lone dash that reads like a typo. */
+export const MARK_IDLE = "\u25CB";
 
 /** Playback's Library Link: answering with current data, answering with an old copy, or not connected at all. */
 export type LibraryLinkState = "ready" | "stale" | "missing";
@@ -58,12 +61,10 @@ export const libraryLinkState = (status: { active: boolean; stale: boolean } | n
 
 /**
  * Why the Auto-Presenter cannot be used now: which link it needs (`need`, said after "Needs" or "Waiting for") and where to set it up
- * (`where`), plus the verdict every song row shows meanwhile (the words the backend uses for the same thing).
+ * (`where`). The reason is said ONCE; the song rows show only their titles while it holds.
  */
-export interface FollowLock { need: string; where: string; chip: Pick<FollowSong, "code" | "text"> }
+export interface FollowLock { need: string; where: string }
 
-const LINK_CHIP = { code: "link_not_ready", text: "ProPresenter Link not ready" } as const;
-const LIBRARY_CHIP = { code: "library_not_ready", text: "Playback's Library Link not ready" } as const;
 const LINK_WHERE = "Set it up in Configuration \u2192 Presentation (Presenter Link setup).";
 const LIBRARY_WHERE = "Set it up in Configuration \u2192 Playback (Library Link setup).";
 
@@ -72,10 +73,10 @@ const LIBRARY_WHERE = "Set it up in Configuration \u2192 Playback (Library Link 
  * latter with current data. Nothing is read without the Presenter Link, so its chip comes first when both are missing.
  */
 export function followLock(linkReady: boolean, library: LibraryLinkState): FollowLock | null {
-  if (!linkReady && library !== "ready") return { need: "the Presenter Link and the Playback Library Link", where: "Set up the Presenter Link in Configuration \u2192 Presentation and the Library Link in Configuration \u2192 Playback.", chip: LINK_CHIP };
-  if (!linkReady) return { need: "the Presenter Link", where: LINK_WHERE, chip: LINK_CHIP };
-  if (library === "stale") return { need: "current data from the Playback Library Link", where: "It has not answered lately: check it in Configuration \u2192 Playback (Library Link setup).", chip: LIBRARY_CHIP };
-  if (library === "missing") return { need: "the Playback Library Link", where: LIBRARY_WHERE, chip: LIBRARY_CHIP };
+  if (!linkReady && library !== "ready") return { need: "the Presenter Link and the Playback Library Link", where: "Set up the Presenter Link in Configuration \u2192 Presentation and the Library Link in Configuration \u2192 Playback." };
+  if (!linkReady) return { need: "the Presenter Link", where: LINK_WHERE };
+  if (library === "stale") return { need: "current data from the Playback Library Link", where: "It has not answered lately: check it in Configuration \u2192 Playback (Library Link setup)." };
+  if (library === "missing") return { need: "the Playback Library Link", where: LIBRARY_WHERE };
   return null;
 }
 
@@ -90,7 +91,7 @@ export const shortLine = (text: string): string => text.split(/ \(|\. /)[0]!.rep
 
 /** The one status line. A section's own name (a blank first group is Playback's Count Off); the slide counted the way ProPresenter's window counts (from 1). */
 export function followLine(status: FollowStatus | null, enabled: boolean, error: string | null): FollowLine {
-  if (!enabled) return { text: FOLLOW_OFF, mark: "\u2212", tone: "idle", state: "off" };
+  if (!enabled) return { text: FOLLOW_OFF, mark: MARK_IDLE, tone: "idle", state: "off" };
   if (!status) return error
     ? { text: error, mark: "!", tone: "warning", state: "error" }
     : { text: "Checking\u2026", mark: "\u2026", tone: "idle", state: "waiting" };
@@ -105,7 +106,7 @@ export function followLine(status: FollowStatus | null, enabled: boolean, error:
       return { text: `Following: ${section || "Playback"}${slide}`, mark: "\u2713", tone: "success", state: "following" };
     }
     case "ready":
-      return { text: song ? `Ready: ${song} starts when Playback plays it` : "Ready: waiting for Playback to play the song", mark: "\u2212", tone: "idle", state: "ready" };
+      return { text: song ? `Ready: ${song} starts when Playback plays it` : "Ready: waiting for Playback to play the song", mark: MARK_IDLE, tone: "idle", state: "ready" };
     case "held":
       return { text: status.hold_reason || status.message, mark: "!", tone: "warning", state: "held" };
     case "paused":
@@ -113,9 +114,9 @@ export function followLine(status: FollowStatus | null, enabled: boolean, error:
     case "not_followed":
       return { text: `Not following: ${status.message}`, mark: "!", tone: "warning", state: "not_followed" };
     case "idle":
-      return { text: status.message || "Nothing to follow", mark: "\u2212", tone: "idle", state: "idle" };
+      return { text: status.message || "Nothing to follow", mark: MARK_IDLE, tone: "idle", state: "idle" };
     default:
-      return { text: status.message || FOLLOW_OFF, mark: "\u2212", tone: "idle", state: "idle" };
+      return { text: status.message || FOLLOW_OFF, mark: MARK_IDLE, tone: "idle", state: "idle" };
   }
 }
 
@@ -137,13 +138,15 @@ const CHIP: Record<FollowCode, Omit<StatusWords, "word">> = {
   no_sections: { mark: "?", tone: "idle" },
 };
 
-export function songChipWords(song: Pick<FollowSong, "code" | "text">): StatusWords {
+export function songChipWords(song: Pick<FollowSong, "code" | "text"> & Partial<Pick<FollowSong, "advice">>): StatusWords {
+  // A song followed by bars for want of cues: ONE warning chip (the backend's `Following by bars (no Playback cues)` is its hover text).
+  if (hasNoCues(song)) return { word: NO_CUES_WORD, mark: "!", tone: "warning" };
   const look = CHIP[song.code] ?? { mark: "?", tone: "idle" as const };
   return { word: song.text, ...look };
 }
 
-/** A song followed by bars because Playback has no cues for it: the chip says No cues and the fix is one sentence. */
-export const hasNoCues = (song: Pick<FollowSong, "code" | "advice">): boolean => song.code === "bars" && Boolean(song.advice);
+/** A song followed by bars because Playback has no cues for it: its ONE chip says `No cues: following by bars` and the fix is one sentence under it. */
+export const hasNoCues = (song: Pick<FollowSong, "code"> & Partial<Pick<FollowSong, "advice">>): boolean => song.code === "bars" && Boolean(song.advice);
 
 /**
  * The one sentence that says where in Playback the lyric cues are made, naming the Lyrics Bus template the song file needs (the status's

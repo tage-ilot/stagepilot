@@ -3,7 +3,7 @@ import { useId, useMemo, useState } from "react";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { PresenterFollowController } from "../hooks/usePresenterFollow";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
-import { AUTO_PRESENTER_OPEN_KEY, followLine, followLock, FOLLOW_LABEL, libraryLinkState, lockWords, shortLine, type FollowLine } from "../presenterFollow";
+import { AUTO_PRESENTER_OPEN_KEY, followLine, followLock, FOLLOW_LABEL, libraryLinkState, lockWords, MARK_IDLE, shortLine, type FollowLine } from "../presenterFollow";
 import type { ServicePlan } from "../types";
 import { followByRow, presenterLinkReady, presenterRows } from "./addSongsSongs";
 import { AutoPresenterSongs } from "./AutoPresenterSongs";
@@ -12,6 +12,7 @@ import { ActionButton, ActionRow, OptionalBand, SectionNotice } from "./sections
 import { Switch } from "./ui/Switch";
 import { cx } from "./ui/cx";
 
+/** The summary and the long line are body ink; only a state that means something (done, look, fault) takes its tone, on the mark and the word that names it. */
 const LINE_TONE = {
   success: "text-success-text",
   idle: "text-ink-body",
@@ -19,6 +20,31 @@ const LINE_TONE = {
   danger: "text-danger-text",
   info: "text-info-text",
 } as const;
+
+/** A line of the section: its mark, then its words in body ink; the leading word (`Paused:`, `Following:`) wears the tone of a state that means something. */
+function Line({ line, text, size = "" }: { line: FollowLine; text: string; size?: string }) {
+  const toned = line.tone !== "idle";
+  const colon = text.indexOf(": ");
+  const lead = toned ? (colon > 0 ? text.slice(0, colon + 1) : text) : "";
+  return (
+    <span className={cx("flex min-w-0 items-start gap-1.5 text-ink-body", size)}>
+      <span aria-hidden="true" className={cx("w-3 flex-none text-center font-mono", LINE_TONE[line.tone])}>{line.mark}</span>
+      <span className="min-w-0 break-words">
+        {lead ? <><span className={cx("font-semibold", LINE_TONE[line.tone])}>{lead}</span>{text.slice(lead.length)}</> : text}
+      </span>
+    </span>
+  );
+}
+
+/** A small padlock for the locked state (a drawn mark, so it is the same on every system). */
+function LockMark() {
+  return (
+    <svg aria-hidden="true" className="size-4 flex-none" data-part="lock" viewBox="0 0 16 16">
+      <rect fill="none" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" width="10" x="3" y="7.5" />
+      <path d="M5.25 7.5V5a2.75 2.75 0 0 1 5.5 0v2.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+    </svg>
+  );
+}
 
 /** The states that need a person: they open the section by themselves (until the person folds it). A click in ProPresenter only holds one song and needs nothing. */
 const NEEDS_ATTENTION = new Set<FollowLine["state"]>(["paused", "not_followed", "error"]);
@@ -48,7 +74,7 @@ export function AutoPresenterSection({ follow, library, link, plan }: { follow?:
 
   // The ONE line: while locked it says which link is missing (`Waiting for ...` once the switch was saved as on), and nothing claims it follows.
   const shown: FollowLine = lock
-    ? { text: lockWords(lock, enabled), mark: enabled ? "!" : "\u2212", tone: enabled ? "warning" : "idle", state: enabled ? "waiting" : "off" }
+    ? { text: lockWords(lock, enabled), mark: enabled ? "!" : MARK_IDLE, tone: enabled ? "warning" : "idle", state: enabled ? "waiting" : "off" }
     : line;
   const summary = shortLine(shown.text);
   const canTryAgain = enabled && !lock && Boolean(follow?.status?.can_try_again);
@@ -65,7 +91,10 @@ export function AutoPresenterSection({ follow, library, link, plan }: { follow?:
   const locked = lock !== null || !follow;
 
   const toggle = (
-    <div className="ml-auto flex items-center pb-1" data-part="auto-presenter-switch">
+    <div className="ml-auto flex items-center gap-3 pb-1 [&_label]:font-semibold [&_label]:text-ink" data-part="auto-presenter-switch">
+      {lock !== null && (
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-body" data-testid="presenter-follow-locked"><LockMark />Locked</span>
+      )}
       <Switch aria-describedby={ids.live} aria-label={FOLLOW_LABEL} checked={enabled} data-testid="presenter-follow-switch" disabled={!follow || busy || (lock !== null && !enabled)} label={enabled ? "On" : "Off"} onChange={(event) => turn(event.target.checked)} />
     </div>
   );
@@ -81,10 +110,7 @@ export function AutoPresenterSection({ follow, library, link, plan }: { follow?:
         onOpenChange={(next) => setFoldedAt(next ? null : key)}
         persistKey={AUTO_PRESENTER_OPEN_KEY}
         summary={(
-          <span className={cx("flex min-w-0 items-start gap-1.5", LINE_TONE[shown.tone])}>
-            <span aria-hidden="true" className="w-3 flex-none text-center font-mono">{shown.mark}</span>
-            <span className="min-w-0 break-words">{summary}</span>
-          </span>
+          <Line line={shown} text={summary} />
         )}
         summaryTestId="auto-presenter-summary"
         title={FOLLOW_LABEL}
@@ -94,12 +120,9 @@ export function AutoPresenterSection({ follow, library, link, plan }: { follow?:
         {lock && (
           <SectionNotice tone={enabled ? "warning" : "info"} title={lockWords(lock, enabled)}><span data-testid="presenter-follow-reason">{lock.where}</span></SectionNotice>
         )}
-        <fieldset aria-describedby={ids.live} className={cx("m-0 min-w-0 space-y-4 border-0 p-0", locked && "opacity-60")} data-locked={locked || undefined} disabled={locked}>
+        <fieldset aria-describedby={ids.live} className="m-0 min-w-0 space-y-4 border-0 p-0" data-locked={locked || undefined} disabled={locked}>
           {detail && (
-            <p className={cx("flex min-w-0 items-start gap-2 text-sm", LINE_TONE[detail.tone])} data-state={detail.state} data-testid="auto-presenter-detail">
-              <span aria-hidden="true" className="w-3 flex-none text-center font-mono">{detail.mark}</span>
-              <span className="min-w-0 break-words">{detail.text}</span>
-            </p>
+            <p data-state={detail.state} data-testid="auto-presenter-detail"><Line line={detail} size="text-sm" text={detail.text} /></p>
           )}
           {canTryAgain && (
             <ActionRow>
@@ -107,8 +130,9 @@ export function AutoPresenterSection({ follow, library, link, plan }: { follow?:
             </ActionRow>
           )}
           <AutoPresenterSongs follow={followed} headingId={ids.songs} lock={lock} rows={rows} />
-          <AutoPresenterTiming follow={follow} />
         </fieldset>
+        {/* Timing is a setting like any other: it stays readable and usable while the list above is locked. */}
+        <div className="pt-2"><AutoPresenterTiming follow={follow} /></div>
       </OptionalBand>
     </div>
   );

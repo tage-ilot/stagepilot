@@ -31,7 +31,7 @@ describe("Auto-Presenter, its own section", () => {
     draw(off());
     expect(band()).toHaveAttribute("data-tone", "presentation");
     expect(screen.getByRole("heading", { name: "Auto-Presenter" })).toBeInTheDocument();
-    expect(summary()).toHaveTextContent(/^\u2212?Off$/);
+    expect(summary()).toHaveTextContent(/^\u25CBOff$/);
     const header = band().querySelector("[data-part=band-header]") as HTMLElement;
     expect(within(header).getByRole("switch", { name: FOLLOW_LABEL })).toBeInTheDocument();
     // The switch is not in the body (no nested box); the body is below the header's rule.
@@ -112,6 +112,9 @@ describe("Auto-Presenter locked", () => {
     expect(screen.getByTestId("auto-presenter")).toHaveAttribute("data-locked", "true");
     expect(band().querySelector("fieldset")).toBeDisabled();
     expect(screen.getByTestId("presenter-follow-reason")).toHaveTextContent("Configuration \u2192 Playback (Library Link setup)");
+    // The locked look: a padlock and the word Locked beside the switch, so a locked Off never reads as an ordinary Off.
+    expect(within(band().querySelector("[data-part=auto-presenter-switch]") as HTMLElement).getByTestId("presenter-follow-locked")).toHaveTextContent("Locked");
+    expect(within(band()).getByText('Locked')).toBeInTheDocument();
     expect(within(band()).getByText("Needs the Playback Library Link", { selector: "[data-part=title], p, div, strong" })).toBeInTheDocument();
   });
 
@@ -157,6 +160,16 @@ describe("Auto-Presenter locked", () => {
     expect(screen.getByRole("switch", { name: FOLLOW_LABEL })).toBeEnabled();
     expect(screen.queryByTestId("presenter-follow-reason")).toBeNull();
     expect(band().querySelector("fieldset")).toBeEnabled();
+    expect(screen.queryByTestId("presenter-follow-locked")).toBeNull();
+  });
+
+  it("the status line is never a lone dash: every state starts with a real mark and its words", () => {
+    const { unmount } = draw(off());
+    expect(summary()).toHaveTextContent(/^\u25CBOff$/);
+    unmount();
+    locked(NO_LIBRARY);
+    expect(summary().textContent).toMatch(/^\u25CBNeeds the Playback Library Link$/);
+    expect(summary().textContent).not.toMatch(/^[-\u2212\u2013]/);
   });
 });
 
@@ -215,9 +228,19 @@ describe("the Timing group", () => {
     expect(follow.setOffset).not.toHaveBeenCalled();
   });
 
-  it("cannot be changed while the section is locked", () => {
+  it("shows a quiet changed mark beside the offset only when it is not 0", () => {
+    const { unmount } = draw300(followController({ offsetMs: 0 }));
+    expect(screen.queryByTestId("presenter-follow-timing-changed")).toBeNull();
+    unmount();
+    draw300();
+    expect(screen.getByTestId("presenter-follow-timing-changed")).toHaveTextContent("changed");
+  });
+
+  it("stays a normal setting while the list is locked: the group opens and the box is usable", async () => {
     window.localStorage.setItem(AUTO_PRESENTER_OPEN_KEY, "true");
     draw(followController(), NO_LINK);
-    expect(screen.getByRole("spinbutton", { name: "Offset (ms)" })).toBeDisabled();
+    expect(timing()).toBeEnabled();
+    await userEvent.setup().click(timing());
+    expect(screen.getByRole("spinbutton", { name: "Offset (ms)" })).toBeEnabled();
   });
 });

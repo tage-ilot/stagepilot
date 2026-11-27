@@ -32,8 +32,15 @@ export function AutoPresenterTiming({ follow }: { follow?: PresenterFollowContro
     if (value !== saved) void follow?.setOffset(value);
     else setText(String(value));
   };
+  // Folded, the row reads like any setting: its value in body ink, and a quiet `changed` mark when the offset is not the usual 0.
+  const summary = (
+    <span className="inline-flex min-w-0 items-center gap-2 text-ink-body" data-testid="presenter-follow-timing-summary">
+      <span>{`Offset ${saved} ms`}</span>
+      {saved !== 0 && <span className="border border-edge-medium px-1.5 text-xs leading-5 text-ink-body" data-testid="presenter-follow-timing-changed">changed</span>}
+    </span>
+  );
   return (
-    <Disclosure data-testid="presenter-follow-timing" summary={`Offset ${saved} ms`} title="Timing" tone="presentation" variant="advanced">
+    <Disclosure data-testid="presenter-follow-timing" summary={summary} title={<span className="text-ink">Timing</span>} tone="presentation" variant="advanced">
       <Field
         error={refused ? OFFSET_ERROR : undefined}
         hint="Positive shows every slide earlier, negative later. Playback's cues come a little before the lyric, so 0 is usually right."
@@ -41,7 +48,7 @@ export function AutoPresenterTiming({ follow }: { follow?: PresenterFollowContro
       >
         <div className="w-28 max-w-full">
           <Input
-            disabled={busy}
+            disabled={busy || !follow}
             inputMode="numeric"
             max={OFFSET_MAX_MS}
             min={OFFSET_MIN_MS}
