@@ -7,7 +7,7 @@ const TITLES = ["Holy Forever", "Battle Belongs", "Gratitude", "Firm Foundation"
 
 /** The four plan songs of the set, `k1` to `k4` as the library plan names them, each with its verdict (the last one repeats). */
 export const followSongs = (...verdicts: Partial<FollowSong>[]): FollowSong[] => TITLES.map((title, i) => ({
-  key: `k${i + 1}`, title, following: "cues" as const, code: "cues" as const, text: "Following by Playback cues", advice: null, lines_per_slide: 1, template: "ProPresenter 1 Line Template", ...verdicts[Math.min(i, verdicts.length - 1)],
+  key: `k${i + 1}`, title, following: "cues" as const, code: "cues" as const, text: "Following by Playback cues", advice: null, lines_per_slide: 1, playback_lines: 1, template: "ProPresenter 1 Line Template", ...verdicts[Math.min(i, verdicts.length - 1)],
 }));
 
 export const NO_CUES_SONG: Partial<FollowSong> = { code: "bars", text: "Following by bars (no Playback cues)", following: "bars", advice: "No cues: in Playback choose a ProPresenter 1 Line Template for this song" };

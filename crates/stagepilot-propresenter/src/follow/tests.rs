@@ -247,10 +247,10 @@ fn repeated_chorus_refrain_and_bridge_sections_map_to_the_right_entries() {
 }
 
 #[test]
-fn the_two_line_template_does_not_fit_a_one_line_file() {
+fn cues_that_stop_at_slide_30_of_a_54_cue_file_do_not_fit() {
     let f = fixture();
     let song = fixture_song(&f);
-    // A 2 Line template gave 40 events that stop at slide 30.
+    // The first 40 events of the 1 Line series, which stop at slide 30: the numbers do not reach the file's 54 cues.
     let two_line: Vec<LyricCue> = f.cues.iter().copied().filter(|c| c.slide <= 30).collect();
     assert!(two_line.len() < 70 && two_line.iter().map(|c| c.slide).max() == Some(30));
     let schedule = schedule_for_song(&song, &f.sections, &two_line, None).unwrap();
@@ -591,6 +591,7 @@ fn a_group_the_file_does_not_have_is_refused() {
         name: "G".into(),
         cues,
         has_text: vec![true; cues],
+        lines: vec![1; cues],
     };
     assert_eq!(
         SongMap::new(vec![group(1)], vec![0, 1]),
@@ -598,6 +599,7 @@ fn a_group_the_file_does_not_have_is_refused() {
     );
     let mut odd = group(2);
     odd.has_text.pop();
+    odd.lines.pop();
     assert_eq!(
         SongMap::new(vec![odd], vec![0]),
         Err(MapError::Inconsistent)

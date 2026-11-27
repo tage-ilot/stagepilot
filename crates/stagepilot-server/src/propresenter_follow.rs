@@ -458,6 +458,8 @@ fn song_json(song: &SongStatus) -> Value {
         // The usual lines of text per slide in the song's file, and the Playback Lyrics Bus template that fits it (1, 2 or 4).
         "lines_per_slide": song.lines_per_slide(),
         "template": template_name(song.lines_per_slide()),
+        // Playback's own lines per slide as its cues say (1, 2 or 4), or null while it has none or they do not say.
+        "playback_lines": song.playback_lines(),
     })
 }
 

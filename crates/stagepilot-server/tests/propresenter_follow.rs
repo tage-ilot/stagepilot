@@ -503,6 +503,9 @@ async fn a_song_is_followed_by_its_playback_cues_through_play_loop_click_and_the
     let status = loop_status(&w, |s| s["songs"][0]["code"] == "cues").await;
     assert_eq!(status["songs"][0]["text"], "Following by Playback cues");
     assert_eq!(status["songs"][0]["following"], "cues");
+    // The status carries Playback's own lines per slide next to the file's (the cues here say one line per slide).
+    assert_eq!(status["songs"][0]["lines_per_slide"], 1);
+    assert_eq!(status["songs"][0]["playback_lines"], 1);
     // Play from 5 s: the playlist item (item 1: a header is item 0), then the cue at 3.5 s (flat slide 1).
     w.play(5.0);
     until("slide 1", || log(&w) == strings(&["item:1", "slide:1"])).await;
@@ -565,6 +568,10 @@ async fn a_song_with_no_cues_is_followed_by_bars_and_the_status_gives_the_advice
     );
     // The file's slides have one line of text each: the template that fits it.
     assert_eq!(status["songs"][0]["lines_per_slide"], 1);
+    assert!(
+        status["songs"][0]["playback_lines"].is_null(),
+        "no cues, nothing to read it from"
+    );
     assert_eq!(
         status["songs"][0]["template"],
         "ProPresenter 1 Line Template"

@@ -470,12 +470,35 @@ shows the right lyric slide.
   <section>)`. Look at that section's first slide the first time: the section named is where a slide inside a group had to be guessed, else
   the first section that has a cue.
 - **More than 8 more slides, or numbers no way of adding slides explains** (a slide group longer than its file group, the same slide
-  in two groups, a 2 or 4 Line template against a 1 Line file) say `Cues do not match the file (cues go to slide N, file has M cues)`, name
-  the Playback template that fits the file, and the song is followed by bars.
+  in two groups) say `Cues do not match the file (cues go to slide N, file has M cues)`, name the Playback template that fits the file,
+  and the song is followed by bars. A 2 or 4 Line template against a 1 Line file is no longer one of these: see the next part.
 
 The usual lines of text per slide that has text (the commonest count of line breaks plus one; 1, 2 or 4 are Playback's templates) is read
 from the file. It is what the advice names: `No cues: in Playback choose the ProPresenter 2 Line Template for this song`, and the same
 template after a mismatch. A file whose slides have another number of lines says `a ProPresenter Line Template that matches the file`.
+
+### Lines per slide
+
+Playback's Lyrics Bus template counts 1, 2 or 4 lines per slide. The song file has as many lines on a slide as it was made with, and people
+change them. StagePilot counts the lines of text on every slide of the file (a line break or a new paragraph starts a line; a blank or
+background-only slide has none) and works out Playback's lines per slide from the cues themselves: for each template it checks how many of
+the song's groups have exactly the number of slides that template makes of that many lines, and the template that fits clearly the most
+groups is Playback's. When no template stands out the song is treated as before (numbers against the file's slides).
+
+- **Same number of lines (the normal case).** Nothing changes: the rules above apply.
+- **Different numbers** (for example Playback's 2 Line Template against a file of one-line slides, or a 4 Line Template against one-line
+  slides): the song is no longer refused. Playback's slide 3 of a group shows lines 5 and 6 of that group, so StagePilot shows the slides of
+  the file that hold those lines. When the file's slides are smaller than Playback's it shows each of them in turn, evenly spaced from
+  Playback's cue to the next cue (or the end of the section); when they are bigger it shows the slide that holds the first line and does
+  not show it again. Blank slides have no lines, so slides added to the file do not matter here either. A slide with 3 lines among
+  2-line slides is followed the same way, by its lines.
+- **Check.** Such a song says `Aligned by lines (Playback 2 per slide, the file 1 per slide)` and is still followed by cues, never blocked.
+  The tip under it says that matching the template in Playback is still best (`choose the ProPresenter 1 Line Template`).
+- **Refused only when it really does not fit**: no template can be told from the cues, or a group's slides fit no template (even with
+  one slide more than its lines make). The song is then followed by bars and says `Cues do not match the file (...)`.
+
+The song row shows both numbers, the file's `lines_per_slide` and Playback's `playback_lines` (null while there are no cues or they do not
+say), in the status below.
 
 ### What StagePilot does while the song plays
 
@@ -537,7 +560,7 @@ seconds while no song plays (never while one plays).
 
 ```
 {enabled, offset_ms, state, message, song: {key, title} | null, section: {index, name} | null, slide, hold_reason, can_try_again,
- songs: [{key, title, following: "cues" | "bars" | null, code, text, advice, lines_per_slide, template}]}
+ songs: [{key, title, following: "cues" | "bars" | null, code, text, advice, lines_per_slide, playback_lines, template}]}
 ```
 
 `state` is `off`, `idle` (nothing to follow), `ready` (the song is loaded and not playing), `following`, `held` (a click holds it), `paused`
@@ -546,6 +569,8 @@ state of following changes the header's Ready or Check-system verdict.
 
 `lines_per_slide` is the usual number of text lines of a slide in the song's file and `template` the Playback Lyrics Bus template that
 fits it (`ProPresenter 1 Line Template`, 2 or 4), both `null` until the file has been read or when it has no text slide.
+`playback_lines` is the lines per slide of the template Playback used (1, 2 or 4), read from the song's cues; `null` when the song has no
+cues or they do not say.
 
 Each plan song says, in the words of the screen:
 
@@ -553,6 +578,7 @@ Each plan song says, in the words of the screen:
 |---|---|
 | `cues` | Following by Playback cues |
 | `cues_aligned` | Following by Playback cues, aligned with extra slides (check the first slide of Intro) |
+| `cues_by_lines` | Aligned by lines (Playback 2 per slide, the file 1 per slide) (followed by cues; `advice`: Matching the template is still best: in Playback choose a ProPresenter 1 Line Template for this song) |
 | `bars` | Following by bars (no Playback cues) (`advice`: No cues: in Playback choose a ProPresenter 1 Line Template for this song; the 2 or 4 Line Template when the file's slides have 2 or 4 lines) |
 | `cues_do_not_match` | Cues do not match the file (cues go to slide N, file has M cues) (followed by bars; `advice`: In Playback choose the ProPresenter 2 Line Template for this song) |
 | `bars_cues_unusable` | Following by bars (cues not used: a cue after the song end / a cue is in no section / ...) |
@@ -567,13 +593,13 @@ Each plan song says, in the words of the screen:
 
 ### The window
 
-Configuration → Presentation holds the **Auto-Presenter** as a card of its own, right under the **Presenter Link** card and in the same style (a rail and a soft wash in the Presentation orange, the title in bold with one line under it, a chevron, a rule under the header). The card is always drawn, even when you cannot use it yet.
+Configuration → Presentation holds the **Auto-Presenter** as a card of its own, under the **Presenter Link** card and the **VerseVision** card, just above the Save bar, and in the same style (a rail and a soft wash in the Presentation orange, the title in bold with one line under it, a chevron, a rule under the header). The card is always drawn, even when you cannot use it yet.
 
 - **The switch** sits on the card's header row, not inside the card. Off until you turn it on; it is saved with the other settings (`propresenter.presenter_follow.enabled`) and turned off the same way. The window reads the switch before it writes, so what you set elsewhere is never put back to an older value.
 - **One summary line** under the title, always a mark and words, never a colour alone: `Off`; `Following: Chorus, slide 3` (the section Playback is in, and ProPresenter's slide counted the way ProPresenter's window counts, from 1: its Count Off is slide 1); `Ready: ...` while a song is loaded and not playing; `Paused: someone changed the slide in ProPresenter` (a click in ProPresenter holds the song until the next section; there is nothing to press); `Paused: ProPresenter did not take 5 slide changes in a row` (the whole sentence, with the reason, is inside the card); `Not following: ...` with the reason when the song that plays cannot be followed; `Needs the Playback Library Link` while it is locked (below). It is the first thing a screen reader hears too.
 - **Fold.** The card opens and closes like the Presenter Link and remembers what you chose on this computer. With the switch off it starts folded. It opens by itself when it needs you (paused by failures, a song that cannot be followed, a switch that is on but locked) until you close it; a click in ProPresenter, which only holds one song, does not open it.
 - **Locked, not hidden.** The Auto-Presenter can be turned on only when **both** links work: the **Presenter Link** is ready, and Playback's **Library Link** is connected and answers with current data (not an old copy). Otherwise the switch cannot be pressed, everything inside is greyed and ONE reason says which link to set up and where: `Needs the Playback Library Link` (Configuration → Playback, Library Link setup), `Needs the Presenter Link` (Configuration → Presentation, Presenter Link setup), `Needs current data from the Playback Library Link` (the Library Link answers but has not lately), or both named in one line. A switch that was saved as on and then locked says `Waiting for the Playback Library Link` (or the Presenter Link): nothing on the card says it is following, no song row claims it, and the switch can still be turned off. It follows again by itself when the link is back.
-- **The songs.** One row for every song of the plan, with its cover and title and one chip from `GET /api/v1/propresenter-follow/status` (`songs[].text`, the table above), each with a mark (`✓` followed by cues, `~` by bars, `!` something to look at, `−` nothing to follow now). While the card is locked the rows are only the cover and title, greyed, with no chip: the one reason box above them says which link is missing. A song followed by bars because Playback holds no cues has ONE chip, `! No cues: following by bars` (warning tone; the status's `Following by bars (no Playback cues)` is its hover text), and one sentence that names the template its song file needs: *In Playback: Edit, the "..." on the song, MIDI OUT, Lyrics Bus, ProPresenter 2 Line Template, Update.* (the 1, 2 or 4 Line Template by the lines per slide the song file has, as the status's `advice` and `template` say; a file with another number says to pick the Line Template that matches the file). A song whose cues do not fit the file says `Cues do not match the file (cues go to slide N, file has M cues)`, `Followed by bars` and the same sentence with the template that fits. A song followed by cues with extra slides in its file says `Following by Playback cues, aligned with extra slides (check the first slide of Intro)`. The song cards of the Presenter Link itself carry none of this.
+- **The songs.** One row for every song of the plan, with its cover and title and one chip from `GET /api/v1/propresenter-follow/status` (`songs[].text`, the table above), each with a mark (`✓` followed by cues, `~` by bars, `!` something to look at, `−` nothing to follow now). While the card is locked the rows are only the cover and title, greyed, with no chip: the one reason box above them says which link is missing. A song followed by bars because Playback holds no cues has ONE chip, `! No cues: following by bars` (warning tone; the status's `Following by bars (no Playback cues)` is its hover text), and one sentence that names the template its song file needs: *In Playback: Edit, the "..." on the song, MIDI OUT, Lyrics Bus, ProPresenter 2 Line Template, Update.* (the 1, 2 or 4 Line Template by the lines per slide the song file has, as the status's `advice` and `template` say; a song followed by lines (Playback and the file count lines per slide differently) has the chip `! Aligned by lines (Playback 2 per slide, the file 1 per slide)` and the same sentence as the tip; a file with another number says to pick the Line Template that matches the file). A song whose cues do not fit the file says `Cues do not match the file (cues go to slide N, file has M cues)`, `Followed by bars` and the same sentence with the template that fits. A song followed by cues with extra slides in its file says `Following by Playback cues, aligned with extra slides (check the first slide of Intro)`. The song cards of the Presenter Link itself carry none of this.
 - **Try again** appears only when following is paused by failures (`POST /api/v1/propresenter-follow/try-again`). It is the only button of the card.
 - **Timing** (folded). One small number box, **Offset (ms)**, from -2000 to 2000, saved when you leave the box or press Enter (`propresenter.presenter_follow.offset_ms`). Positive shows every slide earlier. Leave it at 0 until it has been tuned on the rig.
 

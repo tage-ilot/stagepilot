@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { AutoPresenterSection } from "../components/AutoPresenterSection";
+import { VerseVisionButton } from "../components/VerseVisionButton";
 import { PresenterLinkSection } from "../components/PresenterLinkSection";
 import { PRESENTER_LINK_OPEN_KEY } from "../components/proPresenterLinkState";
 import { Button } from "../components/ui/Button";
@@ -64,6 +65,7 @@ export function AutoPresenter({ on, enabled = true, steps, offsetMs, link = link
           <Panel tone="presentation" variant="setup">
             <div className="space-y-4">
               {beside && <PresenterLinkSection library={library} link={link} plan={plan} />}
+              {beside && <VerseVisionButton />}
               <AutoPresenterSection follow={follow} library={library} link={link} plan={plan} />
             </div>
           </Panel>

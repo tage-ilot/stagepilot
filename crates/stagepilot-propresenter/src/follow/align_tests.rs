@@ -9,17 +9,17 @@ use serde_json::Value;
 
 const FIXTURE: &str = include_str!("../../tests/fixtures/oh-my-soul-lyric-cues.fixture.json");
 /// The `Playback` arrangement of the fixture song: one entry per Playback section, as a position in the file's groups.
-const ARRANGEMENT: [usize; 23] = [
+pub(super) const ARRANGEMENT: [usize; 23] = [
     0, 1, 2, 3, 4, 5, 6, 7, 4, 8, 5, 9, 10, 10, 11, 12, 13, 14, 8, 8, 15, 16, 17,
 ];
 
-struct Fixture {
-    cues: Vec<LyricCue>,
-    sections: Vec<Section>,
-    groups: Vec<(String, usize)>,
+pub(super) struct Fixture {
+    pub(super) cues: Vec<LyricCue>,
+    pub(super) sections: Vec<Section>,
+    pub(super) groups: Vec<(String, usize)>,
 }
 
-fn fixture() -> Fixture {
+pub(super) fn fixture() -> Fixture {
     let v: Value = serde_json::from_str(FIXTURE).unwrap();
     Fixture {
         cues: v["cues"]
@@ -58,15 +58,15 @@ fn fixture() -> Fixture {
 // ---- a song file as a plain description that a test can change --------------------------------------------------------------
 
 #[derive(Clone)]
-struct Layout {
+pub(super) struct Layout {
     /// (uuid key, name, the text of each slide: `None` is a blank background)
-    groups: Vec<(u32, String, Vec<Option<String>>)>,
+    pub(super) groups: Vec<(u32, String, Vec<Option<String>>)>,
     /// Positions in `groups`.
-    arrangement: Vec<usize>,
+    pub(super) arrangement: Vec<usize>,
 }
 
 /// The fixture song: the Count Off is one blank slide, every other slide has a text of its own (`g3c1`: group 3, second slide).
-fn original() -> Layout {
+pub(super) fn original() -> Layout {
     let f = fixture();
     Layout {
         groups: f
@@ -86,7 +86,7 @@ fn original() -> Layout {
 
 impl Layout {
     /// `count` blank slides in a new group at position `at` that the arrangement does not play (a group someone added).
-    fn with_new_group(&self, at: usize, count: usize) -> Layout {
+    pub(super) fn with_new_group(&self, at: usize, count: usize) -> Layout {
         let mut out = self.clone();
         out.groups.insert(
             at,
@@ -101,7 +101,7 @@ impl Layout {
     }
 
     /// `count` blank slides inside group `group`, before its slide number `before` (`before == slides` is the end).
-    fn with_blanks(&self, group: usize, before: usize, count: usize) -> Layout {
+    pub(super) fn with_blanks(&self, group: usize, before: usize, count: usize) -> Layout {
         let mut out = self.clone();
         for _ in 0..count {
             out.groups[group].2.insert(before, None);
@@ -109,7 +109,7 @@ impl Layout {
         out
     }
 
-    fn song(&self) -> Song {
+    pub(super) fn song(&self) -> Song {
         let mut built = SyntheticSong::new("Test Song").id(1001).seed(7);
         for (key, name, slides) in &self.groups {
             let slides: Vec<Option<&str>> = slides.iter().map(Option::as_deref).collect();
@@ -123,7 +123,7 @@ impl Layout {
     }
 
     /// What ProPresenter shows at each slide number of the arrangement.
-    fn flat(&self) -> Vec<Option<String>> {
+    pub(super) fn flat(&self) -> Vec<Option<String>> {
         self.arrangement
             .iter()
             .flat_map(|g| self.groups[*g].2.clone())
@@ -131,7 +131,7 @@ impl Layout {
     }
 
     /// What each cue of the file holds, in file order.
-    fn raw(&self) -> Vec<Option<String>> {
+    pub(super) fn raw(&self) -> Vec<Option<String>> {
         self.groups.iter().flat_map(|g| g.2.clone()).collect()
     }
 }
@@ -413,9 +413,9 @@ fn up_to_eight_extra_slides_are_accepted_and_nine_are_refused() {
 }
 
 #[test]
-fn the_two_line_numbering_is_refused_with_and_without_extra_slides() {
+fn cues_that_stop_short_of_the_file_are_refused_with_and_without_extra_slides() {
     let f = fixture();
-    // A 2 Line template gave slide numbers that stop at 30 while the file has 54 slides.
+    // The 1 Line cues up to slide 30 are numbers of a 1 Line template that stop while the file has 54 slides: no template fits.
     let two_line: Vec<LyricCue> = f.cues.iter().copied().filter(|c| c.slide <= 30).collect();
     for layout in [
         original(),

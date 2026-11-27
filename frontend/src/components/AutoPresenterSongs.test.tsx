@@ -79,6 +79,17 @@ describe("the song list of the Auto-Presenter", () => {
     expect(chip("Holy Forever").querySelector("[aria-hidden=true]")).toHaveTextContent("!");
   });
 
+  it("marks a song followed by lines as one to check, in words with both numbers, and says which template is still best", () => {
+    draw(followController({ status: followStatus({ songs: followSongs({ code: "cues_by_lines", text: "Aligned by lines (Playback 2 per slide, the file 1 per slide)", advice: "Matching the template is still best: in Playback choose a ProPresenter 1 Line Template for this song", lines_per_slide: 1, playback_lines: 2, template: "ProPresenter 1 Line Template" }) }) }));
+    expect(chip("Holy Forever")).toHaveTextContent("Aligned by lines (Playback 2 per slide, the file 1 per slide)");
+    expect(chip("Holy Forever").querySelector("[aria-hidden=true]")).toHaveTextContent("!");
+    expect(chip("Holy Forever")).toHaveAttribute("data-tone", "warning");
+    expect(chip("Holy Forever").getAttribute("title")).toContain("Matching the template is still best");
+    expect(within(row("Holy Forever")).getByTestId("follow-song-fix")).toHaveTextContent("Lyrics Bus, ProPresenter 1 Line Template, Update.");
+    // It is followed (by cues), so nothing says bars.
+    expect(within(row("Holy Forever")).queryByTestId("follow-song-phrase")).toBeNull();
+  });
+
   it("is on the plan's own names too, until Playback has given the songs", () => {
     const follow = followController({ status: followStatus({ songs: followSongs({ code: "switch_off", text: "Switch is off", following: null }).map((song, i) => ({ ...song, key: `s${i}` })) }) });
     render(<AutoPresenterSection follow={follow} library={libraryController("ready", { plan: null })} link={linkController(helperStatus("ready"))} plan={names("Holy Forever", "Battle Belongs")} />);
