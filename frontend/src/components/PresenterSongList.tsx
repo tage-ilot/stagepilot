@@ -2,7 +2,6 @@ import { Fragment, useEffect, useId, useRef, useState } from "react";
 
 import type { AddSongsController } from "../hooks/useAddSongs";
 import { useKeyChangeClock } from "../hooks/useKeyChangeClock";
-import { hasNoCues, NO_CUES_FIX, NO_CUES_WORD, songChipWords, songPhrase, type FollowSong } from "../presenterFollow";
 import type { AddSongsSong } from "../propresenterLink";
 import type { AddSongsRow } from "./addSongsSongs";
 import { songStatus, STATUS, type StatusWords } from "./addSongsStatus";
@@ -50,27 +49,7 @@ const BLOCK_CHIP = {
   unnamed: { word: NO_NUMBER, phrase: NO_NUMBER_PHRASE, why: NO_NUMBER_WHY, tone: "danger" as const },
 };
 
-/**
- * Whether the song is followed, in the words of the backend (docs/propresenter.md): ONE chip with a mark and the words, and for a song with no
- * Playback cues a second chip, No cues, with the one sentence that says where to make them in Playback. The state is the words and the mark, never colour alone.
- */
-function FollowChips({ song }: { song: FollowSong }) {
-  const phrase = songPhrase(song);
-  return (
-    <span className="contents" data-code={song.code} data-testid="follow-song">
-      <StatusChip {...songChipWords(song)} testId="follow-song-chip" title={song.advice ? `${song.text}. ${song.advice}` : song.text} wrap />
-      {phrase && <span className="text-xs text-ink-body" data-testid="follow-song-phrase">{phrase}</span>}
-      {hasNoCues(song) && (
-        <>
-          <StatusChip mark="?" testId="follow-song-no-cues" title={song.advice ?? NO_CUES_FIX} tone="warning" word={NO_CUES_WORD} />
-          <span className="text-xs text-ink-body" data-testid="follow-song-fix">{NO_CUES_FIX}</span>
-        </>
-      )}
-    </span>
-  );
-}
-
-function SongCard({ add, row, busy, now, marks, follow }: { add: AddSongsController; row: AddSongsRow; busy: boolean; now: number; marks: Marks | undefined; follow: FollowSong | undefined }) {
+function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row: AddSongsRow; busy: boolean; now: number; marks: Marks | undefined }) {
   const uid = useId();
   const block = add.blockOf(row);
   const ticked = add.selected.has(row.id);
@@ -117,7 +96,6 @@ function SongCard({ add, row, busy, now, marks, follow }: { add: AddSongsControl
       {marks?.stuck && <StatusChip {...words(marks.stuck)} testId="add-songs-stuck" />}
       {using && using.key !== "check" && <><StatusChip {...words(using)} testId="add-songs-using-chip" title={using.detail} /><span className="text-xs text-ink-body" data-testid="add-songs-using" title={using.detail}>{using.phrase}</span></>}
       {marks?.guessed && <StatusChip {...words(STATUS.check)} testId="add-songs-guessed" />}
-      {follow && <FollowChips song={follow} />}
     </span>
   );
   // The order Playback plays, always on the card (no button, no heading), UNDER the colored bar: the section names, wrapping onto as many lines as it needs.
@@ -156,7 +134,7 @@ function SongCard({ add, row, busy, now, marks, follow }: { add: AddSongsControl
  * Planning Center chip). Every card starts selected; a selection belongs to the song (its title), so the swap between the two keeps it.
  * A song that cannot be imported is a grey dashed card that says why. No sentence explains the list: the chips do.
  */
-export function PresenterSongList({ add, headingId, follow }: { add: AddSongsController; headingId: string; /** What the follow status says about each row (by row id): its readiness chip. */ follow?: ReadonlyMap<string, FollowSong> }) {
+export function PresenterSongList({ add, headingId }: { add: AddSongsController; headingId: string }) {
   const { rows, choices, selectedCount } = add;
   const busy = add.phase === "previewing" || add.phase === "applying";
   const names = !add.fromPlayback;
@@ -170,7 +148,7 @@ export function PresenterSongList({ add, headingId, follow }: { add: AddSongsCon
       <span aria-live="polite" className="sr-only" data-testid="add-songs-count" role="status">{selectedWords(selectedCount, choices.length)}</span>
       {rows.length === 0 ? <p className="text-sm text-ink-muted" data-testid="add-songs-empty">{NO_PLAN_SONGS}</p> : (
         <ul aria-label="Songs to import" className={SONG_GRID_CHECK} data-testid="add-songs-list">
-          {rows.map((row) => <SongCard add={add} busy={busy} key={row.id} follow={follow?.get(row.id)} marks={marks.get(row.id)} now={now} row={row} />)}
+          {rows.map((row) => <SongCard add={add} busy={busy} key={row.id} marks={marks.get(row.id)} now={now} row={row} />)}
         </ul>
       )}
     </section>

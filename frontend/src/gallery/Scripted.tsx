@@ -4,6 +4,7 @@ import { REMOTE_ACCESS_OPEN_KEY } from "../components/BackendSetupPanel";
 import { LIGHTING_CUE_BOARD_OPEN_KEY, LIGHTING_TIMELINE_OPEN_KEY } from "../components/LightingSetupPanel";
 import { SONG_ORDER_OPEN_KEY } from "../components/playbackStatus";
 import { PRESENTER_LINK_OPEN_KEY } from "../components/proPresenterLinkState";
+import { AUTO_PRESENTER_OPEN_KEY } from "../presenterFollow";
 import { SONG_FILE_KEY_PREFIX } from "../hooks/songFilePicks";
 
 /**
@@ -88,7 +89,7 @@ export function Fresh({ flags = {}, children }: { flags?: Record<string, boolean
   if (!seeded.current) {
     seeded.current = true;
     try {
-      for (const key of [REMOTE_ACCESS_OPEN_KEY, SONG_ORDER_OPEN_KEY, PRESENTER_LINK_OPEN_KEY, LIGHTING_TIMELINE_OPEN_KEY, LIGHTING_CUE_BOARD_OPEN_KEY]) window.localStorage.removeItem(key);
+      for (const key of [REMOTE_ACCESS_OPEN_KEY, SONG_ORDER_OPEN_KEY, PRESENTER_LINK_OPEN_KEY, AUTO_PRESENTER_OPEN_KEY, LIGHTING_TIMELINE_OPEN_KEY, LIGHTING_CUE_BOARD_OPEN_KEY]) window.localStorage.removeItem(key);
       for (const key of Object.keys(window.localStorage)) if (key.startsWith("gallery.optional.") || key.startsWith(SONG_FILE_KEY_PREFIX)) window.localStorage.removeItem(key);
       for (const [key, value] of Object.entries(flags)) window.localStorage.setItem(key, String(value));
     } catch { /* storage unavailable: the defaults apply */ }

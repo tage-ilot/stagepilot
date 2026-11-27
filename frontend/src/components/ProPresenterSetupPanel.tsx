@@ -18,6 +18,7 @@ import { connectionWord } from "./ui/statusWord";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import { useProPresenterScan, type ProPresenterScanController } from "../hooks/useProPresenterScan";
 import { ProPresenterLinkBlock } from "./ProPresenterLinkBlock";
+import { AutoPresenterSection } from "./AutoPresenterSection";
 import { PresenterLinkSection } from "./PresenterLinkSection";
 import { VerseVisionButton } from "./VerseVisionButton";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
@@ -300,7 +301,8 @@ export function ProPresenterSetupPanel({
       )}
       content={(
         <>
-          {link ? <PresenterLinkSection follow={follow} library={library} link={link} plan={plan} playing={playing} /> : undefined}
+          {link ? <PresenterLinkSection library={library} link={link} plan={plan} playing={playing} /> : undefined}
+          {link ? <AutoPresenterSection follow={follow} library={library} link={link} plan={plan} /> : undefined}
           <VerseVisionButton />
         </>
       )}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { addSongsRows, followByRow, planNameRows } from "./components/addSongsSongs";
-import { followLine, hasNoCues, shortLine, lockedReason, LOCKED_LIBRARY, LOCKED_LINK, NO_CUES_FIX, songChipWords, songPhrase } from "./presenterFollow";
+import { followLine, followLock, hasFix, hasNoCues, libraryLinkState, lockWords, shortLine, songChipWords, songPhrase, templateFix } from "./presenterFollow";
 import { libraryPlan, librarySong, librarySongOf } from "./test/libraryFixtures";
 import { followSongs, followStatus, NO_CUES_SONG } from "./test/presenterFollowFixtures";
 
@@ -72,16 +72,48 @@ describe("a song's chip", () => {
     expect(hasNoCues(mismatch!)).toBe(false);
     expect(songPhrase(mismatch!)).toBe("Followed by bars");
     expect(songPhrase(plain!)).toBeNull();
-    expect(NO_CUES_FIX).toBe("In Playback: Edit, the \u201C...\u201D on the song, MIDI OUT, Lyrics Bus, ProPresenter 1 Line Template, Update.");
+  });
+
+  it("names the template that fits the file in the one sentence of the fix (a mismatch has the same fix)", () => {
+    const [noCues, twoLine, mismatch, odd] = followSongs(
+      { ...NO_CUES_SONG, template: "ProPresenter 1 Line Template" },
+      { ...NO_CUES_SONG, lines_per_slide: 2, template: "ProPresenter 2 Line Template" },
+      { code: "cues_do_not_match", text: "Cues do not match the file (cues go to slide 30, file has 54 cues)", advice: "In Playback choose the ProPresenter 2 Line Template for this song", template: "ProPresenter 2 Line Template" },
+      { ...NO_CUES_SONG, lines_per_slide: 3, template: null },
+    );
+    const cues = followSongs()[0];
+    expect(templateFix(noCues!)).toBe("In Playback: Edit, the \u201C...\u201D on the song, MIDI OUT, Lyrics Bus, ProPresenter 1 Line Template, Update.");
+    expect(templateFix(twoLine!)).toContain("Lyrics Bus, ProPresenter 2 Line Template, Update.");
+    expect(templateFix(odd!)).toContain("Lyrics Bus, a ProPresenter Line Template that matches the file, Update.");
+    expect([noCues, twoLine, mismatch, odd, cues].map((song) => hasFix(song!))).toEqual([true, true, true, true, false]);
   });
 });
 
 describe("what locks the switch", () => {
-  it("is the Presenter Link first, then Playback's Library Link, else nothing", () => {
-    expect(lockedReason(false, false)).toBe(LOCKED_LINK);
-    expect(lockedReason(false, true)).toBe(LOCKED_LINK);
-    expect(lockedReason(true, false)).toBe(LOCKED_LIBRARY);
-    expect(lockedReason(true, true)).toBeNull();
+  it("is the Library Link's state: not connected, an old copy, or current", () => {
+    expect(libraryLinkState(null)).toBe("missing");
+    expect(libraryLinkState({ active: false, stale: false })).toBe("missing");
+    expect(libraryLinkState({ active: true, stale: true })).toBe("stale");
+    expect(libraryLinkState({ active: true, stale: false })).toBe("ready");
+  });
+
+  it("needs the Presenter Link AND the Library Link with current data, and names ONE reason with where to set it up", () => {
+    expect(followLock(true, "ready")).toBeNull();
+    const link = followLock(false, "ready")!;
+    expect(lockWords(link, false)).toBe("Needs the Presenter Link");
+    expect(link.where).toContain("Configuration \u2192 Presentation");
+    expect(link.chip.text).toBe("ProPresenter Link not ready");
+    const library = followLock(true, "missing")!;
+    expect(lockWords(library, false)).toBe("Needs the Playback Library Link");
+    expect(library.where).toContain("Configuration \u2192 Playback");
+    expect(library.chip.text).toBe("Playback's Library Link not ready");
+    expect(lockWords(followLock(true, "stale")!, false)).toBe("Needs current data from the Playback Library Link");
+    expect(lockWords(followLock(false, "missing")!, false)).toBe("Needs the Presenter Link and the Playback Library Link");
+  });
+
+  it("says Waiting for ... once the switch was saved as on", () => {
+    expect(lockWords(followLock(true, "missing")!, true)).toBe("Waiting for the Playback Library Link");
+    expect(lockWords(followLock(false, "ready")!, true)).toBe("Waiting for the Presenter Link");
   });
 });
 

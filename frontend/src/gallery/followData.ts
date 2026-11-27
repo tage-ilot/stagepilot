@@ -15,8 +15,13 @@ const songs = (...verdicts: Verdict[]): FollowSong[] => TITLES.map((title, i) =>
 }));
 
 const CUES: Verdict = { code: "cues", text: "Following by Playback cues", following: "cues" };
-const NO_CUES: Verdict = { code: "bars", text: "Following by bars (no Playback cues)", following: "bars", advice: "No cues: in Playback choose a ProPresenter 1 Line Template for this song" };
-const MISMATCH: Verdict = { code: "cues_do_not_match", text: "Cues do not match the file (cues go to slide 30, file has 54 cues)", following: "bars" };
+const NO_CUES: Verdict = { code: "bars", text: "Following by bars (no Playback cues)", following: "bars", advice: "No cues: in Playback choose a ProPresenter 1 Line Template for this song", lines_per_slide: 1, template: "ProPresenter 1 Line Template" };
+/** A song file with two lines of text per slide: the recommended template is the 2 Line one. */
+const NO_CUES_TWO: Verdict = { ...NO_CUES, advice: "No cues: in Playback choose the ProPresenter 2 Line Template for this song", lines_per_slide: 2, template: "ProPresenter 2 Line Template" };
+/** A song file with three lines per slide: Playback has no such template, so the fix says to pick the one that matches the file. */
+const NO_CUES_ODD: Verdict = { ...NO_CUES, advice: "No cues: in Playback choose a ProPresenter Line Template that matches the file for this song", lines_per_slide: 3, template: null };
+const MISMATCH: Verdict = { code: "cues_do_not_match", text: "Cues do not match the file (cues go to slide 30, file has 54 cues)", following: "bars", advice: "In Playback choose the ProPresenter 2 Line Template for this song", lines_per_slide: 2, template: "ProPresenter 2 Line Template" };
+const ALIGNED: Verdict = { code: "cues_aligned", text: "Following by Playback cues, aligned with extra slides (check the first slide of Verse 1)", following: "cues" };
 const CHANGED: Verdict = { code: "arrangement_changed", text: "Arrangement was changed in ProPresenter" };
 const NOT_IN_LIST: Verdict = { code: "not_in_playlist", text: "Not in the ProPresenter playlist" };
 const SWITCH_OFF: Verdict = { code: CUES_OFF, text: "Switch is off" };
@@ -37,7 +42,8 @@ export const FOLLOW_STATUS = {
     message: "Paused: ProPresenter did not take 5 slide changes in a row (ProPresenter did not answer). Following starts again with the next song, or press Try again.",
     songs: songs(CUES, CUES, CUES, NO_CUES),
   }),
-  noCues: status({ state: "ready", message: "Nothing to follow", songs: songs(NO_CUES, NO_CUES, CUES, NO_CUES) }),
+  noCues: status({ state: "ready", message: "Nothing to follow", songs: songs(NO_CUES, NO_CUES_TWO, CUES, NO_CUES_ODD) }),
+  aligned: status({ ...playing, state: "following", message: "Following by Playback cues", slide: 2, songs: songs(CUES, ALIGNED, CUES, CUES) }),
   mismatch: status({ state: "idle", songs: songs(MISMATCH, CHANGED, NOT_IN_LIST, CUES) }),
   notFollowed: status({ state: "not_followed", message: "Arrangement was changed in ProPresenter", song: { key: "k2", title: "Battle Belongs" }, songs: songs(CUES, CHANGED, CUES, NO_CUES) }),
   linkGone: status({ enabled: false, state: "off", message: "Switch is off", songs: songs(LINK_GONE) }),

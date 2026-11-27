@@ -22,6 +22,8 @@ export interface OptionalBandProps {
   /** Tint of the band (the connection's own). */
   tone?: DisclosureTone;
   headingId?: string;
+  /** Let the summary wrap onto more lines instead of being cut off beside the buttons (a state that must be read whole: the Auto-Presenter). The toggle keeps at least 16rem, so on a phone the buttons drop to a row of their own. */
+  wrapSummary?: boolean;
   children: ReactNode;
 }
 
@@ -31,7 +33,7 @@ export interface OptionalBandProps {
  * accent with the one-line summary under it, and the open area divided by a rule. The toggle (chevron, title, summary) and the actions
  * share the header row; the body folds in 300ms and is `inert` while closed.
  */
-export function OptionalBand({ title, summary, summaryTestId, actions, persistKey, defaultOpen = true, forceOpen = false, onOpenChange, tone = "playback", headingId, children }: OptionalBandProps) {
+export function OptionalBand({ title, summary, summaryTestId, actions, persistKey, defaultOpen = true, forceOpen = false, onOpenChange, tone = "playback", headingId, wrapSummary = false, children }: OptionalBandProps) {
   const [saved, setSaved] = usePersistedFlag(persistKey, defaultOpen);
   const open = saved || forceOpen;
   const bodyId = useId();
@@ -39,14 +41,14 @@ export function OptionalBand({ title, summary, summaryTestId, actions, persistKe
   return (
     <section aria-labelledby={headingId} className={cx("min-w-0 overflow-hidden rounded-ds-lg border border-l-[5px]", look.card, look.rail)} data-section="band" data-state={open ? "open" : "closed"} data-tone={tone}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pr-3" data-part="band-header">
-        <button aria-controls={bodyId} aria-expanded={open} className={cx("flex min-h-[4.25rem] min-w-0 flex-1 touch-manipulation items-center gap-3 py-3.5 pl-4 text-left transition-colors motion-reduce:transition-none", look.hover)} onClick={() => { setSaved(!open); onOpenChange?.(!open); }} type="button">
+        <button aria-controls={bodyId} aria-expanded={open} className={cx("flex min-h-[4.25rem] min-w-0 touch-manipulation items-center gap-3 py-3.5 pl-4 text-left transition-colors motion-reduce:transition-none", wrapSummary ? "flex-[1_1_16rem]" : "flex-1", look.hover)} onClick={() => { setSaved(!open); onOpenChange?.(!open); }} type="button">
           <svg aria-hidden="true" className={cx("size-3.5 shrink-0 transition-transform duration-[140ms] motion-reduce:transition-none", look.sub, open && "rotate-90")} data-part="chevron" viewBox="0 0 12 12">
             <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
           </svg>
           {/* The title, and the one-line summary under it (the status). With buttons beside the toggle the summary is cut off when there is no room; a band with none (the Presenter Link) lets it wrap on a phone. */}
           <span className="flex min-w-0 flex-1 flex-col">
             <h3 className={cx("font-type-body-md text-lg font-bold", look.title)} data-part="title" id={headingId}>{title}</h3>
-            {summary !== undefined && <span className={cx("mt-0.5 min-w-0 text-sm text-ink-body", actions ? "truncate" : "sm:truncate")} data-part="summary" data-testid={summaryTestId}>{summary}</span>}
+            {summary !== undefined && <span className={cx("mt-0.5 min-w-0 text-sm text-ink-body", wrapSummary ? "break-words" : actions ? "truncate" : "sm:truncate")} data-part="summary" data-testid={summaryTestId}>{summary}</span>}
           </span>
         </button>
         {actions}
