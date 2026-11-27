@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.46.0-rc.1] - 2026-11-26
+
 ### Added
 
 - **StagePilot can show a song's lyrics in ProPresenter while Playback plays the song (a switch, off until you turn it on).** For songs that Presenter Link added to the playlist, StagePilot follows Playback: when Playback reaches a verse or a line, the matching slide is shown in ProPresenter. It uses Playback's lyric cues when the song has them (a ProPresenter Line Template chosen in Playback) and spreads the slides over each section when it has none. Skipping ahead, going back and looping a section are followed; pause, stop and the end of a song leave the slide as it is. If someone clicks a slide in ProPresenter, StagePilot stops for that song until the next section starts, and says so. A song whose arrangement was changed in ProPresenter, or that is not in the playlist, is not followed and the status says why in a few words. After five failed slide changes in a row it pauses until the next song or **Try again**. With the switch off StagePilot sends nothing to ProPresenter. There is a status (`GET /api/v1/propresenter-follow/status`) and a setting (`propresenter.presenter_follow`: `enabled` and an `offset_ms` from -2000 to 2000), and nothing about it changes the header's Ready or Check-system verdict.
