@@ -2,15 +2,12 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useAddSongs } from "../hooks/useAddSongs";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
-import type { PresenterFollowController } from "../hooks/usePresenterFollow";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import type { ServicePlan } from "../types";
-import { followByRow, presenterRows } from "./addSongsSongs";
+import { presenterRows } from "./addSongsSongs";
 import { finishedWords } from "./addSongsStatus";
 import { canTryAgain, IMPORT_SONGS, IMPORTING, PLAYING_WORDS, presenterSummary, SKIP_AND_IMPORT, STALE_WORDS, stuckReason } from "./addSongsWording";
 import { PlaylistPicker, PreviewBody, Progress, Reason, Result } from "./AddSongsParts";
-import { followLine, shortLine } from "../presenterFollow";
-import { PresenterFollowBlock } from "./PresenterFollowBlock";
 import { PresenterSongList } from "./PresenterSongList";
 import { PRESENTER_LINK_NAME, PRESENTER_LINK_OPEN_KEY } from "./proPresenterLinkState";
 import { ActionButton, ActionRow, OptionalBand, SectionNotice } from "./sections";
@@ -27,18 +24,15 @@ import { ActionButton, ActionRow, OptionalBand, SectionNotice } from "./sections
  * (`presenterSummary`). A job that is being made or has just ended, and a problem, open it whatever the person chose, and it stays open
  * until they press the toggle.
  */
-export function PresenterLinkSection({ follow, library, link, plan, playing = false }: { follow?: PresenterFollowController; library?: PlaybackLibraryController; link?: ProPresenterLinkController; plan?: Pick<ServicePlan, "songs"> | null; playing?: boolean }) {
+export function PresenterLinkSection({ library, link, plan, playing = false }: { library?: PlaybackLibraryController; link?: ProPresenterLinkController; plan?: Pick<ServicePlan, "songs"> | null; playing?: boolean }) {
   if (!link) return null;
-  return <PresenterLinkBody follow={follow} library={library} link={link} plan={plan} playing={playing} />;
+  return <PresenterLinkBody library={library} link={link} plan={plan} playing={playing} />;
 }
 
 /** Mounted whenever a controller exists, so a job that is running (or has just ended) is not lost if the Link blinks; it draws only while it may. */
-function PresenterLinkBody({ follow, library, link, plan, playing }: { follow?: PresenterFollowController; library?: PlaybackLibraryController; link: ProPresenterLinkController; plan?: Pick<ServicePlan, "songs"> | null; playing: boolean }) {
+function PresenterLinkBody({ library, link, plan, playing }: { library?: PlaybackLibraryController; link: ProPresenterLinkController; plan?: Pick<ServicePlan, "songs"> | null; playing: boolean }) {
   const rows = useMemo(() => presenterRows(link, library, plan), [link, library, plan]);
   const add = useAddSongs({ rows, link, playing });
-  const followed = useMemo(() => followByRow(rows, follow?.status?.songs), [rows, follow?.status?.songs]);
-  // Playback's Library Link answers with data that is not an old copy (the same test the song list uses for Playback's songs).
-  const libraryReady = Boolean(library?.status?.active) && !library?.status?.stale;
   const ids = { heading: useId(), songs: useId(), preview: useId(), progress: useId(), result: useId(), reason: useId() };
   const { phase, plan: made, report } = add;
   const running = phase === "applying";
@@ -76,20 +70,17 @@ function PresenterLinkBody({ follow, library, link, plan, playing }: { follow?: 
     result: finished ? finishedWords(report) : null,
     reason: phase === "previewed" && made ? (add.stale ? STALE_WORDS : stuckReason(made, false)) : null,
   });
-  // While following is on, the folded header also says what it is doing, once there is something to say (following, a click's hold, a pause).
-  const line = follow?.enabled && add.linkReady && libraryReady ? followLine(follow.status, true, follow.error) : null;
-  const followWords = line && line.tone !== "idle" ? shortLine(line.text) : null;
   return (
     <div className="flex flex-col gap-3" data-phase={phase} data-testid="presenter-link-section">
       <p aria-live="polite" className="sr-only" data-testid="add-songs-live" role="status">{add.announcement}</p>
-      <OptionalBand defaultOpen={false} forceOpen={forceOpen} headingId={ids.heading} onOpenChange={(next) => setFoldedAt(next ? null : key)} persistKey={PRESENTER_LINK_OPEN_KEY} summary={followWords ? `${summary} \u00B7 ${followWords}` : summary} summaryTestId="presenter-link-summary" title={PRESENTER_LINK_NAME} tone="presentation">
+      <OptionalBand defaultOpen={false} forceOpen={forceOpen} headingId={ids.heading} onOpenChange={(next) => setFoldedAt(next ? null : key)} persistKey={PRESENTER_LINK_OPEN_KEY} summary={summary} summaryTestId="presenter-link-summary" title={PRESENTER_LINK_NAME} tone="presentation">
         <fieldset className={`m-0 min-w-0 space-y-4 border-0 p-0${notReady ? " opacity-60" : ""}`} data-locked={notReady || undefined} disabled={notReady}>
           <PlaylistPicker add={add} />
           {!add.linkReady && !notReady && <SectionNotice tone="warning"><span data-testid="add-songs-link-gone" title="Nothing was changed.">{`${PRESENTER_LINK_NAME} not ready: nothing changed`}</span></SectionNotice>}
           {/* The one line at the top when a song is playing; once the preview has stopped for it, the same words are the reason above the button. */}
           {playing && !running && !finished && reason !== PLAYING_WORDS && <SectionNotice tone="info"><span data-testid="add-songs-playing">{PLAYING_WORDS}</span></SectionNotice>}
           {add.problem && <SectionNotice tone="danger"><span data-code={add.problem.code ?? undefined} data-testid="add-songs-problem">{add.problem.message}</span></SectionNotice>}
-          <PresenterSongList add={add} follow={followed} headingId={ids.songs} />
+          <PresenterSongList add={add} headingId={ids.songs} />
           {/* The reason is a small neutral pill BESIDE the button (it wraps under it on a phone), so it is not read as a heading. */}
           {!running && !finished ? (
             <ActionRow align="center">
@@ -110,8 +101,6 @@ function PresenterLinkBody({ follow, library, link, plan, playing }: { follow?: 
           )}
         </fieldset>
       </OptionalBand>
-      {/* Always drawn, like the section: greyed with its reason while the Presenter Link or Playback's Library Link is not ready. */}
-      <PresenterFollowBlock follow={follow} libraryReady={libraryReady} linkReady={add.linkReady} />
     </div>
   );
 }
