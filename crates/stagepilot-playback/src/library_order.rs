@@ -225,6 +225,7 @@ mod tests {
                 title: (*name).into(),
                 seconds: Some(300),
                 key_name: None,
+                pair: None,
             })
             .collect()
     }

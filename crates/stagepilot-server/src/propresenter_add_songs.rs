@@ -22,7 +22,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use serde_json::{json, Map, Value};
 use stagepilot_core::state::TimerStatus;
-use stagepilot_playback::library::{LibraryPlan, LibrarySong, LibraryState};
+use stagepilot_playback::library::{LibraryPlan, LibrarySong, LibraryState, MatchConfidence};
 use stagepilot_propresenter::link::add_songs::{
     AddSongs, ApplyRefusal, ApplyReport, Event, Guard, Place, PlanError, PlanRequest, Prepared,
     Progress, Step, StepState, Timing, TitleFound, WantedSong, MAX_SONGS,
@@ -598,7 +598,11 @@ fn parse_preview(body: &Bytes) -> Result<PreviewBody, Json> {
 
 // ---- what is asked of Playback -----------------------------------------------------------------------------------------
 
-fn wanted(song: &LibrarySong, now: chrono::DateTime<chrono::Utc>) -> WantedSong {
+fn wanted(
+    song: &LibrarySong,
+    plan_name: Option<&str>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> WantedSong {
     WantedSong {
         ref_id: song
             .setlist_song_id
@@ -614,6 +618,7 @@ fn wanted(song: &LibrarySong, now: chrono::DateTime<chrono::Utc>) -> WantedSong 
             .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
             .is_some_and(|t| t.with_timezone(&chrono::Utc) <= now),
         as_is: false,
+        plan_name: plan_name.map(str::to_string),
     }
 }
 
@@ -623,27 +628,31 @@ fn pick_songs(plan: &LibraryPlan, selection: &Selection) -> Result<Vec<WantedSon
         return Ok(title_songs(titles));
     }
     let now = chrono::Utc::now();
-    let all: Vec<&LibrarySong> = plan
+    // A song a person paired by hand goes in under the plan song's own name; every other song under Playback's.
+    let all: Vec<(&LibrarySong, Option<&str>)> = plan
         .songs
         .iter()
-        .filter_map(|s| s.library.as_ref())
-        .chain(plan.playback_only.iter())
+        .filter_map(|s| {
+            let named = (s.confidence == Some(MatchConfidence::ByHand)).then_some(s.title.as_str());
+            Some((s.library.as_ref()?, named))
+        })
+        .chain(plan.playback_only.iter().map(|s| (s, None)))
         .collect();
     let mut out: Vec<WantedSong> = Vec::new();
     let mut missing: Vec<String> = Vec::new();
     match selection {
         Selection::Setlist(ids) => {
             for id in ids {
-                match all.iter().find(|s| s.setlist_song_id == Some(*id)) {
-                    Some(song) => out.push(wanted(song, now)),
+                match all.iter().find(|(s, _)| s.setlist_song_id == Some(*id)) {
+                    Some((song, named)) => out.push(wanted(song, *named, now)),
                     None => missing.push(id.to_string()),
                 }
             }
         }
         Selection::Content(ids) => {
             for id in ids {
-                match all.iter().find(|s| s.content_id == Some(*id)) {
-                    Some(song) => out.push(wanted(song, now)),
+                match all.iter().find(|(s, _)| s.content_id == Some(*id)) {
+                    Some((song, named)) => out.push(wanted(song, *named, now)),
                     None => missing.push(id.to_string()),
                 }
             }
@@ -678,6 +687,7 @@ fn title_songs(titles: &[String]) -> Vec<WantedSong> {
             sections: Vec::new(),
             rental_expired: false,
             as_is: true,
+            plan_name: None,
         })
         .collect()
 }

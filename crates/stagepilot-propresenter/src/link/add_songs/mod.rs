@@ -59,6 +59,10 @@ pub struct WantedSong {
     /// ProPresenter's Songs library with this title. Never imported, never copied, no arrangement or key changed; a title the
     /// library does not have blocks the song.
     pub as_is: bool,
+    /// The plan song's own name, when a person paired the plan song with this Playback song by hand and the names differ.
+    /// A copy StagePilot makes for it (and so its playlist entry) is named after this, not after the Playback title; every
+    /// other rule, the title rule included, still reads `title`. `None` for every song matched by name.
+    pub plan_name: Option<String>,
 }
 
 /// Where in the playlist the songs go.

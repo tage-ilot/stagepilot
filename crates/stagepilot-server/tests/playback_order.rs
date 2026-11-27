@@ -48,7 +48,7 @@ struct Behaviour {
 
 fn item(id: i64, order: usize, title: &str, scan_length: f64) -> Value {
     json!({
-        "setlist_song_id": id, "order": order, "title": title, "artist": "Artist",
+        "setlist_song_id": id, "content_id": 5_000_000 + id, "order": order, "title": title, "artist": "Artist",
         "key": {"id": 3, "name": "Ab"}, "key_original": {"id": 1, "name": "C"},
         "bpm": 65.0, "bpm_original": 65.0, "length_s": scan_length + 3.0, "scan_length_s": scan_length,
         "arrangement": "Default", "planning_center_song_id": null, "rental_expires_utc": null
@@ -142,6 +142,10 @@ async fn answer(State(helper): State<Helper>, uri: Uri) -> Response {
             Some(setlist) => json_ok(setlist.clone()),
             None => (StatusCode::NOT_FOUND, "{\"error\": \"none open\"}").into_response(),
         },
+        // The setlist of a date (what the window's matchup asks): the open one, which says its own date.
+        path if path.starts_with("/setlists/") && b.current.is_some() => {
+            json_ok(b.current.clone().unwrap_or(Value::Null))
+        }
         _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
@@ -333,6 +337,63 @@ async fn with_no_library_link_in_use_nothing_changes_and_nothing_is_asked() {
     assert_eq!(status["order_mode"], "none");
     assert_eq!(status["song_order"], json!([]));
     assert_eq!(status["order_library_note"], Value::Null);
+    r.runtime.stop().await;
+}
+
+#[tokio::test]
+async fn a_song_a_person_paired_by_hand_counts_as_matched_for_the_song_order_and_only_then() {
+    let r = rig(&IN_ORDER).await;
+    r.library_in_use().await;
+    // Only alike: the order is not used (an uncertain match is never taken without a person).
+    r.set_plan(
+        "plan-a",
+        &["Battle Belongs", "Holy", "Gratitude", "Firm Foundation"],
+    );
+    r.helper.open(setlist(&[
+        (101, "Battle Belongs"),
+        (102, "Holy Forever Reprise Live"),
+        (103, "Gratitude"),
+        (104, "Firm Foundation"),
+    ]));
+    assert!(!r.look().await);
+    assert!(note(&r.status().await).contains("only alike"));
+    r.runtime.store.mutate(|s| {
+        s.plan.as_mut().unwrap().date = chrono::NaiveDate::from_ymd_opt(2026, 11, 22).unwrap();
+    });
+    // A person says it is the same song.
+    r.runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(31));
+    let (code, body) = r
+        .call(
+            "PUT",
+            "/api/v1/playback-library/pairs",
+            Some(json!({"key": "plan-a-1", "setlist_song_id": 102})),
+        )
+        .await;
+    assert_eq!(code, StatusCode::OK, "{body}");
+    assert_eq!(body["songs"][1]["confidence"], "by_hand");
+    r.look().await;
+    let status = r.status().await;
+    assert_eq!(status["order_source"], "library", "{status}");
+    assert_eq!(status["order_library_note"], Value::Null);
+    // Undone, it falls back with the same words as before.
+    let (code, _) = r
+        .call(
+            "DELETE",
+            "/api/v1/playback-library/pairs?key=plan-a-1",
+            None,
+        )
+        .await;
+    assert_eq!(code, StatusCode::OK);
+    r.helper.open(setlist(&[
+        (101, "Battle Belongs"),
+        (102, "Holy Forever Reprise Live"),
+        (103, "Gratitude"),
+        (104, "Firm Foundation"),
+    ]));
+    r.look().await;
+    assert!(note(&r.status().await).contains("only alike"));
     r.runtime.stop().await;
 }
 

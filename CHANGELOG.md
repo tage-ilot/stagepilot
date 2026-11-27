@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **A service song with a slightly different name can be paired with Playback's song by hand, and then works like any other pair.** When a plan song is not matched to Playback, or StagePilot is only guessing (\"Check title\"), its row in Configuration → Playback → Song order now has a plain **Pick the Playback song** link. It opens a short list of the Playback songs that could be it (the song that looks alike first, then the rest of the setlist, each with its key and length); pick one and press **Confirm**. Nothing is ever paired without that press. The pair then shows **Paired by you** (with **Undo**) and is used everywhere a name match is: the song's key, BPM, length, sections and cover, the song order check, importing the song into ProPresenter with Playback's song number and arrangement (the copy and its playlist entry keep your plan song's name) and the Auto-Presenter. The pair is remembered next to the settings file, so it is still there after a restart and in later weeks as long as both songs exist; a Playback song can be paired with one service song only. Viewers who log in remotely can see a pair but not make or undo one. Nothing is changed in Playback.
+
 ## [2.46.0-rc.1] - 2026-11-26
 
 ### Added

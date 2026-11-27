@@ -10,6 +10,7 @@ import { layoutTemplates } from "./LayoutStates";
 
 import { lightingStates } from "./LightingStates";
 import { backendPages, lightingPages, playbackPages, presentationPages, servicesPages } from "./PageStates";
+import { pairStates } from "./PairStates";
 import { playbackStates } from "./PlaybackStates";
 import { presentationStates } from "./PresentationStates";
 import { autoPresenterStates } from "./AutoPresenterStates";
@@ -37,6 +38,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
   { id: "page-services", title: "Page: Services", intro: "Services (Planning Center): the three sign-in notices, the optional Manual API Connection, the settings group, the action row.", states: servicesPages },
   { id: "page-backend", title: "Page: StagePilot", intro: "StagePilot: the summary cards first, the optional Advanced section, Connection Access, the Save bar.", states: backendPages },
   { id: "song-scan", title: "Section: Playback song scan", intro: "The ONE song-scan button of the Playback config's Song order section: Scan Playback Library when the Library Link works and its order holds, otherwise Scan Playback API; never hidden, greyed out with its reason when no scan can run. (Search finds a computer; Scan reads the songs.)", states: songScanStates },
+  { id: "song-pairs", title: "Section: Pair a song by hand", intro: "The Song order section's ledger when a plan song has a different name from Playback's song: the plain action Pick the Playback song on a song that is only alike or has no match, the short chooser (title, key, length; Confirm and Cancel), a pair you made (Paired by you, Undo) and a song with no Playback song left to pair. Confirm and Undo do nothing here.", states: pairStates },
   { id: "page-playback", title: "Page: Playback / MIDI", intro: "Playback and MIDI: the Song order band (remembered open or closed), the MIDI input actions and the velocities.", states: playbackPages },
   { id: "page-lighting", title: "Page: Lighting", intro: "Lighting: OSC and MIDI views, the settings group on one line, Refresh outputs, the optional test cue and timeline.", states: lightingPages },
   { id: "page-remote", title: "Page: Remote access", intro: "Remote access (inside StagePilot): boxed groups, notices as lines and as named question groups, the remembered open section.", states: remotePages },
@@ -55,7 +57,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
 /** One column of the side-by-side view: a connection, with the groups that show it (its Live Link block, then its page). */
 const COLUMNS: { label: string; groups: string[] }[] = [
   { label: "Presentation", groups: ["presentation", "page-presentation", "presenter-link", "auto-presenter"] },
-  { label: "Playback / MIDI", groups: ["playback", "page-playback"] },
+  { label: "Playback / MIDI", groups: ["playback", "song-pairs", "page-playback"] },
   { label: "Lighting", groups: ["lighting", "page-lighting"] },
   { label: "Services", groups: ["page-services"] },
   { label: "StagePilot", groups: ["page-backend", "page-remote"] },

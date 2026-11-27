@@ -268,6 +268,10 @@ impl Runtime {
             playback_library = playback_library.with_key_memory_file(
                 crate::playback_key_watch::default_key_watch_path(settings_service.environ()),
             );
+            // The pairs a person confirmed for songs of another name live beside the settings too.
+            playback_library = playback_library.with_pairs_file(
+                crate::playback_pairs::default_pairs_path(settings_service.environ()),
+            );
         }
         let playback_library = Arc::new(playback_library);
         // A song with a Playback waveform is not measured for room loudness: a Lightkey recording asks the library

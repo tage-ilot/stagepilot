@@ -11,6 +11,8 @@ vi.mock("../api", () => ({
   getPlaybackLibraryPlan: vi.fn(),
   updatePlaybackLibrarySettings: vi.fn(),
   choosePlaybackLibrarySetlist: vi.fn(),
+  pairPlaybackLibrarySong: vi.fn(),
+  unpairPlaybackLibrarySong: vi.fn(),
   getSettings: vi.fn(),
 }));
 
@@ -163,5 +165,40 @@ describe("usePlaybackLibrary", () => {
     await act(async () => { done = await result.current.chooseSetlist(7); });
     expect(done).toBe(false);
     expect(api.choosePlaybackLibrarySetlist).not.toHaveBeenCalled();
+  });
+  it("pairing and undoing send only the plan song's key (and Playback's song), show the answer, and say why when it fails", async () => {
+    const paired = libraryPlan([], { chosen: false });
+    const undone = libraryPlan([], { stale: true });
+    vi.mocked(api.pairPlaybackLibrarySong).mockResolvedValueOnce(paired).mockRejectedValueOnce(new Error("That Playback song is not one this song can be paired with now."));
+    vi.mocked(api.unpairPlaybackLibrarySong).mockResolvedValueOnce(undone);
+    const { result } = renderHook(() => usePlaybackLibrary(true, settings("10.30.0.141"), vi.fn()));
+    await waitFor(() => expect(result.current.plan).not.toBeNull());
+    expect(result.current.canPair).toBe(true);
+    let done = false;
+    await act(async () => { done = await result.current.pairSong("k2", 2000003); });
+    expect(done).toBe(true);
+    expect(api.pairPlaybackLibrarySong).toHaveBeenCalledWith("k2", 2000003);
+    expect(result.current.plan).toBe(paired);
+    expect(result.current.pending).toBeNull();
+    await act(async () => { done = await result.current.pairSong("k2", 1); });
+    expect(done).toBe(false);
+    expect(result.current.error).toBe("That Playback song is not one this song can be paired with now.");
+    await act(async () => { done = await result.current.unpairSong("k2"); });
+    expect(done).toBe(true);
+    expect(api.unpairPlaybackLibrarySong).toHaveBeenCalledWith("k2");
+    expect(result.current.plan).toBe(undone);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("a window that may not configure (a remote viewer) never pairs or undoes", async () => {
+    const { result } = renderHook(() => usePlaybackLibrary(false, settings("10.30.0.141"), vi.fn()));
+    expect(result.current.canPair).toBe(false);
+    let done = true;
+    await act(async () => { done = await result.current.pairSong("k2", 1); });
+    expect(done).toBe(false);
+    await act(async () => { done = await result.current.unpairSong("k2"); });
+    expect(done).toBe(false);
+    expect(api.pairPlaybackLibrarySong).not.toHaveBeenCalled();
+    expect(api.unpairPlaybackLibrarySong).not.toHaveBeenCalled();
   });
 });

@@ -583,6 +583,22 @@ async fn remote_retry_and_viewer_policy() {
         .0,
         StatusCode::FORBIDDEN
     );
+    // Pairing a song with Playback's is a write like any other setting: not for a viewer, either way.
+    for method in ["PUT", "DELETE"] {
+        assert_eq!(
+            edge(
+                &e.router,
+                method,
+                "/api/v1/playback-library/pairs",
+                Some(json!({"key": "item-1", "setlist_song_id": 11})),
+                &viewer
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN,
+            "{method}"
+        );
+    }
 
     // An operator cannot bootstrap from remote, and keyed actions replay.
     let (token, csrf) = session_for(&e, "operator@example.test");

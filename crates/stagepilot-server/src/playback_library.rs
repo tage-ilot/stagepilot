@@ -44,6 +44,7 @@
 //! * Library data is held in memory only.
 
 use crate::playback_key_watch::KeyWatchStore;
+use crate::playback_pairs::{PairStore, StoredPair};
 use crate::runtime::Runtime;
 use crate::validation::{http_error, ok, unprocessable, Json};
 use axum::body::Bytes;
@@ -62,13 +63,14 @@ use stagepilot_core::config::{
 };
 use stagepilot_core::credential_guard::GuardedCredentialStore;
 use stagepilot_core::settings::{CredentialStore, MemoryCredentialStore, SettingsService};
-use stagepilot_core::state::ServicePlan;
+use stagepilot_core::state::{ServicePlan, Song};
 use stagepilot_playback::helper_assets::BUNDLED_HELPER_VERSION;
 use stagepilot_playback::library::{
     apply_detail, health_words, helper_state_for, helper_words, match_plan, match_setlist,
-    parse_health, parse_setlist, parse_setlist_list, HelperState, HelperStatus, LibraryArtwork,
-    LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySetlist, LibraryState, LibraryStatus,
-    LyricCue, ParsedSetlist, PlanMatch, PlanTitle, MAX_ARTWORK_BYTES, MAX_SETLISTS,
+    normalise_title, parse_health, parse_setlist, parse_setlist_list, HandPair, HelperState,
+    HelperStatus, LibraryArtwork, LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySetlist,
+    LibraryState, LibraryStatus, LyricCue, MatchConfidence, ParsedSetlist, PlanMatch, PlanTitle,
+    MAX_ARTWORK_BYTES, MAX_SETLISTS,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -273,19 +275,32 @@ impl SetlistAsk {
     }
 }
 
-/// The loaded plan's songs as the pairing reads them. The one place a plan becomes `PlanTitle`s, so the
-/// window's matchup and the song order are decided from exactly the same input.
-pub fn plan_titles(plan: &ServicePlan) -> Vec<PlanTitle> {
+/// The key the Lighting panel (and the pairing) uses for a plan song: Planning Center's song number, else the item's id.
+pub fn plan_song_key(song: &Song) -> String {
+    song.source_song_id
+        .clone()
+        .unwrap_or_else(|| song.id.clone())
+}
+
+/// The loaded plan's songs as the pairing reads them, with the pairs a person confirmed. The one place a plan becomes
+/// `PlanTitle`s, so the window's matchup and the song order are decided from exactly the same input.
+fn plan_titles(plan: &ServicePlan, pairs: &mut PairStore) -> Vec<PlanTitle> {
     plan.songs
         .iter()
         .map(|song| PlanTitle {
-            key: song
-                .source_song_id
-                .clone()
-                .unwrap_or_else(|| song.id.clone()),
+            key: plan_song_key(song),
             title: song.title.clone(),
             seconds: song.duration_seconds,
             key_name: song.key_name.clone(),
+            pair: pairs
+                .find(
+                    &normalise_title(&song.title),
+                    song.source_song_id.as_deref(),
+                )
+                .map(|p| HandPair {
+                    content_id: p.content_id,
+                    title_seen: p.playback_title,
+                }),
         })
         .collect()
 }
@@ -514,6 +529,8 @@ pub struct PlaybackLibrary {
     choice: std::sync::Mutex<Option<(String, i64)>>,
     /// The keys last seen for Playback's setlist songs, to tell when one was changed (`playback-keys.json`).
     keys_seen: std::sync::Mutex<KeyWatchStore>,
+    /// The pairs a person confirmed for songs of another name (`playback-pairs.json`).
+    pairs: std::sync::Mutex<PairStore>,
 }
 
 impl Default for PlaybackLibrary {
@@ -553,7 +570,50 @@ impl PlaybackLibrary {
             wall: std::sync::Mutex::new(Box::new(system_seconds)),
             choice: std::sync::Mutex::new(None),
             keys_seen: std::sync::Mutex::new(KeyWatchStore::in_memory()),
+            pairs: std::sync::Mutex::new(PairStore::in_memory()),
         }
+    }
+
+    /// Keeps the pairs a person confirmed in `path`, so a restart (and a later week) still has them (the product; tests and
+    /// the demo hold them in memory only).
+    pub fn with_pairs_file(self, path: impl Into<std::path::PathBuf>) -> Self {
+        *self.pairs.lock().unwrap_or_else(|p| p.into_inner()) = PairStore::file(path);
+        self
+    }
+
+    /// The loaded plan's songs as the pairing reads them: titles, and the pair a person confirmed for each song, if any.
+    pub fn plan_titles(&self, plan: &ServicePlan) -> Vec<PlanTitle> {
+        plan_titles(
+            plan,
+            &mut self.pairs.lock().unwrap_or_else(|p| p.into_inner()),
+        )
+    }
+
+    /// Keeps the pair a person confirmed for `song`: it is Playback's song with MultiTracks number `content_id`, titled
+    /// `playback_title`. Only a person's confirmation calls this.
+    pub fn confirm_pair(
+        &self,
+        song: &Song,
+        content_id: u64,
+        playback_title: &str,
+    ) -> Result<(), String> {
+        self.pairs
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .confirm(StoredPair {
+                title_key: normalise_title(&song.title),
+                planning_center_id: song.source_song_id.clone(),
+                content_id,
+                playback_title: playback_title.to_string(),
+            })
+    }
+
+    /// Forgets the pair of `song`; `Ok(false)` when it had none.
+    pub fn undo_pair(&self, song: &Song) -> Result<bool, String> {
+        self.pairs.lock().unwrap_or_else(|p| p.into_inner()).undo(
+            &normalise_title(&song.title),
+            song.source_song_id.as_deref(),
+        )
     }
 
     /// Keeps the keys it has seen in `path`, so a restart does not forget a change (the product; tests and the demo
@@ -1255,7 +1315,7 @@ impl PlaybackLibrary {
         if plan.songs.is_empty() {
             return empty(LibraryState::Ready, None);
         }
-        let titles = plan_titles(plan);
+        let titles = self.plan_titles(plan);
         // One ask at a time: a second window waits here and then reads what the first one learned.
         let mut inner = self.inner.lock().await;
         let status = self.status_locked(&mut inner, settings, &base, check).await;
@@ -1807,6 +1867,10 @@ pub fn routes() -> Router<Rt> {
             get(waveform),
         )
         .route("/api/v1/playback-library/setlist", put(choose_setlist))
+        .route(
+            "/api/v1/playback-library/pairs",
+            put(confirm_pair).delete(undo_pair),
+        )
         .route("/api/v1/playback-library/settings", put(settings))
 }
 
@@ -1909,6 +1973,153 @@ async fn choose_setlist(State(rt): State<Rt>, body: Bytes) -> Json {
     let settings = effective_settings(&rt);
     let answer = rt.playback_library.plan(&settings, Some(plan), true).await;
     note_in_use(&rt, answer.state == LibraryState::Ready && answer.enabled).await;
+    ok(to_json(&answer))
+}
+
+/// What a person says about one plan song: its key (`LibraryPlanSong::key`), and for a pair the Playback song, by its setlist
+/// song number and/or its MultiTracks number.
+struct PairAsk {
+    key: String,
+    setlist_song_id: Option<i64>,
+    content_id: Option<u64>,
+}
+
+fn pair_ask(body: &[u8], query_key: Option<String>, needs_song: bool) -> Result<PairAsk, Json> {
+    let value: Option<Value> = serde_json::from_slice(body).ok();
+    let map = match &value {
+        Some(Value::Object(map)) => Some(map),
+        _ => None,
+    };
+    let usage = if needs_song {
+        "Send {\"key\": the plan song's key, \"setlist_song_id\": the number of Playback's song}."
+    } else {
+        "Send {\"key\": the plan song's key}."
+    };
+    let key = map
+        .and_then(|m| m.get("key"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or(query_key)
+        .filter(|k| !k.trim().is_empty() && k.chars().count() <= 200);
+    let Some(key) = key else {
+        return Err(http_error(422, usage));
+    };
+    let whole = |name: &str| -> Result<Option<u64>, Json> {
+        match map.and_then(|m| m.get(name)) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::Number(n)) => n
+                .as_u64()
+                .map(Some)
+                .ok_or_else(|| http_error(422, &format!("{name} must be a whole number."))),
+            Some(_) => Err(http_error(422, &format!("{name} must be a whole number."))),
+        }
+    };
+    let setlist_song_id = whole("setlist_song_id")?
+        .map(|n| {
+            i64::try_from(n).map_err(|_| http_error(422, "setlist_song_id must be a whole number."))
+        })
+        .transpose()?;
+    let content_id = whole("content_id")?;
+    if needs_song && setlist_song_id.is_none() && content_id.is_none() {
+        return Err(http_error(422, usage));
+    }
+    Ok(PairAsk {
+        key,
+        setlist_song_id,
+        content_id,
+    })
+}
+
+#[derive(serde::Deserialize, Default)]
+struct PairKeyQuery {
+    key: Option<String>,
+}
+
+/// `PUT /api/v1/playback-library/pairs` `{key, setlist_song_id | content_id}`: a person confirms that a plan song that is
+/// not matched (or only `uncertain`) is the Playback song they picked. Only the songs the plan answer offers for that plan
+/// song (`pair_choices`) can be picked, so a Playback song pairs with one plan song only and a song matched by name is never
+/// taken over. The pair is kept in `playback-pairs.json` and answered with the plan read again. Nothing else ever makes one.
+async fn confirm_pair(State(rt): State<Rt>, body: Bytes) -> Json {
+    let ask = match pair_ask(&body, None, true) {
+        Ok(ask) => ask,
+        Err(denied) => return denied,
+    };
+    let loaded = rt.store.snapshot().plan;
+    let Some(plan) = loaded.as_ref() else {
+        return http_error(409, "No service plan is loaded.");
+    };
+    let Some(index) = plan.songs.iter().position(|s| plan_song_key(s) == ask.key) else {
+        return http_error(404, "That song is not in the loaded plan.");
+    };
+    let song = &plan.songs[index];
+    if normalise_title(&song.title).is_empty() {
+        return http_error(422, "This song's name has no letters to pair by.");
+    }
+    let settings = effective_settings(&rt);
+    let answer = rt.playback_library.plan(&settings, Some(plan), false).await;
+    let Some(entry) = answer
+        .songs
+        .get(index)
+        .filter(|_| answer.state == LibraryState::Ready && answer.enabled)
+    else {
+        return http_error(
+            409,
+            "Playback's setlist cannot be read just now, so nothing can be paired. Look again in a moment.",
+        );
+    };
+    if entry.status == PlanMatch::Matched {
+        return http_error(
+            409,
+            if entry.confidence == Some(MatchConfidence::ByHand) {
+                "You already paired this song. Undo that first to pick another."
+            } else {
+                "This song is already matched to a Playback song by its name."
+            },
+        );
+    }
+    let picked = entry.pair_choices.iter().find(|c| {
+        ask.setlist_song_id
+            .is_none_or(|id| c.setlist_song_id == Some(id))
+            && ask.content_id.is_none_or(|id| c.content_id == id)
+    });
+    let Some(picked) = picked else {
+        return http_error(
+            409,
+            "That Playback song is not one this song can be paired with now. Look at the setlist again.",
+        );
+    };
+    if let Err(message) = rt
+        .playback_library
+        .confirm_pair(song, picked.content_id, &picked.title)
+    {
+        return http_error(503, &message);
+    }
+    // The song order is decided from the same pairs: look again now instead of at the next watch.
+    crate::playback_order::refresh(&rt).await;
+    let answer = rt.playback_library.plan(&settings, Some(plan), false).await;
+    ok(to_json(&answer))
+}
+
+/// `DELETE /api/v1/playback-library/pairs` `{key}` (or `?key=`): undoes the pair a person made for that plan song. A song
+/// with no pair stays as it is. Answers with the plan read again.
+async fn undo_pair(State(rt): State<Rt>, Query(query): Query<PairKeyQuery>, body: Bytes) -> Json {
+    let ask = match pair_ask(&body, query.key, false) {
+        Ok(ask) => ask,
+        Err(denied) => return denied,
+    };
+    let loaded = rt.store.snapshot().plan;
+    let Some(plan) = loaded.as_ref() else {
+        return http_error(409, "No service plan is loaded.");
+    };
+    let Some(song) = plan.songs.iter().find(|s| plan_song_key(s) == ask.key) else {
+        return http_error(404, "That song is not in the loaded plan.");
+    };
+    if let Err(message) = rt.playback_library.undo_pair(song) {
+        return http_error(503, &message);
+    }
+    crate::playback_order::refresh(&rt).await;
+    let settings = effective_settings(&rt);
+    let answer = rt.playback_library.plan(&settings, Some(plan), false).await;
     ok(to_json(&answer))
 }
 

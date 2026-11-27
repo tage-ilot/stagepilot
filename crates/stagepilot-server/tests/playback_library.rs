@@ -3419,3 +3419,396 @@ async fn a_helper_that_cannot_read_playbacks_library_is_still_a_503() {
         assert_eq!(runtime.playback_library.waveforms_held(), 0, "{what}");
     }
 }
+
+// ---- a pair a person made for a song of another name ---------------------------------------------------
+
+/// Playback's setlist for the pairs tests: one song that matches by name, one only alike (`Oceans`), one with another name.
+fn pairs_helper() -> Helper {
+    let helper = Helper::new();
+    helper.set(|b| {
+        b.items = vec![
+            item(11, 1, "Song One"),
+            item(12, 2, "Oceans Where Feet May Fail"),
+            item(13, 3, "A Completely Other Name"),
+            item(14, 4, "Last Song"),
+        ];
+    });
+    helper
+}
+
+const PAIR_TITLES: [&str; 3] = ["Song One", "Oceans", "Our Name For It"];
+
+async fn pairs_app(helper: &Helper) -> (axum::Router, Arc<Runtime>) {
+    let address = helper.serve().await;
+    let (router, runtime) = app().await;
+    runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &PAIR_TITLES)));
+    let (status, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/settings",
+        Some(json!({"address": address})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    (router, runtime)
+}
+
+fn choice_titles(body: &Value, song: usize) -> Vec<String> {
+    body["songs"][song]["pair_choices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["title"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn the_plan_lists_the_playback_songs_each_unpaired_plan_song_could_be_paired_with() {
+    let helper = pairs_helper();
+    let (router, _runtime) = pairs_app(&helper).await;
+    let (status, body) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["songs"][0]["status"], "matched");
+    assert_eq!(
+        choice_titles(&body, 0),
+        Vec::<String>::new(),
+        "a paired song offers nothing"
+    );
+    // The uncertain song: its alike song first, then the others in Playback's order (never the exact pair).
+    assert_eq!(body["songs"][1]["status"], "uncertain");
+    assert!(
+        body["songs"][1]["library"].is_null(),
+        "an uncertain match is never used"
+    );
+    assert_eq!(
+        choice_titles(&body, 1),
+        [
+            "Oceans Where Feet May Fail",
+            "A Completely Other Name",
+            "Last Song"
+        ]
+    );
+    assert_eq!(body["songs"][1]["pair_choices"][0]["suggested"], true);
+    assert_eq!(body["songs"][1]["pair_choices"][1]["suggested"], false);
+    // No match at all: the setlist's songs that go with no plan song, in Playback's order.
+    assert_eq!(body["songs"][2]["status"], "missing");
+    assert_eq!(
+        choice_titles(&body, 2),
+        [
+            "Oceans Where Feet May Fail",
+            "A Completely Other Name",
+            "Last Song"
+        ]
+    );
+    let first = &body["songs"][2]["pair_choices"][1];
+    assert_eq!(first["setlist_song_id"], 13);
+    assert_eq!(first["content_id"], 5_000_013);
+    assert_eq!(first["key"], "Ab");
+    assert_eq!(first["countdown_length_s"], 297.25);
+}
+
+#[tokio::test]
+async fn only_a_confirmation_pairs_a_song_and_it_then_acts_as_an_exact_pair() {
+    let helper = pairs_helper();
+    let (router, _runtime) = pairs_app(&helper).await;
+    let (_, before) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
+    assert!(before["songs"][2]["library"].is_null());
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/pairs",
+        Some(json!({"key": "item-2", "setlist_song_id": 13})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let song = &body["songs"][2];
+    assert_eq!(
+        (song["status"].as_str(), song["confidence"].as_str()),
+        (Some("matched"), Some("by_hand"))
+    );
+    // Everything an exact pair has: key, BPM, length, sections, the helper's number for ProPresenter.
+    let library = &song["library"];
+    assert_eq!(library["title"], "A Completely Other Name");
+    assert_eq!(library["key"], "Ab");
+    assert_eq!(library["bpm"], 65.0);
+    assert_eq!(library["countdown_length_s"], 297.25);
+    assert_eq!(library["content_id"], 5_000_013);
+    assert!(library["section_count"].as_u64().unwrap() > 0);
+    assert!(!library["sections"].as_array().unwrap().is_empty());
+    assert!(song["pair_choices"].as_array().unwrap().is_empty());
+    // Playback's song is spoken for: it is no longer anyone else's choice, nor Playback's own.
+    assert_eq!(
+        choice_titles(&body, 1),
+        ["Oceans Where Feet May Fail", "Last Song"]
+    );
+    let only: Vec<&str> = body["playback_only"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["title"].as_str().unwrap())
+        .collect();
+    assert_eq!(only, ["Last Song"]);
+    // The next read says the same.
+    let (_, again) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
+    assert_eq!(again["songs"][2]["confidence"], "by_hand");
+    // The uncertain song stays uncertain: nobody confirmed it.
+    assert_eq!(again["songs"][1]["status"], "uncertain");
+    assert!(again["songs"][1]["library"].is_null());
+}
+
+#[tokio::test]
+async fn a_pair_is_undone_and_a_playback_song_pairs_with_one_plan_song_only() {
+    let helper = pairs_helper();
+    let (router, _runtime) = pairs_app(&helper).await;
+    let pair = |key: &str, id: i64| json!({"key": key, "setlist_song_id": id});
+    let put = |body: Value| {
+        let router = router.clone();
+        async move { call(&router, "PUT", "/api/v1/playback-library/pairs", Some(body)).await }
+    };
+    // The uncertain song's own suggestion may be confirmed (by Playback's MultiTracks number too).
+    let (status, body) = put(json!({"key": "item-1", "content_id": 5_000_012})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["songs"][1]["confidence"], "by_hand");
+    assert_eq!(
+        body["songs"][1]["library"]["title"],
+        "Oceans Where Feet May Fail"
+    );
+    assert!(body["songs"][1]["candidate"].is_null());
+    // Another plan song cannot take the same Playback song, and a song matched by name cannot be paired or taken.
+    for (body, why) in [
+        (pair("item-2", 12), "already paired with another plan song"),
+        (pair("item-2", 11), "matched by name to another plan song"),
+        (pair("item-0", 13), "this plan song is matched by name"),
+        (
+            pair("item-1", 13),
+            "this plan song is already paired by you",
+        ),
+        (pair("item-2", 999), "no such Playback song"),
+        (
+            json!({"key": "item-2", "setlist_song_id": 13, "content_id": 5_000_014}),
+            "the two numbers name two songs",
+        ),
+    ] {
+        let (status, answer) = put(body).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{why}: {answer}");
+    }
+    // Undo it: the song goes back to what the names say (uncertain), and a second undo changes nothing.
+    for _ in 0..2 {
+        let (status, body) = call(
+            &router,
+            "DELETE",
+            "/api/v1/playback-library/pairs?key=item-1",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["songs"][1]["status"], "uncertain");
+        assert!(body["songs"][1]["library"].is_null());
+    }
+    // The key may be in the body as well, and now the other song can take it.
+    let (status, _) = put(pair("item-2", 12)).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(
+        &router,
+        "DELETE",
+        "/api/v1/playback-library/pairs",
+        Some(json!({"key": "item-2"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["songs"][2]["status"], "missing");
+}
+
+#[tokio::test]
+async fn the_pairs_routes_refuse_what_they_cannot_understand() {
+    let helper = pairs_helper();
+    let (router, runtime) = pairs_app(&helper).await;
+    for bad in [
+        json!({}),
+        json!({"key": "item-2"}),
+        json!({"setlist_song_id": 13}),
+        json!({"key": "", "setlist_song_id": 13}),
+        json!({"key": "item-2", "setlist_song_id": "13"}),
+        json!({"key": "item-2", "setlist_song_id": -3}),
+        json!({"key": "item-2", "content_id": 1.5}),
+        json!([1, 2]),
+    ] {
+        let (status, _) = call(
+            &router,
+            "PUT",
+            "/api/v1/playback-library/pairs",
+            Some(bad.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}");
+    }
+    let (status, _) = call(&router, "DELETE", "/api/v1/playback-library/pairs", None).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    let (status, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/pairs",
+        Some(json!({"key": "nobody", "setlist_song_id": 13})),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a song that is not in the plan"
+    );
+    let (status, _) = call(
+        &router,
+        "DELETE",
+        "/api/v1/playback-library/pairs?key=nobody",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    // No plan, no pair.
+    runtime.store.mutate(|s| s.plan = None);
+    let (status, _) = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/pairs",
+        Some(json!({"key": "item-2", "setlist_song_id": 13})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn nothing_is_paired_while_playbacks_setlist_cannot_be_read() {
+    // No Playback computer chosen: the library says nothing, so no pair is made (and nothing is asked).
+    let (router, _runtime) = app().await;
+    _runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &PAIR_TITLES)));
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/pairs",
+        Some(json!({"key": "item-2", "setlist_song_id": 13})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+}
+
+#[tokio::test]
+async fn a_pair_survives_a_restart_and_a_later_week_and_a_damaged_file_is_no_pairs() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("playback-pairs.json");
+    let helper = pairs_helper();
+    let address = helper.serve().await;
+    let settings = settings_for(&address);
+    let mut week_one = plan("2026-11-22", &PAIR_TITLES);
+    week_one.songs[2].source_song_id = Some("pco-77".into());
+    let library = PlaybackLibrary::new().with_pairs_file(&file);
+    library.advance_clock(Duration::from_secs(31));
+    let answer = library.plan(&settings, Some(&week_one), false).await;
+    assert_eq!(answer.songs[2].status, PlanMatch::Missing);
+    // Nothing is saved by looking.
+    assert!(!file.exists());
+    library
+        .confirm_pair(&week_one.songs[2], 5_000_013, "A Completely Other Name")
+        .unwrap();
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        text.contains("pco-77") && text.contains("5000013") && text.contains("our name for it"),
+        "{text}"
+    );
+    drop(library);
+    // Restart, and a week later: another plan, other item ids, the same song. The setlist now holds the song at another place.
+    helper.set(|b| {
+        b.items = vec![
+            item(21, 1, "Last Song"),
+            item(13, 2, "A Completely Other Name"),
+            item(25, 3, "Song One"),
+        ];
+    });
+    let mut week_two = plan("2026-11-22", &["Song One", "Our Name For It", "Last Song"]);
+    week_two.id = "plan-2".into();
+    for (i, song) in week_two.songs.iter_mut().enumerate() {
+        song.id = format!("later-{i}");
+    }
+    week_two.songs[1].source_song_id = Some("pco-77".into());
+    let restarted = PlaybackLibrary::new().with_pairs_file(&file);
+    let answer = restarted.plan(&settings, Some(&week_two), false).await;
+    let song = &answer.songs[1];
+    assert_eq!(
+        (song.status, song.confidence),
+        (PlanMatch::Matched, Some(MatchConfidence::ByHand))
+    );
+    assert_eq!(song.library.as_ref().unwrap().setlist_song_id, Some(13));
+    // The same title without Planning Center's number is another song: no pair.
+    let mut other = week_two.clone();
+    other.songs[1].source_song_id = None;
+    let restarted_again = PlaybackLibrary::new().with_pairs_file(&file);
+    let answer = restarted_again.plan(&settings, Some(&other), false).await;
+    assert_eq!(answer.songs[1].status, PlanMatch::Missing);
+    // A damaged or missing file means no pairs, and the next confirmation writes it again.
+    std::fs::write(&file, "][ not json").unwrap();
+    let damaged = PlaybackLibrary::new().with_pairs_file(&file);
+    let answer = damaged.plan(&settings, Some(&week_two), false).await;
+    assert_eq!(answer.state, LibraryState::Ready);
+    assert_eq!(answer.songs[1].status, PlanMatch::Missing);
+    damaged
+        .confirm_pair(&week_two.songs[1], 5_000_013, "A Completely Other Name")
+        .unwrap();
+    assert!(std::fs::read_to_string(&file).unwrap().contains("5000013"));
+    std::fs::remove_file(&file).unwrap();
+    let missing = PlaybackLibrary::new().with_pairs_file(&file);
+    assert_eq!(
+        missing.plan(&settings, Some(&week_two), false).await.songs[1].status,
+        PlanMatch::Missing
+    );
+}
+
+#[tokio::test]
+async fn a_pair_whose_playback_song_has_left_the_setlist_waits_quietly_until_it_is_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("playback-pairs.json");
+    let helper = pairs_helper();
+    let address = helper.serve().await;
+    let settings = settings_for(&address);
+    let sunday = plan("2026-11-22", &PAIR_TITLES);
+    let library = PlaybackLibrary::new().with_pairs_file(&file);
+    library
+        .confirm_pair(&sunday.songs[2], 5_000_013, "A Completely Other Name")
+        .unwrap();
+    helper.set(|b| b.items.retain(|i| i["setlist_song_id"] != json!(13)));
+    library.advance_clock(Duration::from_secs(31));
+    let answer = library.plan(&settings, Some(&sunday), false).await;
+    assert_eq!(answer.songs[2].status, PlanMatch::Missing);
+    assert!(file.exists(), "the pair is kept for when the song is back");
+    helper.set(|b| b.items.push(item(13, 5, "A Completely Other Name")));
+    library.advance_clock(Duration::from_secs(31));
+    let answer = library.plan(&settings, Some(&sunday), false).await;
+    assert_eq!(answer.songs[2].confidence, Some(MatchConfidence::ByHand));
+}
+
+#[tokio::test]
+async fn the_pairs_routes_follow_the_origin_rule_of_every_other_write() {
+    let helper = pairs_helper();
+    let (router, _runtime) = pairs_app(&helper).await;
+    for method in ["PUT", "DELETE"] {
+        let mut request = Request::builder()
+            .method(method)
+            .uri("/api/v1/playback-library/pairs")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ORIGIN, "https://evil.example")
+            .header(header::HOST, "127.0.0.1:8000")
+            .body(Body::from(
+                json!({"key": "item-2", "setlist_song_id": 13}).to_string(),
+            ))
+            .unwrap();
+        request.extensions_mut().insert(ConnectInfo(
+            "127.0.0.1:50000".parse::<SocketAddr>().unwrap(),
+        ));
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{method}");
+    }
+    let (_, body) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
+    assert_eq!(body["songs"][2]["status"], "missing", "nothing was paired");
+}

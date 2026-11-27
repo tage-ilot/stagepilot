@@ -41,7 +41,7 @@ export const librarySong = (over: Partial<LibrarySong> = {}): LibrarySong => ({
 
 export const librarySongOf = (title: string, position: number, over: Partial<LibraryPlanSong> = {}): LibraryPlanSong => ({
   key: `k${position}`, title, plan_position: position, plan_seconds: 389, plan_key: null, status: "matched", confidence: "exact",
-  library: librarySong({ title, position, setlist_song_id: 2000000 + position }), candidate: null, ...over,
+  library: librarySong({ title, position, setlist_song_id: 2000000 + position }), candidate: null, pair_choices: [], ...over,
 });
 
 export const libraryPlan = (songs: LibraryPlanSong[], over: Partial<LibraryPlan> = {}): LibraryPlan => ({
@@ -54,6 +54,6 @@ export const libraryController = (state: HelperState = "ready", over: Partial<Pl
   const status = libraryStatus(state);
   return {
     target: "10.30.0.141", address: "", status, plan: status.active ? libraryPlan([librarySongOf("Song One", 1)]) : null, error: null, pending: null,
-    saveAddress: vi.fn().mockResolvedValue(true), chooseSetlist: vi.fn().mockResolvedValue(true), check: vi.fn(), watch: vi.fn(), ...over,
+    canPair: true, saveAddress: vi.fn().mockResolvedValue(true), chooseSetlist: vi.fn().mockResolvedValue(true), pairSong: vi.fn().mockResolvedValue(true), unpairSong: vi.fn().mockResolvedValue(true), check: vi.fn(), watch: vi.fn(), ...over,
   };
 };

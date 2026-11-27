@@ -111,6 +111,7 @@ fn plan(songs: Vec<LibrarySong>) -> LibraryPlan {
                 confidence: None,
                 library: Some(s),
                 candidate: None,
+                pair_choices: vec![],
             })
             .collect(),
         playback_only: vec![],

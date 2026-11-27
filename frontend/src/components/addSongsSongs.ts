@@ -24,6 +24,8 @@ export interface AddSongsRow {
   unnamed: boolean;
   /** The plan song's key as the follow status names it (Playback library plan key; the Planning Center id for a name); null when there is none. */
   planKey: string | null;
+  /** The plan song's own name when a person paired it by hand with this Playback song (\"Paired by you\"); null for every song matched by name. */
+  pairedAs: string | null;
 }
 
 /** A title as ProPresenter would read it: letters and digits only (no accents, no case), one space between words. Two rows with the same text are the same song. */
@@ -45,9 +47,9 @@ function withIds<T extends { title: string }>(rows: T[]): (T & { id: string })[]
 /** The setlist songs the loaded plan is paired with (an uncertain or missing pairing has no Playback song to add). In Playback's setlist order. */
 export function addSongsRows(plan: LibraryPlan | null | undefined): AddSongsRow[] {
   if (!plan?.enabled || plan.state !== "ready" || !plan.setlist) return [];
-  const songs = plan.songs.flatMap((planSong) => (planSong.library ? [{ song: planSong.library, planKey: planSong.key }] : []));
+  const songs = plan.songs.flatMap((planSong) => (planSong.library ? [{ song: planSong.library, planKey: planSong.key, pairedAs: planSong.confidence === "by_hand" ? planSong.title : null }] : []));
   const ordered = songs.map((entry, index) => ({ ...entry, index })).sort((a, b) => a.song.position - b.song.position || a.index - b.index);
-  return withIds(ordered.map(({ song, planKey }) => ({
+  return withIds(ordered.map(({ song, planKey, pairedAs }) => ({
     ref: song.setlist_song_id === null ? "" : String(song.setlist_song_id),
     title: song.title,
     source: "playback" as const,
@@ -58,6 +60,7 @@ export function addSongsRows(plan: LibraryPlan | null | undefined): AddSongsRow[
     song,
     unnamed: song.setlist_song_id === null,
     planKey,
+    pairedAs,
   })));
 }
 
@@ -74,6 +77,7 @@ export function planNameRows(plan: Pick<ServicePlan, "songs"> | null | undefined
     song: null,
     unnamed: false,
     planKey: song.source_song_id ?? song.id,
+    pairedAs: null,
   })));
 }
 

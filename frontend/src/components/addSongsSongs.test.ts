@@ -36,6 +36,15 @@ describe("which songs the Presenter Link lists", () => {
     expect(rows[1]).toMatchObject({ ref: "22", contentId: 7002, keyName: "D", arrangement: "Long", unnamed: false, sections: ["Count Off", "Chorus"] });
   });
 
+  it("a song a person paired by hand is a Playback row that remembers the plan song's own name", () => {
+    const rows = addSongsRows(libraryPlan([
+      librarySongOf("Our Name For It", 1, { confidence: "by_hand", library: librarySong({ title: "Battle Belongs", position: 1, setlist_song_id: 31, content_id: 23126 }) }),
+      librarySongOf("Gratitude", 2, { library: librarySong({ title: "Gratitude", position: 2, setlist_song_id: 32, content_id: 31877 }) }),
+    ]));
+    expect(rows.map((row) => [row.title, row.pairedAs, row.contentId])).toEqual([["Battle Belongs", "Our Name For It", 23126], ["Gratitude", null, 31877]]);
+    expect(planNameRows(pc("A"))[0]!.pairedAs).toBeNull();
+  });
+
   it("uses Playback's songs only while the Link, the Library Link and a paired setlist are all there; else the names", () => {
     const ready = linkController(helperStatus("ready"));
     const lib = libraryController("ready");

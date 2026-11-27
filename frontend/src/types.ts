@@ -1028,7 +1028,7 @@ export interface DashboardAccess {
 export type LibraryState = "off" | "ready" | "waiting" | "no_setlist" | "problem";
 export type PlanMatch = "matched" | "uncertain" | "missing" | "duplicate_in_plan" | "duplicate_in_playback";
 /** How sure a title match is: exact (same words), close (same but for a bracket or a "feat." tail), uncertain (alike, not the same). */
-export type MatchConfidence = "exact" | "close" | "uncertain";
+export type MatchConfidence = "exact" | "close" | "uncertain" | "by_hand";
 
 /** Where the Library Link (the helper on the Playback computer) stands. Only `ready` and `outdated` feed the library. */
 export type HelperState = "not_installed" | "needs_key" | "outdated" | "ready" | "unreachable";
@@ -1150,6 +1150,24 @@ export interface LibraryPlanSong {
   library: LibrarySong | null;
   /** The Playback song an `uncertain` pairing is about; never a source of cover, key or waveform. */
   candidate: LibrarySong | null;
+  /**
+   * The Playback songs a person may pick for this plan song (only while it is not paired, or only `uncertain`): the uncertain suggestion
+   * first, then the setlist's other unpaired songs in setlist order. Empty when paired and when Playback has no other song to pair.
+   */
+  pair_choices: PairChoice[];
+}
+
+/** A Playback song a person may pick for a plan song. */
+export interface PairChoice {
+  setlist_song_id: number | null;
+  /** The song's MultiTracks number, which is what a pair is kept by. */
+  content_id: number;
+  position: number;
+  title: string;
+  key: string | null;
+  countdown_length_s: number | null;
+  /** True for the one song StagePilot found alike (always first). */
+  suggested: boolean;
 }
 
 export interface LibrarySetlist {

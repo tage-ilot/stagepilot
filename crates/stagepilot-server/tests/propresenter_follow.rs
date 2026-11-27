@@ -132,6 +132,7 @@ fn library_plan(with_cues: bool) -> LibraryPlan {
             confidence: None,
             library: Some(library_song(with_cues)),
             candidate: None,
+            pair_choices: vec![],
         }],
         playback_only: vec![],
         chosen: false,

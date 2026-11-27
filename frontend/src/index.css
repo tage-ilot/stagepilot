@@ -1513,6 +1513,11 @@ textarea:focus-visible {
   flex: 1 1 16rem;
 }
 
+/* Pairing a song by hand sits under its row, across both columns. */
+.arr-pair {
+  grid-column: 1 / -1;
+}
+
 .arr-link {
   position: relative;
   display: grid;

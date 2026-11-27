@@ -488,6 +488,16 @@ export const choosePlaybackLibrarySetlist = (setlistId: number | null) =>
   requestJson<LibraryPlan>("/api/v1/playback-library/setlist", {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ setlist_id: setlistId }),
   });
+/** A person confirms that a plan song (`LibraryPlanSong.key`) goes with a Playback song of another name. Kept beside the settings; answers the plan read again. */
+export const pairPlaybackLibrarySong = (key: string, setlistSongId: number) =>
+  requestJson<LibraryPlan>("/api/v1/playback-library/pairs", {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, setlist_song_id: setlistSongId }),
+  });
+/** Undoes that pair. Answers the plan read again. */
+export const unpairPlaybackLibrarySong = (key: string) =>
+  requestJson<LibraryPlan>("/api/v1/playback-library/pairs", {
+    method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }),
+  });
 /** Saves the optional override of the helper's computer (empty: the saved Playback host). */
 export const updatePlaybackLibrarySettings = (address: string) =>
   requestJson<LibraryStatus>("/api/v1/playback-library/settings", {
