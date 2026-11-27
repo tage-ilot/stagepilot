@@ -67,9 +67,14 @@ describe("every configuration page follows PanelLayout's order", () => {
     const parts = partsOf(panel);
     expectPanelOrder(parts);
     // Refresh sits inside the Timer field, so the page has no actions slot of its own (and draws no empty band for it). The Presenter Link
-    // section, the Auto-Presenter card and the VerseVision card under them (the page's own content, in that order) come after the settings and
+    // section, the VerseVision card and the Auto-Presenter card under them (the page's own content, in that order) come after the settings and
     // before the Save bar, with the Link ready.
     expect(parts).toEqual(["connection", "settings", "content", "content", "content", "saveBar", "summary"]);
+    const at = (selector: string) => panel.querySelector(selector)!;
+    expect(at("[data-testid=presenter-link-section]"), "the Presenter Link section is first").not.toBeNull();
+    expect(before(at("[data-testid=presenter-link-section]"), at("[data-testid=versevision-button]")), "VerseVision sits under the Presenter Link").toBe(true);
+    expect(before(at("[data-testid=versevision-button]"), at("[data-testid=auto-presenter]")), "the Auto-Presenter card sits under VerseVision").toBe(true);
+    expect(before(at("[data-testid=auto-presenter]"), at("[data-save-bar]")), "the Auto-Presenter card sits above the Save bar").toBe(true);
   });
 
   it("Services (Planning Center)", () => {

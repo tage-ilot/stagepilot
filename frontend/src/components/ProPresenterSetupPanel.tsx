@@ -302,8 +302,8 @@ export function ProPresenterSetupPanel({
       content={(
         <>
           {link ? <PresenterLinkSection library={library} link={link} plan={plan} playing={playing} /> : undefined}
-          {link ? <AutoPresenterSection follow={follow} library={library} link={link} plan={plan} /> : undefined}
           <VerseVisionButton />
+          {link ? <AutoPresenterSection follow={follow} library={library} link={link} plan={plan} /> : undefined}
         </>
       )}
       notices={blockedReason ? <SectionNotice id="propresenter-save-blocked" tone="info" variant="line">{blockedReason}</SectionNotice> : undefined}
