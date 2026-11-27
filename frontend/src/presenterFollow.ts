@@ -8,7 +8,7 @@ export type FollowState = "off" | "idle" | "ready" | "following" | "held" | "pau
 
 /** The verdict code of one plan song (`songs[].code`). */
 export type FollowCode =
-  | "cues" | "bars" | "cues_do_not_match" | "bars_cues_unusable" | "arrangement_changed" | "not_in_playlist" | "link_not_ready" | "switch_off"
+  | "cues" | "cues_aligned" | "bars" | "cues_do_not_match" | "bars_cues_unusable" | "arrangement_changed" | "not_in_playlist" | "link_not_ready" | "switch_off"
   | "not_in_playback" | "sections_changed" | "no_sections" | "library_not_ready";
 
 export interface FollowSong {
@@ -19,8 +19,12 @@ export interface FollowSong {
   code: FollowCode;
   /** The words of the chip, as the backend says them (docs/propresenter.md lists them). */
   text: string;
-  /** A second sentence that says what to do, when there is something to do (`No cues: ...`). */
+  /** A second sentence that says what to do, when there is something to do (`No cues: ...`), naming the Lyrics Bus template that fits the file. */
   advice: string | null;
+  /** The usual lines of text on a slide of the song's file (null until the file has been read, or when no slide has text). */
+  lines_per_slide: number | null;
+  /** The Playback Lyrics Bus template that fits the file (`ProPresenter 2 Line Template`), when the file's lines per slide is 1, 2 or 4. */
+  template: string | null;
 }
 
 export interface FollowStatus {
@@ -99,6 +103,8 @@ export function followLine(status: FollowStatus | null, enabled: boolean, error:
 /** The mark and tone of a song's chip, by what the verdict means. The words are the backend's (`text`); the mark carries the state next to them, never colour alone. */
 const CHIP: Record<FollowCode, Omit<StatusWords, "word">> = {
   cues: { mark: "\u2713", tone: "success" },
+  // Followed by cues, but the file has slides Playback does not number: the first slide is worth a look.
+  cues_aligned: { mark: "!", tone: "warning" },
   bars: { mark: "~", tone: "info" },
   cues_do_not_match: { mark: "!", tone: "warning" },
   bars_cues_unusable: { mark: "~", tone: "info" },

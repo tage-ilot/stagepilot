@@ -11,7 +11,7 @@ const CUES_OFF: FollowSong["code"] = "switch_off";
 type Verdict = Partial<FollowSong> & Pick<FollowSong, "code" | "text">;
 /** The four songs of Playback's set (keys `k1` to `k4`, as the library plan names them), each with its verdict. */
 const songs = (...verdicts: Verdict[]): FollowSong[] => TITLES.map((title, i) => ({
-  key: `k${i + 1}`, title, following: null, advice: null, ...verdicts[Math.min(i, verdicts.length - 1)]!,
+  key: `k${i + 1}`, title, following: null, advice: null, lines_per_slide: null, template: null, ...verdicts[Math.min(i, verdicts.length - 1)]!,
 }));
 
 const CUES: Verdict = { code: "cues", text: "Following by Playback cues", following: "cues" };

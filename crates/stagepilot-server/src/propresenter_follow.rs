@@ -24,7 +24,9 @@ use stagepilot_propresenter::follow::binding::BindingStore;
 use stagepilot_propresenter::follow::engine::{
     FollowHandle, FollowState, Follower, Input, PlaybackNow, SongView, Timing,
 };
-use stagepilot_propresenter::follow::prepare::{Preparer, Readiness, SongInput, SongStatus};
+use stagepilot_propresenter::follow::prepare::{
+    template_name, Preparer, Readiness, SongInput, SongStatus,
+};
 use stagepilot_propresenter::follow::{LyricCue, Section};
 use stagepilot_propresenter::link::api::{HttpApi, ProPresenterApi};
 use stagepilot_propresenter::link::status::LinkState;
@@ -452,7 +454,10 @@ fn song_json(song: &SongStatus) -> Value {
         "following": song.readiness.following(),
         "code": song.readiness.code(),
         "text": song.readiness.text(),
-        "advice": song.readiness.advice(),
+        "advice": song.advice(),
+        // The usual lines of text per slide in the song's file, and the Playback Lyrics Bus template that fits it (1, 2 or 4).
+        "lines_per_slide": song.lines_per_slide(),
+        "template": template_name(song.lines_per_slide()),
     })
 }
 
