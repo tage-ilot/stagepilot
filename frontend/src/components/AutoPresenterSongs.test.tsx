@@ -59,15 +59,18 @@ describe("the song list of the Auto-Presenter", () => {
     for (const item of screen.getAllByTestId("follow-song-chip")) expect(item.querySelector("[aria-hidden=true]")?.textContent).toMatch(/\S/);
   });
 
-  it("says No cues with the one sentence that names the template that fits the file", () => {
+  it("says ONE chip, No cues: following by bars, with the one sentence that names the template that fits the file", () => {
     const twoLine = { ...NO_CUES_SONG, lines_per_slide: 2, template: "ProPresenter 2 Line Template", advice: "No cues: in Playback choose the ProPresenter 2 Line Template for this song" };
     draw(followController({ status: followStatus({ songs: followSongs({}, twoLine) }) }));
-    expect(chip("Battle Belongs")).toHaveTextContent("Following by bars (no Playback cues)");
-    expect(within(row("Battle Belongs")).getByTestId("follow-song-no-cues")).toHaveTextContent("No cues");
+    expect(within(row("Battle Belongs")).getAllByTestId("follow-song-chip")).toHaveLength(1);
+    expect(chip("Battle Belongs")).toHaveTextContent("No cues: following by bars");
+    expect(chip("Battle Belongs")).toHaveAttribute("data-tone", "warning");
+    expect(chip("Battle Belongs").getAttribute("title")).toContain("Following by bars (no Playback cues)");
     const fix = within(row("Battle Belongs")).getByTestId("follow-song-fix");
     expect(fix).toHaveTextContent(templateFix(twoLine));
     for (const word of ["Edit", "MIDI OUT", "Lyrics Bus", "ProPresenter 2 Line Template", "Update"]) expect(fix.textContent).toContain(word);
     expect(within(row("Holy Forever")).queryByTestId("follow-song-no-cues")).toBeNull();
+    expect(chip("Holy Forever")).toHaveTextContent("Following by Playback cues");
   });
 
   it("marks a song followed with extra slides in the file as one to check", () => {
@@ -83,11 +86,15 @@ describe("the song list of the Auto-Presenter", () => {
     expect(chip("Battle Belongs")).toHaveTextContent("Switch is off");
   });
 
-  it("says which link is missing on every row while locked, and never that a song is followed", () => {
+  it("while locked the rows are only the cover and title, greyed: no chip, no fix, the reason is said once above", () => {
     render(<AutoPresenterSection follow={followController({ status: followStatus({ songs: followSongs().map((song, i) => ({ ...song, key: `s${i}` })) }) })} library={libraryController("unreachable")} link={linkController(helperStatus("ready"))} plan={names(...TITLES)} />);
     expect(screen.getAllByTestId("auto-presenter-song")).toHaveLength(4);
-    for (const item of screen.getAllByTestId("follow-song-chip")) expect(item).toHaveTextContent("Playback's Library Link not ready");
+    expect(screen.queryByTestId("follow-song-chip")).toBeNull();
     expect(screen.queryByTestId("follow-song-fix")).toBeNull();
+    expect(screen.queryByTestId("follow-song-phrase")).toBeNull();
+    expect(document.body.textContent).not.toContain("Library Link not ready");
+    for (const item of screen.getAllByTestId("auto-presenter-song")) expect(item).toHaveClass("opacity-60");
+    expect(screen.getAllByTestId("presenter-follow-reason")).toHaveLength(1);
   });
 });
 

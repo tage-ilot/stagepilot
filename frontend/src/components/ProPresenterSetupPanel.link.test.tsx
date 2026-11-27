@@ -141,8 +141,10 @@ describe("ProPresenterSetupPanel: tab order follows the new visual order", () =>
       "Timer", "Refresh timers and Looks", "Look",
       // The Presenter Link section sits between the settings and the Save bar: its toggle (heading and header line), then the body (it has no list to tick without a plan).
       "Presenter LinkNo songs in the plan", "Playlist",
-      // The Auto-Presenter is its own card right under it (folded while off; its switch is locked here, with no follower, so it is not a tab stop).
-      "Auto-Presenter\u2212Needs the Playback Library Link",
+      // The Auto-Presenter is its own card right under it (folded while off; its switch is locked here, with no follower, so it is not a tab stop; the card is open here, so its Timing row is).
+      "Auto-Presenter\u25CBNeeds the Playback Library Link",
+      // Its Timing row is a real setting, so it is a tab stop even while the list above it is locked.
+      "TimingOffset 0 ms",
       // The VerseVision card comes after the Presenter Link section, still before the Save bar.
       "VerseVision Import sermon points and verses (opens in a new window)Open",
       "Save configuration",
