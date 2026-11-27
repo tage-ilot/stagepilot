@@ -452,6 +452,8 @@ Only `ready` and `outdated` feed the library (the chips, the arrangement bar, th
 
 **What the plan carries.** `GET /api/v1/playback-library/plan` adds to each paired song `artwork` (`{type, bytes, etag}` or null; never the picture) and `sections` (`[{name, start, end}]` in seconds on Playback's own played clock, from `arrangement_detail.sections`), next to `section_count` (the number of sections the helper counts). An entry whose times are missing, not numbers, negative, over 86,400 or whose end is not after its start is left out; a name is trimmed and cut at 40 characters (a missing one reads `Section`); at most 200 sections are kept; a song with no usable section has an empty list and no bar. This changes nothing about `scan_length_s`, the countdown length or the saved scan.
 
+**Lyric cues.** The song's own answer (`/songs/<id>`) has `midi[]`; the events with `bus_id` 1 and `note` 19 are lyric cues (`velocity` is the slide number, `time_s` the second on the played clock). The plan adds to each paired song only `lyric_cue_count` and `lyric_cue_max_slide` (null with no cues); the cues are kept inside StagePilot and are never in an answer. An event of another bus or note is ignored; one with a missing or odd time (not 0 to 86,400) or slide (not a whole number from 0) is dropped on its own; the rest are sorted by time, an equal (time, slide) pair counts once, and at most 3,000 are kept. The 256 KB size cap on the song's answer is unchanged, so an answer over it gives that song neither sections nor cues.
+
 **Notices** (plain words; the header pill carries one combined line with the actionable ones only, and nothing when everything agrees; the length is information on the chip and in the panel):
 
 | Notice | Wording | Pill |

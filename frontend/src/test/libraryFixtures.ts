@@ -36,7 +36,7 @@ export const librarySong = (over: Partial<LibrarySong> = {}): LibrarySong => ({
   setlist_song_id: 2000001, content_id: 23126, position: 1, title: "Song One", key: "Ab", key_original: "C", key_was: null, key_changed_at: null, has_waveform: false, bpm: 65, scan_length_s: 388.64, countdown_length_s: 388.64,
   length_source: "last_measure", arrangement: "Default", section_count: 3,
   sections: [{ name: "Count Off", start: 0, end: 4 }, { name: "Verse 1", start: 4, end: 24 }, { name: "Vamp on 1", start: 24, end: 28 }],
-  artwork: { type: "image/jpeg", bytes: 46874, etag: "\"0123456789abcdef\"" }, rental_expires_utc: null, ...over,
+  artwork: { type: "image/jpeg", bytes: 46874, etag: "\"0123456789abcdef\"" }, rental_expires_utc: null, lyric_cue_count: 0, lyric_cue_max_slide: null, ...over,
 });
 
 export const librarySongOf = (title: string, position: number, over: Partial<LibraryPlanSong> = {}): LibraryPlanSong => ({

@@ -68,7 +68,7 @@ use stagepilot_playback::library::{
     apply_detail, health_words, helper_state_for, helper_words, match_plan, match_setlist,
     parse_health, parse_setlist, parse_setlist_list, HelperState, HelperStatus, LibraryArtwork,
     LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySetlist, LibraryState, LibraryStatus,
-    ParsedSetlist, PlanMatch, PlanTitle, MAX_ARTWORK_BYTES, MAX_SETLISTS,
+    LyricCue, ParsedSetlist, PlanMatch, PlanTitle, MAX_ARTWORK_BYTES, MAX_SETLISTS,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -388,6 +388,7 @@ struct Detail {
     sections: Vec<LibrarySection>,
     artwork: Option<LibraryArtwork>,
     arrangement: Option<String>,
+    lyric_cues: Vec<LyricCue>,
 }
 
 /// A cover picture held in memory, as the helper sent it.
@@ -970,6 +971,9 @@ impl PlaybackLibrary {
             sections: Vec::new(),
             artwork: None,
             rental_expires_utc: None,
+            lyric_cues: Vec::new(),
+            lyric_cue_count: 0,
+            lyric_cue_max_slide: None,
         };
         apply_detail(&mut scratch, &value);
         Some(Detail {
@@ -977,6 +981,7 @@ impl PlaybackLibrary {
             sections: scratch.sections,
             artwork: scratch.artwork,
             arrangement: scratch.arrangement,
+            lyric_cues: scratch.lyric_cues,
         })
     }
 
@@ -1066,6 +1071,7 @@ impl PlaybackLibrary {
             if let (Some(detail), Some(song)) = (detail, setlist.songs.get_mut(i)) {
                 song.section_count = detail.section_count;
                 song.sections = detail.sections;
+                song.set_lyric_cues(detail.lyric_cues);
                 if song.artwork.is_none() {
                     song.artwork = detail.artwork;
                 }
