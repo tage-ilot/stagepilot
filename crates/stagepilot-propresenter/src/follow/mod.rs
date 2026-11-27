@@ -23,7 +23,10 @@
 
 pub mod binding;
 pub mod engine;
+pub mod lines;
 pub mod prepare;
+
+pub use lines::LineFit;
 
 use crate::pro_file::Song;
 use sha2::{Digest, Sha256};
@@ -59,6 +62,16 @@ pub struct FileGroup {
     pub cues: usize,
     /// Per cue, whether it has a text element with a visible character (`cues` entries).
     pub has_text: Vec<bool>,
+    /// Per cue, how many lines of text its slide shows (`cues` entries; 0 for a blank or background-only slide). A cue with
+    /// `lines > 0` has text.
+    pub lines: Vec<usize>,
+}
+
+impl FileGroup {
+    /// The lines of text the whole group shows.
+    pub fn text_lines(&self) -> usize {
+        self.lines.iter().sum()
+    }
 }
 
 /// Why the song file cannot be mapped at all.
@@ -94,7 +107,10 @@ pub const HASH_VERSION: u8 = 2;
 impl SongMap {
     /// From groups in file order and an arrangement given as positions in `groups`.
     pub fn new(groups: Vec<FileGroup>, arrangement: Vec<usize>) -> Result<Self, MapError> {
-        if groups.iter().any(|g| g.has_text.len() != g.cues) {
+        if groups
+            .iter()
+            .any(|g| g.has_text.len() != g.cues || g.lines.len() != g.cues)
+        {
             return Err(MapError::Inconsistent);
         }
         if arrangement.iter().any(|g| *g >= groups.len()) {
@@ -141,6 +157,13 @@ impl SongMap {
                 name: g.name.clone(),
                 cues: g.cue_ids.len(),
                 has_text: g.cue_has_text.clone(),
+                // A slide with no visible text shows no line, whatever the file's text element holds.
+                lines: g
+                    .cue_lines
+                    .iter()
+                    .zip(&g.cue_has_text)
+                    .map(|(lines, text)| if *text { (*lines).max(1) } else { 0 })
+                    .collect(),
             })
             .collect();
         let entries = arrangement
@@ -313,6 +336,8 @@ pub struct Schedule {
     pub arrangement_hash: String,
     /// Set when the cues were used with the file's extra slides taken into account (see [`align`]).
     pub alignment: Option<Alignment>,
+    /// Playback's lines per slide (1, 2 or 4) worked out from the cues, whether or not they were used (see [`lines::infer`]).
+    pub playback_lines: Option<usize>,
     /// The highest slide number among the cues given, whether or not they were used (for the plan's summary line).
     pub cue_max_slide: Option<u32>,
 }
@@ -359,6 +384,9 @@ pub struct Alignment {
     pub check_section: usize,
     /// Whether the place of the extras inside some group had to be guessed (from which slides have text).
     pub uncertain: bool,
+    /// Set when the cues were mapped by lines because Playback's template and the file count lines per slide differently (see
+    /// [`lines::by_lines`]); then `extras`, `shifts` and `uncertain` do not apply.
+    pub lines: Option<LineFit>,
 }
 
 /// The slides to fire for a song followed by Playback's cues.
@@ -406,6 +434,38 @@ pub fn cue_plan(
         max_slide,
         file_cues: total,
     };
+    // Revision 3: Playback's lines per slide against the file's. When they differ, or the file's slides are not the ones that
+    // many lines make (a 3-line slide among 2-line ones), the song is followed by lines.
+    let file_lines = map.lines_per_slide();
+    let playback_lines = lines::infer(map, sections, &sorted);
+    if let Some(playback) = playback_lines {
+        let differ = file_lines != Some(playback);
+        if differ || !lines::slides_match(map, playback) {
+            let by_lines = lines::by_lines(
+                map,
+                sections,
+                &sorted,
+                playback,
+                file_lines.unwrap_or(playback),
+                mismatch.clone(),
+            );
+            if by_lines.is_ok() || differ {
+                return by_lines;
+            }
+        }
+    }
+    exact_or_aligned(map, sections, &sorted, mismatch)
+}
+
+/// Rules 3 and 4 and Revision 2: the exact layout, else the cues aligned group by group.
+fn exact_or_aligned(
+    map: &SongMap,
+    sections: &[Section],
+    sorted: &[LyricCue],
+    mismatch: CueProblem,
+) -> Result<CuePlan, CueProblem> {
+    let total = map.cue_total();
+    let max_slide = sorted.iter().map(|c| c.slide).max().unwrap_or(0);
     let numbered = max_slide as usize + 1;
     if total == 0 || numbered > total {
         return Err(mismatch);
@@ -415,10 +475,10 @@ pub fn cue_plan(
         if extras > MAX_EXTRA_CUES {
             return Err(mismatch);
         }
-        return align(map, sections, &sorted, extras, mismatch);
+        return align(map, sections, sorted, extras, mismatch);
     }
     let mut steps = Vec::with_capacity(sorted.len());
-    for cue in &sorted {
+    for cue in sorted {
         let raw = cue.slide as usize;
         let k = section_for(sections, cue)?;
         let unresolved = || CueProblem::NoSection {
@@ -792,6 +852,7 @@ impl Search<'_> {
                 shifts,
                 check_section,
                 uncertain: placed.uncertain.iter().any(|u| *u),
+                lines: None,
             }),
         }
     }
@@ -895,6 +956,7 @@ pub fn build_schedule(
         });
     }
     let cue_max_slide = cues.iter().map(|c| c.slide).max();
+    let playback_lines = infer_playback_lines(map, sections, cues);
     let arrangement_hash = map.arrangement_hash();
     match cue_plan(map, sections, cues) {
         Ok(plan) => Ok(Schedule {
@@ -903,6 +965,7 @@ pub fn build_schedule(
             steps: plan.steps,
             arrangement_hash,
             alignment: plan.alignment,
+            playback_lines,
             cue_max_slide,
         }),
         Err(problem) => Ok(Schedule {
@@ -911,9 +974,26 @@ pub fn build_schedule(
             steps: bars_steps(map, sections, bars),
             arrangement_hash,
             alignment: None,
+            playback_lines,
             cue_max_slide,
         }),
     }
+}
+
+/// Playback's lines per slide (1, 2 or 4), worked out from the cues as they come (see [`lines::infer`]); `None` when no template
+/// stands out, or the cues cannot be placed in the sections.
+pub fn infer_playback_lines(
+    map: &SongMap,
+    sections: &[Section],
+    cues: &[LyricCue],
+) -> Option<usize> {
+    if cues.iter().any(|c| !c.time_s.is_finite()) {
+        return None;
+    }
+    let mut sorted: Vec<LyricCue> = cues.to_vec();
+    sorted.sort_by(|a, b| a.time_s.total_cmp(&b.time_s).then(a.slide.cmp(&b.slide)));
+    sorted.dedup_by(|a, b| a.time_s == b.time_s && a.slide == b.slide);
+    lines::infer(map, sections, &sorted)
 }
 
 /// `build_schedule` straight from a song file: its `Playback` arrangement must be the selected one.
@@ -929,5 +1009,7 @@ pub fn schedule_for_song(
 
 #[cfg(test)]
 mod align_tests;
+#[cfg(test)]
+mod lines_tests;
 #[cfg(test)]
 mod tests;

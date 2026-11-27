@@ -8,7 +8,8 @@ use super::binding::{
     LookError, PlaylistItem,
 };
 use super::{
-    build_schedule, CueProblem, LyricCue, Schedule, Section, Source, Unfollowable, HASH_VERSION,
+    build_schedule, Alignment, CueProblem, LyricCue, Schedule, Section, Source, Unfollowable,
+    HASH_VERSION,
 };
 use crate::link::api::{ApiError, ProPresenterApi};
 use crate::link::ProPresenterHost;
@@ -69,6 +70,11 @@ pub enum Readiness {
     CuesAligned {
         section: String,
     },
+    /// Followed by cues that Playback numbers with another number of lines per slide than the file has: mapped by lines. Check.
+    CuesByLines {
+        playback: usize,
+        file: usize,
+    },
     /// Followed by bars; `Some` is the test the cues failed (`None`: it has no cues, which is the plain case).
     Bars(Option<CueProblem>),
     NotInPlayback,
@@ -94,6 +100,9 @@ impl Readiness {
                 } else {
                     section.trim()
                 }
+            ),
+            Self::CuesByLines { playback, file } => format!(
+                "Aligned by lines (Playback {playback} per slide, the file {file} per slide)"
             ),
             Self::Bars(None | Some(CueProblem::NoCues | CueProblem::TooFew { .. })) => {
                 FOLLOWING_BY_BARS.to_string()
@@ -134,6 +143,10 @@ impl Readiness {
                 "In Playback choose {} for this song",
                 template_phrase(lines)
             )),
+            Self::CuesByLines { .. } => Some(format!(
+                "Matching the template is still best: in Playback choose {} for this song",
+                template_phrase(lines)
+            )),
             _ => None,
         }
     }
@@ -141,7 +154,7 @@ impl Readiness {
     /// `cues` or `bars` when the song is followed, else `None`.
     pub fn following(&self) -> Option<&'static str> {
         match self {
-            Self::Cues | Self::CuesAligned { .. } => Some("cues"),
+            Self::Cues | Self::CuesAligned { .. } | Self::CuesByLines { .. } => Some("cues"),
             Self::Bars(_) => Some("bars"),
             _ => None,
         }
@@ -152,6 +165,7 @@ impl Readiness {
         match self {
             Self::Cues => "cues",
             Self::CuesAligned { .. } => "cues_aligned",
+            Self::CuesByLines { .. } => "cues_by_lines",
             Self::Bars(None | Some(CueProblem::NoCues | CueProblem::TooFew { .. })) => "bars",
             Self::Bars(Some(CueProblem::Mismatch { .. })) => "cues_do_not_match",
             Self::Bars(Some(_)) => "bars_cues_unusable",
@@ -178,6 +192,9 @@ pub struct Prepared {
     pub section_names: Vec<String>,
     /// The usual lines of text per slide in the song file (which Playback Lyrics Bus template fits it).
     pub lines_per_slide: Option<usize>,
+    /// Playback's lines per slide (its Lyrics Bus template: 1, 2 or 4), worked out from its cues; `None` when it has none or they
+    /// do not say.
+    pub playback_lines: Option<usize>,
 }
 
 /// One plan song's verdict.
@@ -195,6 +212,11 @@ impl SongStatus {
     /// The usual lines of text per slide in the song's file, when the file was read.
     pub fn lines_per_slide(&self) -> Option<usize> {
         self.prepared.as_ref().and_then(|p| p.lines_per_slide)
+    }
+
+    /// Playback's lines per slide as its cues say, when they do.
+    pub fn playback_lines(&self) -> Option<usize> {
+        self.prepared.as_ref().and_then(|p| p.playback_lines)
     }
 
     /// The second line that says what to do, naming the template that fits the file.
@@ -345,6 +367,12 @@ impl Preparer {
                     let readiness = match prepared.schedule.source {
                         Source::Cues => match &prepared.schedule.alignment {
                             None => Readiness::Cues,
+                            Some(Alignment {
+                                lines: Some(fit), ..
+                            }) => Readiness::CuesByLines {
+                                playback: fit.playback,
+                                file: fit.file,
+                            },
                             Some(alignment) => Readiness::CuesAligned {
                                 section: prepared
                                     .section_names
@@ -466,6 +494,7 @@ impl Preparer {
                 Unfollowable::ArrangementDiffers { .. } => Readiness::SectionsChanged,
                 Unfollowable::File(_) => Readiness::ArrangementChanged,
             })?;
+        let playback_lines = schedule.playback_lines;
         Ok(Prepared {
             key: song.key.clone(),
             title: song.title.clone(),
@@ -473,6 +502,7 @@ impl Preparer {
             binding,
             section_names: song.sections.iter().map(|s| s.name.clone()).collect(),
             lines_per_slide: map.lines_per_slide(),
+            playback_lines,
         })
     }
 }

@@ -7,7 +7,7 @@ export type FollowState = "off" | "idle" | "ready" | "following" | "held" | "pau
 
 /** The verdict code of one plan song (`songs[].code`). */
 export type FollowCode =
-  | "cues" | "cues_aligned" | "bars" | "cues_do_not_match" | "bars_cues_unusable" | "arrangement_changed" | "not_in_playlist" | "link_not_ready" | "switch_off"
+  | "cues" | "cues_aligned" | "cues_by_lines" | "bars" | "cues_do_not_match" | "bars_cues_unusable" | "arrangement_changed" | "not_in_playlist" | "link_not_ready" | "switch_off"
   | "not_in_playback" | "sections_changed" | "no_sections" | "library_not_ready";
 
 export interface FollowSong {
@@ -22,6 +22,8 @@ export interface FollowSong {
   advice: string | null;
   /** The usual lines of text on a slide of the song's file (null until the file has been read, or when no slide has text). */
   lines_per_slide: number | null;
+  /** Playback's own lines per slide (its Lyrics Bus template: 1, 2 or 4) as its cues say; null while it has none or they do not say. */
+  playback_lines: number | null;
   /** The Playback Lyrics Bus template that fits the file (`ProPresenter 2 Line Template`), when the file's lines per slide is 1, 2 or 4. */
   template: string | null;
 }
@@ -125,6 +127,8 @@ const CHIP: Record<FollowCode, Omit<StatusWords, "word">> = {
   cues: { mark: "\u2713", tone: "success" },
   // Followed by cues, but the file has slides Playback does not number: the first slide is worth a look.
   cues_aligned: { mark: "!", tone: "warning" },
+  // Followed by cues that count another number of lines per slide than the file does (`Aligned by lines (Playback 2 per slide, the file 1 per slide)`): a Check, never a block.
+  cues_by_lines: { mark: "!", tone: "warning" },
   bars: { mark: "~", tone: "info" },
   cues_do_not_match: { mark: "!", tone: "warning" },
   bars_cues_unusable: { mark: "~", tone: "info" },
@@ -157,7 +161,7 @@ export function templateFix(song: Pick<FollowSong, "template">): string {
 }
 
 /** A song followed by bars because its cues are missing or wrong has a fix: pick the template that fits the file. */
-export const hasFix = (song: Pick<FollowSong, "code" | "advice">): boolean => (song.code === "bars" || song.code === "cues_do_not_match") && Boolean(song.advice);
+export const hasFix = (song: Pick<FollowSong, "code" | "advice">): boolean => (song.code === "bars" || song.code === "cues_do_not_match" || song.code === "cues_by_lines") && Boolean(song.advice);
 
 /** `cues go to slide 30, file has 54 cues` -> the quiet phrase under the chip: how the song is followed anyway. */
 export function songPhrase(song: Pick<FollowSong, "code">): string | null {

@@ -21,6 +21,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 const FIXTURE: &str = include_str!("fixtures/oh-my-soul-lyric-cues.fixture.json");
+const TEMPLATES: &str = include_str!("fixtures/oh-my-soul-templates.fixture.json");
 /// The `Playback` arrangement of the fixture song: one entry per Playback section, as a position in the file's groups.
 const ARRANGEMENT: [usize; 23] = [
     0, 1, 2, 3, 4, 5, 6, 7, 4, 8, 5, 9, 10, 10, 11, 12, 13, 14, 8, 8, 15, 16, 17,
@@ -1238,4 +1239,106 @@ async fn the_advice_names_the_template_that_fits_the_file() {
             Some(format!("In Playback choose {template} for this song").as_str())
         );
     }
+}
+
+// ---- Playback numbers 4 lines per slide, the file has one line per slide ------------------------------------------------------
+
+#[tokio::test]
+async fn the_four_line_series_against_the_one_line_file_triggers_each_cue_of_every_four_lines_in_turn(
+) {
+    let f = fixture();
+    let series: Vec<LyricCue> = serde_json::from_str::<Value>(TEMPLATES).unwrap()["four_line"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|pair| LyricCue {
+            time_s: pair[0].as_f64().unwrap(),
+            slide: pair[1].as_u64().unwrap() as u32,
+        })
+        .collect();
+    let rig = rig();
+    rig.api.focus_playlist(&rig.playlist, 0);
+    let mut wanted_songs = inputs(true);
+    wanted_songs[0].cues = series.clone();
+    let statuses = rig
+        .preparer
+        .prepare(&*rig.host, &*rig.api, &wanted_songs, true)
+        .await;
+    rig.api.clear_calls();
+    let oms = view(&statuses[0]);
+    assert_eq!(
+        oms.readiness_text,
+        "Aligned by lines (Playback 4 per slide, the file 1 per slide)"
+    );
+    assert_eq!(statuses[0].readiness.code(), "cues_by_lines");
+    assert_eq!(statuses[0].playback_lines(), Some(4));
+    assert_eq!(statuses[0].lines_per_slide(), Some(1));
+    // Never a refusal: the song is followed by its cues.
+    assert_eq!(statuses[0].readiness.following(), Some("cues"));
+
+    // The expected triggers, worked out by hand from the line counts: every group has one line per cue, so Playback's group of
+    // `c` cues has ceil(c / 4) slides (the blank Count Off one); slide `s` of the group shows cues 4 * s to 4 * s + 3.
+    let sizes: Vec<usize> = f.groups.iter().map(|g| g.1).collect();
+    let mut group_start = Vec::new();
+    let mut slide_start = Vec::new();
+    let (mut raw, mut slide) = (0, 0);
+    for (g, size) in sizes.iter().enumerate() {
+        group_start.push(raw);
+        slide_start.push(slide);
+        raw += size;
+        slide += if g == 0 { 1 } else { size.div_ceil(4) };
+    }
+    let mut entry_base = Vec::new();
+    let mut flat = 0;
+    for g in ARRANGEMENT {
+        entry_base.push(flat);
+        flat += sizes[g];
+    }
+    let (mut want_flat, mut want_raw) = (Vec::new(), Vec::new());
+    for cue in &series {
+        let entry = f
+            .sections
+            .iter()
+            .rposition(|s| s.start - 2.0 <= cue.time_s)
+            .unwrap();
+        let group = ARRANGEMENT[entry];
+        let first = (cue.slide as usize - slide_start[group]) * 4;
+        for inside in first..(first + 4).min(sizes[group]) {
+            want_flat.push(entry_base[entry] + inside);
+            want_raw.push(group_start[group] + inside);
+        }
+    }
+    // The first slides, as a person can read them: the Intro (cues 1, 2), then the four lines of the first verse (cues 3 to 6).
+    assert_eq!(&want_raw[..6], &[1, 2, 3, 4, 5, 6]);
+
+    let mut follower = Follower::new(Timing::default());
+    let mut clock = Clock::start(0.0);
+    let (mut seen, mut got_raw) = (0, Vec::new());
+    for _ in 0..2600 {
+        advance(&mut follower, &rig.api, &oms, &mut clock, 0.1, true, 0).await;
+        let now = log(&rig.api).len();
+        if now != seen {
+            assert_eq!(
+                now,
+                seen + 1,
+                "one trigger at a time, never two in one step"
+            );
+            seen = now;
+            got_raw.push(rig.api.raw_on_screen().unwrap());
+        }
+    }
+    let log = log(&rig.api);
+    assert_eq!(log[0], "item:0");
+    assert_eq!(
+        &log[1..9],
+        &strings(&[
+            "slide:1", "slide:2", "slide:3", "slide:4", "slide:5", "slide:6", "slide:7", "slide:8"
+        ])[..]
+    );
+    let want_log: Vec<String> = std::iter::once("item:0".to_string())
+        .chain(want_flat.iter().map(|n| format!("slide:{n}")))
+        .collect();
+    assert_eq!(log, want_log);
+    // The fake works the raw cue out from the file's own arrangement: each trigger showed the cue of the lines.
+    assert_eq!(&got_raw[1..], &want_raw[..]);
 }

@@ -68,6 +68,17 @@ describe("a song's chip", () => {
     expect(twoLine).toMatchObject({ lines_per_slide: 2, template: "ProPresenter 2 Line Template" });
   });
 
+  it("marks a song followed by lines (Playback and the file count lines per slide differently) as one to check, with the two numbers and the one-sentence tip", () => {
+    const [byLines] = followSongs({ code: "cues_by_lines", text: "Aligned by lines (Playback 2 per slide, the file 1 per slide)", advice: "Matching the template is still best: in Playback choose a ProPresenter 1 Line Template for this song", lines_per_slide: 1, playback_lines: 2, template: "ProPresenter 1 Line Template" });
+    expect(songChipWords(byLines!)).toEqual({ word: "Aligned by lines (Playback 2 per slide, the file 1 per slide)", mark: "!", tone: "warning" });
+    expect(byLines).toMatchObject({ following: "cues", lines_per_slide: 1, playback_lines: 2 });
+    expect(hasNoCues(byLines!)).toBe(false);
+    expect(songPhrase(byLines!)).toBeNull();
+    // The tip: matching the template is still best, named like the other fixes.
+    expect(hasFix(byLines!)).toBe(true);
+    expect(templateFix(byLines!)).toContain("Lyrics Bus, ProPresenter 1 Line Template, Update.");
+  });
+
   it("says No cues only for a song followed by bars for want of cues, and a mismatch is followed by bars", () => {
     const [noCues, plain, mismatch] = followSongs(NO_CUES_SONG, {}, { code: "cues_do_not_match", text: "Cues do not match the file (cues go to slide 30, file has 54 cues)", advice: null });
     expect(hasNoCues(noCues!)).toBe(true);
