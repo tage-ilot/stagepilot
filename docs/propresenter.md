@@ -533,6 +533,20 @@ Each plan song says, in the words of the screen:
 | `no_sections` | Playback has not given this song's sections yet |
 | `library_not_ready` | Playback's Library Link not ready |
 
+### The window
+
+Configuration → Presentation, under the **Presenter Link** section (always drawn, like the section itself), holds one box, **Follow Playback in ProPresenter**:
+
+- **The switch.** Off until you turn it on; it is saved with the other settings (`propresenter.presenter_follow.enabled`) and turned off the same way. The window reads the switch before it writes, so what you set elsewhere is never put back to an older value.
+- **One status line.** A mark and words, never a colour alone: `Off`; `Following: Chorus, slide 3` (the section Playback is in, and ProPresenter's slide counted the way ProPresenter's window counts, from 1: its Count Off is slide 1); `Ready: ...` while a song is loaded and not playing; `Paused: someone changed the slide in ProPresenter` (a click in ProPresenter holds the song until the next section; there is nothing to press); `Paused: ProPresenter did not take 5 slide changes in a row (...)`; `Not following: ...` with the reason when the song that plays cannot be followed. The same words, shortened, end the folded header of the Presenter Link while something needs to be seen.
+- **Try again** appears only when following is paused by failures (`POST /api/v1/propresenter-follow/try-again`). It is the only button of the box.
+- **Locked, not hidden.** While the Presenter Link is not ready (`Presenter Link not ready`) or Playback's Library Link is not ready (`Playback's Library Link not ready`) the box is greyed, nothing in it can be pressed and the reason sits beside the switch. Following itself never starts without both.
+- **Timing** (folded). One small number box, **Offset (ms)**, from -2000 to 2000, saved when you leave the box or press Enter (`propresenter.presenter_follow.offset_ms`). Positive shows every slide earlier. Leave it at 0 until it has been tuned on the rig.
+
+Every song card of the Presenter Link carries one chip from `GET /api/v1/propresenter-follow/status` (`songs[].text`, the table above), each with a mark (`✓` followed by cues, `~` by bars, `!` something to look at, `−` nothing to follow now). A song followed by bars because Playback holds no cues also gets a **No cues** chip and one sentence: *In Playback: Edit, the "..." on the song, MIDI OUT, Lyrics Bus, ProPresenter 1 Line Template, Update.* (the 2 or 4 Line Template when the song file has two or four lines per slide). A song whose cues do not fit the file says `Cues do not match the file (cues go to slide N, file has M cues)` and `Followed by bars`.
+
+While the Presentation panel is open the window reads the status every 2 seconds with the switch on, and every 30 seconds with it off; with the panel closed it reads nothing. The switch and the offset are changed only by someone allowed to change the configuration.
+
 ### What has not been tried on the real rig
 
 Everything above was tested against fakes (a fake ProPresenter that numbers slides like the real one, and the recorded numbers of one real

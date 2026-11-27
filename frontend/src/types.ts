@@ -247,6 +247,8 @@ export interface PersistentSettings {
     reconnect_initial_seconds: number;
     reconnect_max_seconds: number;
     health_check_interval_seconds: number;
+    /** Following Playback with the lyrics in ProPresenter (off by default; left out of the file while it holds the defaults). Mirrors the generated `PresenterFollowSettings`. */
+    presenter_follow?: { enabled: boolean; offset_ms: number };
   };
 }
 

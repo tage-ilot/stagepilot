@@ -12,6 +12,7 @@ import { lightingStates } from "./LightingStates";
 import { backendPages, lightingPages, playbackPages, presentationPages, servicesPages } from "./PageStates";
 import { playbackStates } from "./PlaybackStates";
 import { presentationStates } from "./PresentationStates";
+import { presenterFollowStates } from "./PresenterFollowStates";
 import { presenterLinkStates } from "./PresenterLinkStates";
 import { remotePages } from "./RemoteStates";
 import { scanTemplates } from "./ScanStates";
@@ -32,6 +33,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
   { id: "lighting", title: "Connection section: Lighting", intro: "sACN DMX Live Link (Configuration > Lighting): the Lightkey link and its Lighting Link on the Lighting computer.", states: lightingStates },
   { id: "page-presentation", title: "Page: Presentation", intro: "Settings, actions, summary and notices of the Presentation page: clean, held, error, busy, disabled, failed, loading.", states: presentationPages, lead: PAGES_NOTE },
   { id: "presenter-link", title: "Section: Presenter Link", intro: "The Presenter Link in the Presentation panel: playlist and section (the section names; End of Playlist only for a playlist with none), ONE list of plain song cards like the Lighting tab's (Planning Center names until Playback has given them), ONE button, Import songs to ProPresenter, and its short statuses: one chip and one short phrase per song. Every state is reached by pressing the real buttons; the answers are made up.", states: presenterLinkStates },
+  { id: "presenter-follow", title: "Section: Follow Playback in ProPresenter", intro: "Under the Presenter Link: the switch (off by default), ONE status line, Try again only after failures, the Timing offset folded away, and per song a readiness chip in the words of docs/propresenter.md (with a mark, never colour alone). Greyed with its reason while the Presenter Link or Playback's Library Link is not ready. The answers are made up; the switch really switches.", states: presenterFollowStates },
   { id: "page-services", title: "Page: Services", intro: "Services (Planning Center): the three sign-in notices, the optional Manual API Connection, the settings group, the action row.", states: servicesPages },
   { id: "page-backend", title: "Page: StagePilot", intro: "StagePilot: the summary cards first, the optional Advanced section, Connection Access, the Save bar.", states: backendPages },
   { id: "song-scan", title: "Section: Playback song scan", intro: "The ONE song-scan button of the Playback config's Song order section: Scan Playback Library when the Library Link works and its order holds, otherwise Scan Playback API; never hidden, greyed out with its reason when no scan can run. (Search finds a computer; Scan reads the songs.)", states: songScanStates },
@@ -52,7 +54,7 @@ const GROUPS: { id: string; title: string; intro: string; states: SampleState[];
 
 /** One column of the side-by-side view: a connection, with the groups that show it (its Live Link block, then its page). */
 const COLUMNS: { label: string; groups: string[] }[] = [
-  { label: "Presentation", groups: ["presentation", "page-presentation", "presenter-link"] },
+  { label: "Presentation", groups: ["presentation", "page-presentation", "presenter-link", "presenter-follow"] },
   { label: "Playback / MIDI", groups: ["playback", "page-playback"] },
   { label: "Lighting", groups: ["lighting", "page-lighting"] },
   { label: "Services", groups: ["page-services"] },
