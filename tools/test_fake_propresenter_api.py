@@ -234,5 +234,87 @@ class Layers(unittest.TestCase):
         self.assertIn("slide", self.api.call("GET", "/v1/status/layers")[1])
 
 
+class Following(unittest.TestCase):
+    """The parts a follower of Playback needs: triggers, the active presentation and where it is."""
+
+    def setUp(self):
+        self.api = Api(libraries={"Songs": ["Amazing Grace", "How Great"], "Playback": []}, playlists=["Sunday"], arrangements={"How Great": "Playback"})
+        self.addCleanup(self.api.stop)
+        self.sunday = self.api.state.playlists[0]
+        self.grace, self.great = self.api.state.memory[0]["songs"]
+    def put_two(self):
+        self.api.call("PUT", "/v1/playlist/" + self.sunday["id"]["uuid"], [item(self.grace), item(self.great)])
+        # How Great: groups of 1, 2 and 3 slides in the file; the selected arrangement plays 0, 2, 1, 2.
+        self.api.state.set_layout("How Great", [1, 2, 3], [0, 2, 1, 2])
+        return self.sunday["id"]["uuid"]
+
+    def test_a_playlist_item_trigger_shows_its_presentation_on_the_first_slide(self):
+        uuid = self.put_two()
+        self.assertEqual(self.api.call("GET", "/v1/presentation/active")[0], 404, "nothing is active at the start")
+        self.assertEqual(self.api.call("GET", "/v1/presentation/slide_index")[1], {"presentation_index": None})
+        self.assertEqual(self.api.call("GET", "/v1/playlist/active")[1]["presentation"], None)
+        self.assertEqual(self.api.call("GET", "/v1/playlist/%s/1/trigger" % uuid)[0], 204)
+        status, active = self.api.call("GET", "/v1/presentation/active")
+        self.assertEqual((status, active["presentation"]["id"]["uuid"]), (200, self.great["id"]["uuid"]))
+        index = self.api.call("GET", "/v1/presentation/slide_index")[1]["presentation_index"]
+        self.assertEqual((index["index"], index["presentation_id"]["uuid"]), (0, self.great["id"]["uuid"]))
+        where = self.api.call("GET", "/v1/playlist/active")[1]["presentation"]
+        self.assertEqual((where["playlist"]["uuid"], where["item"]["uuid"]), (uuid, self.great["id"]["uuid"]))
+        self.assertEqual(self.api.call("GET", "/v1/playlist/%s/9/trigger" % uuid)[0], 404)
+        self.assertEqual(self.api.call("GET", "/v1/playlist/nope/0/trigger")[0], 404)
+
+    def test_a_slide_number_is_flat_in_the_selected_arrangement_and_the_raw_cue_is_known(self):
+        uuid = self.put_two()
+        self.api.call("GET", "/v1/playlist/%s/1/trigger" % uuid)
+        # Flat slides: group 0 (raw 0), group 2 (raw 3,4,5), group 1 (raw 1,2), group 2 again (raw 3,4,5).
+        raws = []
+        for n in range(9):
+            self.assertEqual(self.api.call("GET", "/v1/presentation/active/%d/trigger" % n)[0], 204)
+            self.assertEqual(self.api.call("GET", "/v1/presentation/slide_index")[1]["presentation_index"]["index"], n)
+            raws.append(self.api.state.raw_on_screen())
+        self.assertEqual(raws, [0, 3, 4, 5, 1, 2, 3, 4, 5])
+        self.assertEqual(self.api.call("GET", "/v1/presentation/active/9/trigger")[0], 404)
+        self.assertEqual(self.api.call("GET", "/v1/presentation/slide_index")[1]["presentation_index"]["index"], 8,
+                         "a refused one changes nothing")
+        self.assertEqual(self.api.state.triggers[0], ("item", uuid, 1))
+        self.assertEqual([t for t in self.api.state.triggers if t[0] == "slide"][-1], ("slide", 9))
+
+    def test_a_slide_trigger_with_nothing_active_is_refused_and_a_song_with_no_layout_takes_any_number(self):
+        uuid = self.put_two()
+        self.assertEqual(self.api.call("GET", "/v1/presentation/active/0/trigger")[0], 404)
+        self.api.call("GET", "/v1/playlist/%s/0/trigger" % uuid)
+        self.assertEqual(self.api.call("GET", "/v1/presentation/active/40/trigger")[0], 204)
+        self.assertIsNone(self.api.state.raw_on_screen())
+
+    def test_a_person_clicking_or_opening_another_song_is_seen_by_the_slide_index(self):
+        uuid = self.put_two()
+        self.api.call("GET", "/v1/playlist/%s/1/trigger" % uuid)
+        self.api.call("GET", "/v1/presentation/active/2/trigger")
+        self.api.state.click_slide(5)
+        self.assertEqual(self.api.call("GET", "/v1/presentation/slide_index")[1]["presentation_index"]["index"], 5)
+        self.assertEqual(self.api.state.triggers.count(("slide", 5)), 0, "a click is not a trigger")
+        self.assertTrue(self.api.state.open_presentation("Amazing Grace"))
+        index = self.api.call("GET", "/v1/presentation/slide_index")[1]["presentation_index"]
+        self.assertEqual((index["index"], index["presentation_id"]["uuid"]), (0, self.grace["id"]["uuid"]))
+        self.assertFalse(self.api.state.open_presentation("No Such Song"))
+
+    def test_triggers_can_fail_or_be_ignored_and_are_logged_either_way(self):
+        uuid = self.put_two()
+        self.api.state.fail_triggers = 500
+        self.assertEqual(self.api.call("GET", "/v1/playlist/%s/1/trigger" % uuid)[0], 500)
+        self.assertIsNone(self.api.state.active)
+        self.api.state.fail_triggers = None
+        self.api.state.ignore_items = True
+        self.assertEqual(self.api.call("GET", "/v1/playlist/%s/1/trigger" % uuid)[0], 204)
+        self.assertIsNone(self.api.state.active, "accepted and nothing shown")
+        self.assertEqual(self.api.state.triggers, [("item", uuid, 1), ("item", uuid, 1)])
+
+    def test_the_playlist_that_was_focused_is_the_active_one_without_touching_the_screen(self):
+        uuid = self.put_two()
+        self.assertTrue(self.api.state.focus_playlist(uuid, 0))
+        self.assertEqual(self.api.call("GET", "/v1/playlist/active")[1]["presentation"]["item"]["uuid"], self.grace["id"]["uuid"])
+        self.assertEqual(self.api.state.triggers, [])
+
+
 if __name__ == "__main__":
     unittest.main()

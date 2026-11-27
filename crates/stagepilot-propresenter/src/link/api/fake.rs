@@ -8,9 +8,18 @@
 //!   without the suffix, else the WHOLE write is refused with 404 and nothing changes;
 //! * the `arrangement_name` that is sent is ignored: a song reads back with the arrangement its file has selected.
 //!
-//! Everything can be made to fail on purpose (`set_down`, `fail_put`, `corrupt_reads`).
+//! * following Playback: `GET /v1/playlist/{id}/{index}/trigger` makes the item's presentation the active one and shows its first
+//!   slide; `GET /v1/presentation/active/{n}/trigger` shows slide `n`, counted in the arrangement the FILE has selected (a
+//!   repeated group counts its slides again, so `n` is a FLAT position, never a raw cue index); `/v1/presentation/active`,
+//!   `/v1/presentation/slide_index` and `/v1/playlist/active` read where it is. A test plays the operator with
+//!   [`FakeApi::click_slide`] (a person clicked a slide) and [`FakeApi::open_presentation`] (a person opened another song).
+//!
+//! Everything can be made to fail on purpose (`set_down`, `fail_put`, `corrupt_reads`, `fail_triggers`, `set_delay`).
 
-use super::{ApiError, Layers, LibraryEntry, LibraryRef, PlaylistRef, ProPresenterApi};
+use super::{
+    ActivePlaylist, ApiError, Layers, LibraryEntry, LibraryRef, PlaylistRef, ProPresenterApi,
+    SlidePosition,
+};
 use crate::link::fake::FakeHost;
 use crate::pro_file::Song;
 use async_trait::async_trait;
@@ -18,6 +27,27 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+/// One trigger the fake was asked for (what a follower did to ProPresenter's screen), in order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Trigger {
+    /// `GET /v1/playlist/{playlist}/{index}/trigger`.
+    Item { playlist: String, index: usize },
+    /// `GET /v1/presentation/active/{n}/trigger`.
+    Slide(usize),
+}
+
+/// What is on ProPresenter's presentation layer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Active {
+    library: String,
+    file: String,
+    uuid: String,
+    /// The playlist and item it was triggered from, when it was.
+    from: Option<(String, usize)>,
+    slide: usize,
+}
 
 /// When ProPresenter gives a newly placed file its id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +86,12 @@ struct State {
     layers: Result<Layers, ApiError>,
     /// Answers that are given first, one per call, before `layers` is.
     layers_next: VecDeque<Result<Layers, ApiError>>,
+    active: Option<Active>,
+    triggers: Vec<Trigger>,
+    clicks: Vec<usize>,
+    fail_triggers: Option<ApiError>,
+    ignore_items: bool,
+    delay: Duration,
 }
 
 pub struct FakeApi {
@@ -104,6 +140,12 @@ impl FakeApi {
                     ..Layers::default()
                 }),
                 layers_next: VecDeque::new(),
+                active: None,
+                triggers: Vec::new(),
+                clicks: Vec::new(),
+                fail_triggers: None,
+                ignore_items: false,
+                delay: Duration::ZERO,
             }),
         }
     }
@@ -115,6 +157,15 @@ impl FakeApi {
     /// A playlist with these items (as the API would show them), optionally inside a folder.
     pub fn add_playlist(&self, name: &str, folder: Option<&str>, items: Vec<Value>) -> String {
         let mut s = self.lock();
+        // ProPresenter numbers the items of a playlist by their place in it.
+        let items: Vec<Value> = items
+            .into_iter()
+            .enumerate()
+            .map(|(index, mut item)| {
+                item["id"]["index"] = json!(index);
+                item
+            })
+            .collect();
         let uuid = format!("00000000-0000-4000-8000-{:012X}", s.playlists.len() + 1);
         s.playlists.push(Playlist {
             uuid: uuid.clone(),
@@ -240,6 +291,194 @@ impl FakeApi {
             return Err(ApiError::NoAnswer("it is not there".into()));
         }
         Ok(s)
+    }
+
+    // ---- following Playback ----------------------------------------------------------------------------------------
+
+    /// Every trigger asked for, in order.
+    pub fn triggers(&self) -> Vec<Trigger> {
+        self.lock().triggers.clone()
+    }
+
+    /// The slide numbers of the `Slide` triggers asked for, in order.
+    pub fn slides_triggered(&self) -> Vec<usize> {
+        self.lock()
+            .triggers
+            .iter()
+            .filter_map(|t| match t {
+                Trigger::Slide(n) => Some(*n),
+                Trigger::Item { .. } => None,
+            })
+            .collect()
+    }
+
+    /// How many `Item` triggers were asked for.
+    pub fn item_triggers(&self) -> usize {
+        self.lock()
+            .triggers
+            .iter()
+            .filter(|t| matches!(t, Trigger::Item { .. }))
+            .count()
+    }
+
+    /// The calls that are part of following (reads and triggers), not the playlist work of the Presenter Link.
+    pub fn follow_calls(&self) -> Vec<String> {
+        const NAMES: [&str; 5] = [
+            "trigger_item",
+            "trigger_slide",
+            "active_presentation",
+            "slide_position",
+            "active_playlist",
+        ];
+        self.lock()
+            .calls
+            .iter()
+            .filter(|c| NAMES.iter().any(|n| c.starts_with(n)))
+            .cloned()
+            .collect()
+    }
+
+    /// Forgets the calls and triggers so far.
+    pub fn clear_calls(&self) {
+        let mut s = self.lock();
+        s.calls.clear();
+        s.triggers.clear();
+        s.clicks.clear();
+    }
+
+    /// Every trigger fails with this error from now on (`None`: they work again). The call is still logged.
+    pub fn fail_triggers(&self, error: Option<ApiError>) {
+        self.lock().fail_triggers = error;
+    }
+
+    /// A playlist-item trigger is accepted but changes nothing on screen (ProPresenter did not take it).
+    pub fn ignore_item_triggers(&self, ignore: bool) {
+        self.lock().ignore_items = ignore;
+    }
+
+    /// Every following call waits this long before it answers (a slow ProPresenter).
+    pub fn set_delay(&self, delay: Duration) {
+        self.lock().delay = delay;
+    }
+
+    /// A person clicked slide `n` of the active presentation in ProPresenter. Nothing is logged as a trigger.
+    pub fn click_slide(&self, n: usize) {
+        let mut s = self.lock();
+        s.clicks.push(n);
+        if let Some(active) = s.active.as_mut() {
+            active.slide = n;
+        }
+    }
+
+    /// A person opened another song (its file's name, without `.pro`) in ProPresenter: it is the active presentation, on its
+    /// first slide. `false` when no such file is in any library.
+    pub fn open_presentation(&self, name: &str) -> bool {
+        let mut s = self.lock();
+        let found = self
+            .entries(&s, None)
+            .into_iter()
+            .find(|(_, file, uuid)| uuid.is_some() && file.strip_suffix(".pro") == Some(name));
+        let Some((library, file, Some(uuid))) = found else {
+            return false;
+        };
+        s.active = Some(Active {
+            library,
+            file,
+            uuid,
+            from: None,
+            slide: 0,
+        });
+        true
+    }
+
+    /// The active presentation's uuid and its slide now, as the fake holds them.
+    pub fn on_screen(&self) -> Option<(String, usize)> {
+        self.lock()
+            .active
+            .as_ref()
+            .map(|a| (a.uuid.clone(), a.slide))
+    }
+
+    /// The file (without `.pro`) of the active presentation.
+    pub fn active_file(&self) -> Option<String> {
+        self.lock()
+            .active
+            .as_ref()
+            .map(|a| a.file.strip_suffix(".pro").unwrap_or(&a.file).to_string())
+    }
+
+    /// The RAW cue index (file order, whatever the arrangement) of the slide on screen: what a trigger of a flat number really
+    /// showed.
+    pub fn raw_on_screen(&self) -> Option<usize> {
+        let s = self.lock();
+        let active = s.active.as_ref()?;
+        let flat = self.flat_raws(&active.library, &active.file)?;
+        flat.get(active.slide).copied()
+    }
+
+    /// Makes `item_index` of the playlist the playlist ProPresenter last triggered (as if a person had clicked it), without
+    /// touching what is on screen.
+    pub fn focus_playlist(&self, playlist_uuid: &str, item_index: usize) {
+        let mut s = self.lock();
+        let uuid = s
+            .playlists
+            .iter()
+            .find(|p| p.uuid == playlist_uuid)
+            .and_then(|p| p.items.get(item_index))
+            .and_then(|i| i["id"]["uuid"].as_str().map(str::to_string));
+        let found = uuid.and_then(|u| self.song_by_uuid(&s, &u).map(|(l, f)| (l, f, u)));
+        if let Some((library, file, uuid)) = found {
+            s.active = Some(Active {
+                library,
+                file,
+                uuid,
+                from: Some((playlist_uuid.to_string(), item_index)),
+                slide: 0,
+            });
+        }
+    }
+
+    /// The slide numbers ProPresenter has for a file in the arrangement the FILE has selected: for each, the raw cue index.
+    /// With no arrangement selected, the groups once each in file order.
+    fn flat_raws(&self, library: &str, file: &str) -> Option<Vec<usize>> {
+        let bytes = self
+            .host
+            .files_of(library)
+            .into_iter()
+            .find(|(f, _)| f == file)
+            .map(|(_, bytes)| bytes)?;
+        let song = Song::read(&bytes).ok()?;
+        let mut starts = Vec::new();
+        let mut total = 0;
+        for group in &song.groups {
+            starts.push(total);
+            total += group.cue_ids.len();
+        }
+        let order: Vec<usize> = match song.selected_arrangement() {
+            Some(arrangement) => arrangement
+                .group_ids
+                .iter()
+                .filter_map(|id| {
+                    song.groups
+                        .iter()
+                        .position(|g| g.uuid.eq_ignore_ascii_case(id))
+                })
+                .collect(),
+            None => (0..song.groups.len()).collect(),
+        };
+        Some(
+            order
+                .into_iter()
+                .flat_map(|g| starts[g]..starts[g] + song.groups[g].cue_ids.len())
+                .collect(),
+        )
+    }
+
+    async fn pause(&self) {
+        let delay = self.lock().delay;
+        if !delay.is_zero() {
+            tokio::time::sleep(delay).await;
+        }
     }
 
     fn song_by_uuid(&self, s: &State, wanted: &str) -> Option<(String, String)> {
@@ -395,5 +634,97 @@ impl ProPresenterApi for FakeApi {
             Some(answer) => answer,
             None => s.layers.clone(),
         }
+    }
+
+    async fn active_playlist(&self) -> Result<Option<ActivePlaylist>, ApiError> {
+        self.pause().await;
+        let s = self.up("active_playlist".into())?;
+        let Some((playlist_uuid, item_index)) = s.active.as_ref().and_then(|a| a.from.clone())
+        else {
+            return Ok(None);
+        };
+        let Some(playlist) = s.playlists.iter().find(|p| p.uuid == playlist_uuid) else {
+            return Ok(None);
+        };
+        let item_uuid = playlist
+            .items
+            .get(item_index)
+            .and_then(|i| i["id"]["uuid"].as_str())
+            .unwrap_or_default()
+            .to_string();
+        Ok(Some(ActivePlaylist {
+            playlist_uuid,
+            playlist_name: playlist.name.clone(),
+            item_uuid,
+            item_index,
+        }))
+    }
+
+    async fn trigger_playlist_item(&self, playlist_id: &str, index: usize) -> Result<(), ApiError> {
+        super::plain_id(playlist_id)?;
+        self.pause().await;
+        let mut s = self.up(format!("trigger_item({playlist_id},{index})"))?;
+        s.triggers.push(Trigger::Item {
+            playlist: playlist_id.to_string(),
+            index,
+        });
+        if let Some(error) = s.fail_triggers.clone() {
+            return Err(error);
+        }
+        let playlist = s
+            .playlists
+            .iter()
+            .find(|p| p.uuid == playlist_id)
+            .ok_or(ApiError::NotFound)?;
+        let item = playlist.items.get(index).ok_or(ApiError::NotFound)?;
+        let uuid = item["id"]["uuid"].as_str().unwrap_or_default().to_string();
+        let (library, file) = self.song_by_uuid(&s, &uuid).ok_or(ApiError::NotFound)?;
+        if s.ignore_items {
+            return Ok(());
+        }
+        s.active = Some(Active {
+            library,
+            file,
+            uuid,
+            from: Some((playlist_id.to_string(), index)),
+            slide: 0,
+        });
+        Ok(())
+    }
+
+    async fn trigger_slide(&self, index: usize) -> Result<(), ApiError> {
+        self.pause().await;
+        let mut s = self.up(format!("trigger_slide({index})"))?;
+        s.triggers.push(Trigger::Slide(index));
+        if let Some(error) = s.fail_triggers.clone() {
+            return Err(error);
+        }
+        let (library, file) = match s.active.as_ref() {
+            Some(a) => (a.library.clone(), a.file.clone()),
+            None => return Err(ApiError::NotFound),
+        };
+        let total = self.flat_raws(&library, &file).map_or(0, |f| f.len());
+        if index >= total {
+            return Err(ApiError::NotFound);
+        }
+        if let Some(active) = s.active.as_mut() {
+            active.slide = index;
+        }
+        Ok(())
+    }
+
+    async fn active_presentation(&self) -> Result<Option<String>, ApiError> {
+        self.pause().await;
+        let s = self.up("active_presentation".into())?;
+        Ok(s.active.as_ref().map(|a| a.uuid.clone()))
+    }
+
+    async fn slide_position(&self) -> Result<Option<SlidePosition>, ApiError> {
+        self.pause().await;
+        let s = self.up("slide_position".into())?;
+        Ok(s.active.as_ref().map(|a| SlidePosition {
+            presentation_uuid: a.uuid.clone(),
+            index: a.slide,
+        }))
     }
 }

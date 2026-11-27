@@ -19,6 +19,10 @@
 //! * Bars: the first slide of each section fires at the section start; the other text slides are spread evenly over the
 //!   section (snapped to bar lines when the caller holds the beat grid). Background-only slides are never spread over.
 
+pub mod binding;
+pub mod engine;
+pub mod prepare;
+
 use crate::pro_file::Song;
 use sha2::{Digest, Sha256};
 

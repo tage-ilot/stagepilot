@@ -20,6 +20,7 @@ pub mod playback_library;
 pub mod playback_order;
 pub mod playback_routes;
 pub mod propresenter_add_songs;
+pub mod propresenter_follow;
 pub mod propresenter_helper_install;
 pub mod propresenter_link;
 pub mod propresenter_scan;
