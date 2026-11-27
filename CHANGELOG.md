@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Auto-Presenter follows a song with the 2 Line and 4 Line template too when Playback sends a slide a bar before its section, and the first slide of a repeated section shows at its own repeat.** On a real song, Playback's cue for the first slide of a section can come up to a bar (about 3 s) before the section starts; StagePilot only allowed 2 s, so it lost count of Playback's lines per slide and refused the song (`Cues do not match the file`) and a repeated section (like a Tag played four times) showed its first slide at the wrong repeat. Both are fixed, and a song that matches by lines says `Aligned by lines`.
+- **The locked Auto-Presenter card names the real cause right after an install, and `No cues: following by bars` no longer looks like an error.** While the Library Link waits for you to allow the keychain prompt, the card says to allow it instead of sending you to the setup; the no-cues chip uses the calm information look.
+
 ## [2.46.0-rc.1] - 2026-11-26
 
 ### Added

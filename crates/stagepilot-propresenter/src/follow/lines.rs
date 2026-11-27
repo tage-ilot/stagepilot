@@ -15,9 +15,7 @@
 //! Both work on top of the same section-by-time rule as [`super::cue_plan`] (a cue just before a section starts goes by
 //! continuity and by room).
 
-use super::{
-    section_for, Alignment, CuePlan, CueProblem, LyricCue, Section, SongMap, Step, StepKind,
-};
+use super::{Alignment, CuePlan, CueProblem, LyricCue, Section, SongMap, Step, StepKind};
 
 /// Playback's Lyrics Bus templates, in lines per slide.
 pub const TEMPLATES: [usize; 3] = [1, 2, 4];
@@ -50,43 +48,14 @@ fn shape(map: &SongMap, n: usize) -> Shape {
     Shape { slides, start }
 }
 
-/// The arrangement entry (the section) of each cue, when Playback numbers `shape`. A cue just before the next section starts and
-/// still inside the one before goes by continuity: it continues the earlier section when its slide is the previous slide plus one
-/// and that section's group still has room, else it starts the next.
+/// The arrangement entry (the section) of each cue, when Playback numbers `shape` (see [`super::assign`]).
 fn assign(
     map: &SongMap,
     sections: &[Section],
     sorted: &[LyricCue],
     shape: &Shape,
 ) -> Result<Vec<usize>, CueProblem> {
-    let mut entry: Vec<usize> = Vec::with_capacity(sorted.len());
-    let mut seen: Vec<Option<(u32, u32)>> = vec![None; sections.len()];
-    for (i, cue) in sorted.iter().enumerate() {
-        let late = section_for(sections, cue)?;
-        let early = late
-            .checked_sub(1)
-            .filter(|before| cue.time_s < sections[*before].end);
-        let pick = match early {
-            Some(before)
-                if i > 0
-                    && entry[i - 1] == before
-                    && sorted[i - 1].slide.checked_add(1) == Some(cue.slide)
-                    && seen[before].is_some_and(|(low, high)| {
-                        let room = shape.slides[map.arrangement[before]];
-                        ((high.max(cue.slide) - low.min(cue.slide)) as usize) < room
-                    }) =>
-            {
-                before
-            }
-            _ => late,
-        };
-        seen[pick] = Some(match seen[pick] {
-            Some((low, high)) => (low.min(cue.slide), high.max(cue.slide)),
-            None => (cue.slide, cue.slide),
-        });
-        entry.push(pick);
-    }
-    Ok(entry)
+    super::assign(map, sections, sorted, &|g| shape.slides[g])
 }
 
 /// The lowest and highest slide played in each file group, over every section that holds the group.

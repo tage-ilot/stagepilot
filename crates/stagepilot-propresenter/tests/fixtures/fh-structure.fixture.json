@@ -1,0 +1,5 @@
+{"note":"Father's House Playback copy: numbers only, no text. Every cue of the file has exactly 1 text line (Count Off has none).",
+ "groups":[["",1],["Intro",2],["Verse 1",8],["Verse 2",8],["Chorus",8],["Turnaround",1],["Verse 1",8],["Verse 2",8],["Chorus",8],["Interlude",1],["Bridge",8],["Bridge",8],["Bridge",7],["Tag",2],["Tag",2],["Chorus",8],["Ending",1]],
+ "total_cues":89,
+ "arrangement_Playback":["","Intro","Verse 1","Verse 2","Chorus","Turnaround","Verse 1","Verse 2","Chorus","Interlude","Bridge","Bridge","Bridge","Tag","Tag","Tag","Tag","Chorus","Ending"],
+ "playback_sections":"song_fh.json arrangement_detail.sections"}

@@ -52,14 +52,17 @@ export const FOLLOW_OFF = "Off";
 /** Where this browser remembers whether the Auto-Presenter section is open. */
 export const AUTO_PRESENTER_OPEN_KEY = "stagepilot.presentation.auto-presenter-open";
 
-/** The ONE chip of a song followed by bars for want of cues (the backend's long words stay in its hover text). */
+/** The ONE chip of a song followed by bars for want of cues: a notice (the info look of `Following by bars`), not an error. The backend's long words stay in its hover text. */
 export const NO_CUES_WORD = "No cues: following by bars";
 /** The mark of a line with nothing to follow now (off, ready, idle, needs a link): a hollow circle, never a lone dash that reads like a typo. */
 export const MARK_IDLE = "\u25CB";
 
-/** Playback's Library Link: answering with current data, answering with an old copy, or not connected at all. */
-export type LibraryLinkState = "ready" | "stale" | "missing";
-export const libraryLinkState = (status: { active: boolean; stale: boolean } | null | undefined): LibraryLinkState => (!status?.active ? "missing" : status.stale ? "stale" : "ready");
+/**
+ * Playback's Library Link: answering with current data, answering with an old copy, not connected at all, or waiting for someone to
+ * allow the keychain prompt (the helper's own state `needs_key`, seen right after an install; it clears itself on Allow).
+ */
+export type LibraryLinkState = "ready" | "stale" | "missing" | "needs_key";
+export const libraryLinkState = (status: { active: boolean; stale: boolean; helper?: { state: string } } | null | undefined): LibraryLinkState => (!status?.active ? (status?.helper?.state === "needs_key" ? "needs_key" : "missing") : status.stale ? "stale" : "ready");
 
 /**
  * Why the Auto-Presenter cannot be used now: which link it needs (`need`, said after "Needs" or "Waiting for") and where to set it up
@@ -78,6 +81,8 @@ export function followLock(linkReady: boolean, library: LibraryLinkState): Follo
   if (!linkReady && library !== "ready") return { need: "the Presenter Link and the Playback Library Link", where: "Set up the Presenter Link in Configuration \u2192 Presentation and the Library Link in Configuration \u2192 Playback." };
   if (!linkReady) return { need: "the Presenter Link", where: LINK_WHERE };
   if (library === "stale") return { need: "current data from the Playback Library Link", where: "It has not answered lately: check it in Configuration \u2192 Playback (Library Link setup)." };
+  // Right after an install the cause is the pending keychain prompt, not a missing setup: the helper says it does not know this StagePilot yet.
+  if (library === "needs_key") return { need: "the Playback Library Link", where: "Allow the keychain prompt on the StagePilot computer (the Library Link does not know this StagePilot yet). If there is none, run the setup command again in Configuration \u2192 Playback (Library Link setup)." };
   if (library === "missing") return { need: "the Playback Library Link", where: LIBRARY_WHERE };
   return null;
 }
@@ -143,8 +148,8 @@ const CHIP: Record<FollowCode, Omit<StatusWords, "word">> = {
 };
 
 export function songChipWords(song: Pick<FollowSong, "code" | "text"> & Partial<Pick<FollowSong, "advice">>): StatusWords {
-  // A song followed by bars for want of cues: ONE warning chip (the backend's `Following by bars (no Playback cues)` is its hover text).
-  if (hasNoCues(song)) return { word: NO_CUES_WORD, mark: "!", tone: "warning" };
+  // A song followed by bars for want of cues: ONE notice chip (the backend's `Following by bars (no Playback cues)` is its hover text).
+  if (hasNoCues(song)) return { word: NO_CUES_WORD, mark: "~", tone: "info" };
   const look = CHIP[song.code] ?? { mark: "?", tone: "idle" as const };
   return { word: song.text, ...look };
 }

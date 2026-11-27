@@ -21,7 +21,7 @@ describe("the Auto-Presenter states", { timeout: 120000 }, () => {
   it("lists every state, as the task names them", () => {
     draw();
     const ids = Array.from(document.querySelectorAll('[data-group="auto-presenter"] [data-sample]')).map((node) => node.getAttribute("data-sample")?.replace("auto-presenter-", ""));
-    expect(ids).toEqual(["off", "starts-folded", "following", "folded", "held", "paused", "no-cues", "mismatch", "aligned", "not-followed", "locked-library", "locked-link", "waiting", "timing-changed", "timing", "timing-error"]);
+    expect(ids).toEqual(["off", "starts-folded", "following", "folded", "held", "paused", "no-cues", "mismatch", "aligned", "not-followed", "locked-library", "locked-keychain", "locked-link", "waiting", "timing-changed", "timing", "timing-error"]);
   });
 
   it("off: Off, every row says the switch is off, nothing to press but the switch; a new install starts folded", async () => {
@@ -75,7 +75,10 @@ describe("the Auto-Presenter states", { timeout: 120000 }, () => {
       expect(box(id)).toBeDisabled();
       expect(within(sample(id)).getByTestId("auto-presenter")).toHaveAttribute("data-locked", "true");
     }
-    for (const id of ["locked-library", "locked-link"]) {
+    // Right after an install the cause is the keychain prompt: the reason says so instead of sending the person to the setup.
+    await waitFor(() => expect(within(sample("locked-keychain")).getByTestId("presenter-follow-reason")).toHaveTextContent("Allow the keychain prompt"), WAIT);
+    expect(summary("locked-keychain")).toHaveTextContent("Needs the Playback Library Link");
+    for (const id of ["locked-library", "locked-keychain", "locked-link"]) {
       expect(within(sample(id)).queryAllByTestId("follow-song-chip")).toHaveLength(0);
       expect(within(sample(id)).getAllByTestId("auto-presenter-song")).toHaveLength(4);
       expect(within(sample(id)).getByTestId("presenter-follow-locked")).toHaveTextContent("Locked");

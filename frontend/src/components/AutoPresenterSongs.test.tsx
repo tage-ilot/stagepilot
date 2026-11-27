@@ -64,7 +64,7 @@ describe("the song list of the Auto-Presenter", () => {
     draw(followController({ status: followStatus({ songs: followSongs({}, twoLine) }) }));
     expect(within(row("Battle Belongs")).getAllByTestId("follow-song-chip")).toHaveLength(1);
     expect(chip("Battle Belongs")).toHaveTextContent("No cues: following by bars");
-    expect(chip("Battle Belongs")).toHaveAttribute("data-tone", "warning");
+    expect(chip("Battle Belongs")).toHaveAttribute("data-tone", "info");
     expect(chip("Battle Belongs").getAttribute("title")).toContain("Following by bars (no Playback cues)");
     const fix = within(row("Battle Belongs")).getByTestId("follow-song-fix");
     expect(fix).toHaveTextContent(templateFix(twoLine));

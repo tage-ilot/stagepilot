@@ -47,8 +47,8 @@ describe("a song's chip", () => {
   it("wears the backend's words with a mark that says the state without colour", () => {
     const [cues, bars, mismatch, changed, , , off] = followSongs({}, NO_CUES_SONG, { code: "cues_do_not_match", text: "Cues do not match the file (cues go to slide 30, file has 54 cues)" }, { code: "arrangement_changed", text: "Arrangement was changed in ProPresenter" }, { code: "not_in_playlist", text: "Not in the ProPresenter playlist" }, { code: "link_not_ready", text: "ProPresenter Link not ready" }, { code: "switch_off", text: "Switch is off" });
     expect(songChipWords(cues!)).toEqual({ word: "Following by Playback cues", mark: "\u2713", tone: "success" });
-    // No cues: ONE warning chip in the SPEC's words (the backend's long words stay in the hover text).
-    expect(songChipWords(bars!)).toEqual({ word: "No cues: following by bars", mark: "!", tone: "warning" });
+    // No cues: ONE notice chip in the SPEC's words, the info look of the other fallback chips and never an error (the backend's long words stay in the hover text).
+    expect(songChipWords(bars!)).toEqual({ word: "No cues: following by bars", mark: "~", tone: "info" });
     // Followed by bars with nothing to fix (cues unusable, no advice) keeps the backend's own words.
     expect(songChipWords({ code: "bars", text: "Following by bars (no Playback cues)" })).toEqual({ word: "Following by bars (no Playback cues)", mark: "~", tone: "info" });
     expect(songChipWords(mismatch!)).toMatchObject({ mark: "!", tone: "warning" });
@@ -109,6 +109,16 @@ describe("what locks the switch", () => {
     expect(libraryLinkState({ active: false, stale: false })).toBe("missing");
     expect(libraryLinkState({ active: true, stale: true })).toBe("stale");
     expect(libraryLinkState({ active: true, stale: false })).toBe("ready");
+  });
+
+  it("tells the pending keychain prompt (the helper's needs_key) from a Library Link that was never set up", () => {
+    expect(libraryLinkState({ active: false, stale: false, helper: { state: "needs_key" } })).toBe("needs_key");
+    expect(libraryLinkState({ active: false, stale: false, helper: { state: "not_installed" } })).toBe("missing");
+    expect(libraryLinkState({ active: false, stale: false, helper: { state: "unreachable" } })).toBe("missing");
+    const keychain = followLock(true, "needs_key")!;
+    expect(lockWords(keychain, false)).toBe("Needs the Playback Library Link");
+    expect(keychain.where).toContain("Allow the keychain prompt");
+    expect(keychain.where).not.toBe(followLock(true, "missing")!.where);
   });
 
   it("needs the Presenter Link AND the Library Link with current data, and names ONE reason with where to set it up", () => {
