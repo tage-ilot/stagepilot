@@ -2193,6 +2193,43 @@ pub struct ProPresenterSettings {
     #[serde(default, skip_serializing_if = "ProPresenterLinkSettings::is_default")]
     #[ts(optional, as = "Option<ProPresenterLinkSettings>")]
     pub link: ProPresenterLinkSettings,
+    /// Following Playback with the song's lyrics in ProPresenter (`propresenter.presenter_follow`). Left out of the saved file
+    /// while it holds the defaults (off, no offset), so an older file saves back unchanged and an older build never meets it.
+    #[serde(default, skip_serializing_if = "PresenterFollowSettings::is_default")]
+    #[ts(optional, as = "Option<PresenterFollowSettings>")]
+    pub presenter_follow: PresenterFollowSettings,
+}
+
+/// The widest `offset_ms` allowed, either way.
+pub const PRESENTER_FOLLOW_MAX_OFFSET_MS: i32 = 2000;
+
+/// The switch for following Playback with the lyrics in ProPresenter. Off by default: with it off, ProPresenter is never
+/// triggered. `offset_ms` moves every slide change in time (positive = the slide comes earlier), to be tuned on the rig.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PresenterFollowSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub offset_ms: i32,
+}
+
+impl PresenterFollowSettings {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn validate(&self, path: &[Value], errors: &mut Errors) {
+        check_range(
+            errors,
+            path,
+            "offset_ms",
+            self.offset_ms,
+            Some(f64::from(-PRESENTER_FOLLOW_MAX_OFFSET_MS)),
+            Some(f64::from(PRESENTER_FOLLOW_MAX_OFFSET_MS)),
+            None,
+        );
+    }
 }
 
 /// Default port of the ProPresenter Link helper (`propresenter-link`, a small agent on the ProPresenter computer).
@@ -2274,6 +2311,7 @@ impl Default for ProPresenterSettings {
             reconnect_max_seconds: 30.0,
             health_check_interval_seconds: 10.0,
             link: ProPresenterLinkSettings::default(),
+            presenter_follow: PresenterFollowSettings::default(),
         }
     }
 }
@@ -2287,6 +2325,8 @@ impl ProPresenterSettings {
     }
     pub fn validate(&self, path: &[Value], errors: &mut Errors) {
         self.link.validate(&path_with(path, "link"), errors);
+        self.presenter_follow
+            .validate(&path_with(path, "presenter_follow"), errors);
         for (key, v) in [("host", &self.host), ("timer_name", &self.timer_name)] {
             if v.is_empty() {
                 value_error(

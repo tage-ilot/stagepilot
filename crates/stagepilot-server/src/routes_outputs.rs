@@ -544,6 +544,8 @@ async fn propresenter_settings_body(rt: Rt, raw: Bytes) -> Json {
         health_check_interval_seconds: current.health_check_interval_seconds,
         // The ProPresenter Link's settings are not this form's: they stay as they are.
         link: current.link.clone(),
+        // Nor is the follow-Playback switch (it is saved with the rest of the settings).
+        presenter_follow: current.presenter_follow.clone(),
     };
     updated.normalise();
     let mut errors = Vec::new();

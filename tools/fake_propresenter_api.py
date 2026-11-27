@@ -22,6 +22,19 @@ ProPresenter 19.0.1 (docs/propresenter.md, "ProPresenter Link"), so a client tha
   `State.set_layers(slide=True, ...)`, and `State.set_layers_unreadable(True)` makes it answer something that is not that shape.
 * A wrong playlist id answers 404.
 
+Following Playback (the parts a follower needs; nothing here is written to a file):
+
+* `GET /v1/playlist/{id}/{index}/trigger` -> 204; the item's presentation becomes the active one, on its first slide.
+* `GET /v1/presentation/active/{n}/trigger` -> 204; slide `n` of the active presentation, counted in the arrangement the song
+  file has SELECTED (a repeated group counts its slides again, so `n` is a FLAT position, not a raw cue index). 404 when nothing is
+  active or `n` is not one of its slides (the layout is told with `State.set_layout`; a song with none accepts any `n`).
+* `GET /v1/presentation/active` -> `{"presentation": {"id": {...}, "groups": []}}` (404 when nothing is active);
+  `GET /v1/presentation/slide_index` -> `{"presentation_index": {"index": 13, "presentation_id": {...}}}` (`null` when nothing is
+  active); `GET /v1/playlist/active` -> `{"presentation": {"playlist": {...}, "item": {...}}, "announcements": null}`.
+* A test plays the operator with `State.click_slide(n)` and `State.open_presentation(name)`, and reads `State.triggers`
+  (`("item", playlist_uuid, index)` and `("slide", n)`, in order). `State.fail_triggers = 500` makes every trigger answer that status;
+  `State.ignore_items = True` accepts a playlist-item trigger and changes nothing on screen.
+
     python3 tools/fake_propresenter_api.py --port 11025 --song "Amazing Grace" --song "How Great" --playlist Sunday
     python3 tools/fake_propresenter_api.py --port 11025 --folder /tmp/ProPresenter --lazy select --playlist Sunday
 
@@ -126,6 +139,11 @@ class State:
         self.layers = dict(LAYERS_QUIET)
         self.layers_unreadable = False
         self.layer_reads = 0
+        self.layouts = {}         # following: song display name -> {"groups": [cues per group, file order], "arrangement": [group positions]}
+        self.active = None        # following: {"entry", "playlist", "item", "slide"} of the presentation layer
+        self.triggers = []
+        self.fail_triggers = None
+        self.ignore_items = False
         if folder:
             for library, files in self._scan():
                 self.known.update((library, f) for f in files)
@@ -150,6 +168,74 @@ class State:
     def set_layers_unreadable(self, on=True):
         with self.lock:
             self.layers_unreadable = bool(on)
+
+    # -- following Playback
+    def set_layout(self, display, groups, arrangement):
+        """The slides of a song: `groups` is the cue count of each file group, `arrangement` the positions of the groups the
+        selected arrangement plays, in order."""
+        self.layouts[display] = {"groups": list(groups), "arrangement": list(arrangement)}
+
+    def flat_raws(self, display):
+        """The raw cue index (file order) of each flat slide of the selected arrangement; None when no layout was told."""
+        layout = self.layouts.get(display)
+        if layout is None:
+            return None
+        starts, total = [], 0
+        for count in layout["groups"]:
+            starts.append(total)
+            total += count
+        return [starts[g] + i for g in layout["arrangement"] for i in range(layout["groups"][g])]
+
+    def raw_on_screen(self):
+        """The raw cue index of the slide on screen (what a flat number really showed); None when not known."""
+        if not self.active:
+            return None
+        raws = self.flat_raws(self.active["entry"]["display"])
+        slide = self.active["slide"]
+        return raws[slide] if raws is not None and slide < len(raws) else None
+
+    def click_slide(self, n):
+        """A person clicked slide `n` of the active presentation."""
+        with self.lock:
+            if self.active:
+                self.active["slide"] = n
+
+    def open_presentation(self, display):
+        """A person opened another song in ProPresenter (its display name): it is the active one, on its first slide."""
+        with self.lock:
+            for library in self.libraries():
+                for entry in library["entries"]:
+                    if entry["uuid"] and entry["display"] == display:
+                        self.active = {"entry": entry, "playlist": None, "item": None, "slide": 0}
+                        return True
+        return False
+
+    def focus_playlist(self, ident, index):
+        """The playlist and item ProPresenter last triggered, as if a person had clicked it (the screen is left alone)."""
+        with self.lock:
+            return self._show_item(ident, index, screen=False)
+
+    def _show_item(self, ident, index, screen=True):
+        playlist = self.playlist(ident)
+        if playlist is None or not 0 <= index < len(playlist["items"]):
+            return False
+        item = playlist["items"][index]
+        entry = self.song_by_uuid((item.get("presentation_info") or {}).get("presentation_uuid") or item["id"].get("uuid"))
+        if entry is None:
+            return False
+        if self.ignore_items and screen:
+            return True
+        self.active = {"entry": entry, "playlist": playlist, "item": index, "slide": 0}
+        return True
+
+    def _show_slide(self, n):
+        if not self.active:
+            return False
+        raws = self.flat_raws(self.active["entry"]["display"])
+        if raws is not None and not 0 <= n < len(raws):
+            return False
+        self.active["slide"] = n
+        return True
 
     # -- libraries
     def _scan(self):
@@ -343,6 +429,35 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"updateType": "all", "items": items})
             if path == "/v1/playlists":
                 return self._send(200, st.playlist_tree())
+            if path == "/v1/playlist/active":
+                active = st.active
+                if not active or not active["playlist"]:
+                    return self._send(200, {"presentation": None, "announcements": None})
+                item = active["playlist"]["items"][active["item"]]
+                return self._send(200, {"presentation": {"playlist": active["playlist"]["id"], "item": item["id"]}, "announcements": None})
+            if path == "/v1/presentation/active":
+                if not st.active:
+                    return self._send(404)
+                entry = st.active["entry"]
+                return self._send(200, {"presentation": {"id": {"uuid": entry["uuid"], "name": entry["display"], "index": 0}, "groups": []}})
+            if path == "/v1/presentation/slide_index":
+                if not st.active:
+                    return self._send(200, {"presentation_index": None})
+                entry = st.active["entry"]
+                return self._send(200, {"presentation_index": {"index": st.active["slide"],
+                                                               "presentation_id": {"uuid": entry["uuid"], "name": entry["display"], "index": 0}}})
+            m = re.fullmatch(r"/v1/playlist/([^/]+)/(\d+)/trigger", path)
+            if m:
+                st.triggers.append(("item", m.group(1), int(m.group(2))))
+                if st.fail_triggers:
+                    return self._send(st.fail_triggers)
+                return self._send(204) if st._show_item(m.group(1), int(m.group(2))) else self._send(404)
+            m = re.fullmatch(r"/v1/presentation/active/(\d+)/trigger", path)
+            if m:
+                st.triggers.append(("slide", int(m.group(1))))
+                if st.fail_triggers:
+                    return self._send(st.fail_triggers)
+                return self._send(204) if st._show_slide(int(m.group(1))) else self._send(404)
             m = re.fullmatch(r"/v1/playlist/([^/]+)", path)
             if m:
                 playlist = st.playlist(m.group(1))

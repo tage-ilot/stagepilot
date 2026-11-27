@@ -99,6 +99,8 @@ pub fn build_app(runtime: Rt, options: AppOptions) -> Router {
         .merge(crate::propresenter_link::routes())
         // Adding the songs Playback plays to a ProPresenter playlist (preview, apply, jobs): behind the same PIN, origin and remote rules.
         .merge(crate::propresenter_add_songs::routes())
+        // Following Playback with the lyrics in ProPresenter: its status and `Try again` (the switch is a setting; same guards).
+        .merge(crate::propresenter_follow::routes())
         // Finding ProPresenter's API by looking (GET /version on private addresses only; saves nothing): the same guards.
         .merge(crate::propresenter_scan::routes())
         .merge(crate::propresenter_helper_install::api_routes())
@@ -433,6 +435,17 @@ async fn put_settings(State(rt): State<Rt>, body: Bytes) -> Json {
         .is_some();
     if !sent_link {
         requested.propresenter.link = rt.settings_service.snapshot().propresenter.link;
+    }
+    // The same for the follow-Playback switch (`propresenter.presenter_follow`): an older window never sends it, and a save of
+    // anything else must not switch it off.
+    let sent_follow = parsed
+        .as_ref()
+        .and_then(|v| v.get("propresenter"))
+        .and_then(|p| p.get("presenter_follow"))
+        .is_some();
+    if !sent_follow {
+        requested.propresenter.presenter_follow =
+            rt.settings_service.snapshot().propresenter.presenter_follow;
     }
     // The Playback library connection is changed by its own route only (`PUT /api/v1/playback-library/settings`),
     // so a save of anything else, even from an older window, never switches it on or off.
