@@ -13,9 +13,11 @@
 //!   arrangement entries that hold that group, the one nearest the section position `k` found from the time is `p` (ties go
 //!   to the earlier entry). `k` is the latest section with `start - 2 s <= time_s`; the cue must also lie before that
 //!   section's end. This keeps repeated groups, same-named groups and background slides right.
-//! * Cues are used only when every cue resolves, the highest slide number is the file's cue total minus one (no slide is at
-//!   or past the total), and there are at least three. Anything else is a `CueProblem`, said in plain words, and the song
-//!   falls back to bars.
+//! * Cues are used only when every cue resolves and there are at least three. When the highest slide number is the file's cue
+//!   total minus one (nothing was added to the file) the global raw index is used as it is. When the file has up to
+//!   [`MAX_EXTRA_CUES`] more cues than Playback numbers (background or blank slides someone added), the numbers are aligned
+//!   group by group instead (see [`align`], design `SPEC.md`, "Revision 2"). Anything else is a `CueProblem`, said in plain
+//!   words, and the song falls back to bars.
 //! * Bars: the first slide of each section fires at the section start; the other text slides are spread evenly over the
 //!   section (snapped to bar lines when the caller holds the beat grid). Background-only slides are never spread over.
 
@@ -82,7 +84,12 @@ pub struct SongMap {
     group_start: Vec<usize>,
     /// Flat position of the first cue of each arrangement entry.
     entry_base: Vec<usize>,
+    /// The usual number of lines of text on a slide that has text (which Playback Lyrics Bus template fits the file).
+    usual_lines: Option<usize>,
 }
+
+/// Version of [`SongMap::arrangement_hash`]. A binding saved with an older one is rebuilt, not reported as changed.
+pub const HASH_VERSION: u8 = 2;
 
 impl SongMap {
     /// From groups in file order and an arrangement given as positions in `groups`.
@@ -110,6 +117,7 @@ impl SongMap {
             arrangement,
             group_start,
             entry_base,
+            usual_lines: None,
         })
     }
 
@@ -145,7 +153,14 @@ impl SongMap {
                     .ok_or(MapError::UnknownGroup)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Self::new(groups, entries)
+        let mut map = Self::new(groups, entries)?;
+        map.usual_lines = song.usual_lines();
+        Ok(map)
+    }
+
+    /// The usual lines of text per slide that has text (1, 2 or 4 are the Lyrics Bus templates Playback has).
+    pub fn lines_per_slide(&self) -> Option<usize> {
+        self.usual_lines
     }
 
     pub fn groups(&self) -> &[FileGroup] {
@@ -195,19 +210,18 @@ impl SongMap {
         (inside < self.groups[group].cues).then(|| self.entry_base[entry] + inside)
     }
 
-    /// A stable fingerprint of what the numbers depend on: every file group (its uuid and cue count, in file order) and the
-    /// order of the groups in the arrangement. A changed arrangement or a slide added or removed changes it.
+    /// A stable fingerprint of the arrangement StagePilot follows: the ordered ids of the groups the `Playback` arrangement plays
+    /// (the map only exists while `Playback` is the selected arrangement). Slides added to or removed from a group, or a group the
+    /// arrangement does not play, do not change it (the map is read again from the file every time); another order, another length
+    /// or another group do. Version [`HASH_VERSION`].
     pub fn arrangement_hash(&self) -> String {
-        let mut text = String::from("stagepilot-follow-arrangement-1\n");
-        for group in &self.groups {
+        let mut text = String::from("stagepilot-follow-arrangement-2\nselected Playback\n");
+        for g in &self.arrangement {
             text.push_str(&format!(
-                "g {} {}\n",
-                group.uuid.to_ascii_lowercase(),
-                group.cues
+                "a {}\n",
+                self.groups[*g].uuid.to_ascii_lowercase()
             ));
         }
-        let order: Vec<String> = self.arrangement.iter().map(usize::to_string).collect();
-        text.push_str(&format!("a {}\n", order.join(",")));
         hex::encode(Sha256::digest(text.as_bytes()))
     }
 }
@@ -297,6 +311,8 @@ pub struct Schedule {
     /// Ordered by `time_s`.
     pub steps: Vec<Step>,
     pub arrangement_hash: String,
+    /// Set when the cues were used with the file's extra slides taken into account (see [`align`]).
+    pub alignment: Option<Alignment>,
     /// The highest slide number among the cues given, whether or not they were used (for the plan's summary line).
     pub cue_max_slide: Option<u32>,
 }
@@ -326,12 +342,52 @@ pub enum CueProblemAt {
     NoSection,
 }
 
+/// Most cues the file may have beyond the highest slide number Playback sends plus one (blank or background slides someone added
+/// to the song). More than that is not a person adding a slide: it is a Lyrics Bus template that does not fit the file (a 2 or
+/// 4 Line template against a 1 Line file leaves many slides unnumbered).
+pub const MAX_EXTRA_CUES: usize = 8;
+
+/// How the file's extra cues were worked around (see [`align`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Alignment {
+    /// The cues the file has beyond Playback's numbering: file cue total minus (highest slide + 1).
+    pub extras: usize,
+    /// Per file group: the cues the file has in front of what Playback counts there (the shift `d` of the design).
+    pub shifts: Vec<usize>,
+    /// The arrangement entry (the Playback section) whose first slide is worth a look: the first one whose group could not be
+    /// placed with certainty (extras inside the group), else the first section that has a cue.
+    pub check_section: usize,
+    /// Whether the place of the extras inside some group had to be guessed (from which slides have text).
+    pub uncertain: bool,
+}
+
+/// The slides to fire for a song followed by Playback's cues.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CuePlan {
+    pub steps: Vec<Step>,
+    /// `None` for the exact layout (nothing was added to the file).
+    pub alignment: Option<Alignment>,
+}
+
 /// Checks Playback's cues against the file and the sections (rules 3 and 4) and turns them into steps.
 pub fn cue_steps(
     map: &SongMap,
     sections: &[Section],
     cues: &[LyricCue],
 ) -> Result<Vec<Step>, CueProblem> {
+    cue_plan(map, sections, cues).map(|plan| plan.steps)
+}
+
+/// [`cue_steps`] with how the numbers were matched to the file.
+///
+/// The exact layout (the highest slide number plus one is the file's cue total) is tried first and is unchanged: the slide
+/// number is the global raw index. When the file has more cues than that, up to [`MAX_EXTRA_CUES`] more, [`align`] matches the
+/// numbers to the file group by group. Anything else is a `Mismatch`.
+pub fn cue_plan(
+    map: &SongMap,
+    sections: &[Section],
+    cues: &[LyricCue],
+) -> Result<CuePlan, CueProblem> {
     if cues.is_empty() {
         return Err(CueProblem::NoCues);
     }
@@ -346,26 +402,25 @@ pub fn cue_steps(
     }
     let total = map.cue_total();
     let max_slide = sorted.iter().map(|c| c.slide).max().unwrap_or(0);
-    if total == 0 || max_slide as usize + 1 != total {
-        return Err(CueProblem::Mismatch {
-            max_slide,
-            file_cues: total,
-        });
+    let mismatch = CueProblem::Mismatch {
+        max_slide,
+        file_cues: total,
+    };
+    let numbered = max_slide as usize + 1;
+    if total == 0 || numbered > total {
+        return Err(mismatch);
+    }
+    if numbered != total {
+        let extras = total - numbered;
+        if extras > MAX_EXTRA_CUES {
+            return Err(mismatch);
+        }
+        return align(map, sections, &sorted, extras, mismatch);
     }
     let mut steps = Vec::with_capacity(sorted.len());
     for cue in &sorted {
         let raw = cue.slide as usize;
-        let at = |problem: CueProblemAt| match problem {
-            CueProblemAt::AfterEnd => CueProblem::AfterEnd {
-                time_s: cue.time_s,
-                slide: cue.slide,
-            },
-            CueProblemAt::NoSection => CueProblem::NoSection {
-                time_s: cue.time_s,
-                slide: cue.slide,
-            },
-        };
-        let k = section_at(sections, cue.time_s).map_err(at)?;
+        let k = section_for(sections, cue)?;
         let unresolved = || CueProblem::NoSection {
             time_s: cue.time_s,
             slide: cue.slide,
@@ -381,7 +436,365 @@ pub fn cue_steps(
             kind: StepKind::Cue,
         });
     }
-    Ok(steps)
+    Ok(CuePlan {
+        steps,
+        alignment: None,
+    })
+}
+
+/// The section position of a cue by its time, or why it has none.
+fn section_for(sections: &[Section], cue: &LyricCue) -> Result<usize, CueProblem> {
+    section_at(sections, cue.time_s).map_err(|problem| match problem {
+        CueProblemAt::AfterEnd => CueProblem::AfterEnd {
+            time_s: cue.time_s,
+            slide: cue.slide,
+        },
+        CueProblemAt::NoSection => CueProblem::NoSection {
+            time_s: cue.time_s,
+            slide: cue.slide,
+        },
+    })
+}
+
+// ---- extra slides in the file (SPEC "Revision 2") -----------------------------------------------------------------------
+
+/// How many ways of splitting the cues near section boundaries `align` tries at most.
+const MAX_SEARCH_NODES: usize = 20_000;
+
+/// A run of cues that could be the end of the section before a boundary or the start of the section after it.
+struct Boundary {
+    early: usize,
+    late: usize,
+    /// Indexes of the cues (time order, consecutive).
+    cues: Vec<usize>,
+}
+
+/// One way of putting every cue in a section, worked out.
+struct Placed {
+    /// Distinct slides that land on a file cue with text.
+    text_hits: usize,
+    /// Each distinct slide (ascending) and the cues the file has in front of it that Playback does not count.
+    shift: Vec<(u32, usize)>,
+    /// Per file group, whether the file holds cues in it that no slide number lands on (extras inside it: where they sit was
+    /// guessed from which cues have text).
+    uncertain: Vec<bool>,
+}
+
+struct Search<'a> {
+    map: &'a SongMap,
+    cues: &'a [LyricCue],
+    extras: usize,
+    boundaries: Vec<Boundary>,
+    /// The section of each cue (the ones near a boundary are filled in as the search goes).
+    section: Vec<usize>,
+    nodes: usize,
+    /// (cues on text, boundaries that went against the continuity rule, the sections, how it was placed)
+    best: Option<(usize, usize, Vec<usize>, Placed)>,
+}
+
+/// The cues of one song when the file has extra slides: Playback numbers the ORIGINAL layout, in file-group order, with no
+/// extras; the file has `extras` more cues. Group `g` starts at file cue `F_g` and holds `c_g` cues. A slide `s` is file cue
+/// `s + d(s)`, where `d(s)` is the number of extra cues in front of it, so `d` never decreases from one slide to the next (extras
+/// only add cues; for the first slide of a group this is the design's `d_g = F_g - s_g`).
+///
+/// 1. Each cue goes to a section by time. Where two sections qualify (a cue just before the next section starts), the cue
+///    continues the earlier section when its slide is the previous slide plus one and that section's group still has room,
+///    else it starts the next one. Because extras inside a group make its room look bigger than it was, the other way of
+///    splitting each boundary is tried too, and the way that puts the most cues on slides with text wins; the continuity rule
+///    decides when that is a tie.
+/// 2. For each slide the feasible shifts are those with `F_g <= s + d` and `s + d < F_g + c_g` (`g` the group of its section) and
+///    `0 <= d <= extras`; the shifts never decrease along the slides. When several fit (the extras sit inside the group) the
+///    placement that puts most slides on cues with text wins (blank slides are the likely extras), then the smallest shifts.
+/// 3. A group with no cue (never sampled, like the Count Off) takes the previous shift; a group before the first one that has
+///    cues takes that one's shift when the groups in between hold only blank slides, else 0.
+/// 4. The flat slide number is `entry_base(k) + (s + d - F_g)`; `raw` is the file's cue index `s + d`.
+///
+/// `Err(mismatch)` when no way of placing the cues fits the file; a cue in no section is that cue's own problem. The song is
+/// then not followed by cues.
+pub fn align(
+    map: &SongMap,
+    sections: &[Section],
+    sorted: &[LyricCue],
+    extras: usize,
+    mismatch: CueProblem,
+) -> Result<CuePlan, CueProblem> {
+    // Which sections each cue could be in: the one `section_at` finds and the one before it when the cue is also before that
+    // one's end.
+    let mut late = Vec::with_capacity(sorted.len());
+    let mut early = Vec::with_capacity(sorted.len());
+    for cue in sorted {
+        let k = section_for(sections, cue)?;
+        late.push(k);
+        early.push(
+            k.checked_sub(1)
+                .filter(|before| cue.time_s < sections[*before].end),
+        );
+    }
+    let mut boundaries: Vec<Boundary> = Vec::new();
+    for i in 0..sorted.len() {
+        let Some(before) = early[i] else { continue };
+        match boundaries.last_mut() {
+            Some(b) if b.late == late[i] && b.cues.last() == Some(&(i - 1)) => b.cues.push(i),
+            _ => boundaries.push(Boundary {
+                early: before,
+                late: late[i],
+                cues: vec![i],
+            }),
+        }
+    }
+    let mut search = Search {
+        map,
+        cues: sorted,
+        extras,
+        boundaries,
+        section: late,
+        nodes: 0,
+        best: None,
+    };
+    search.go(0, 0);
+    match search.best.take() {
+        Some((_, _, section, placed)) => Ok(search.plan(&section, &placed)),
+        None => Err(mismatch),
+    }
+}
+
+impl Search<'_> {
+    /// The cues that continue the earlier section at boundary `b`, by the continuity rule, given the cues placed before it.
+    fn preferred_split(&self, b: &Boundary) -> usize {
+        let first = b.cues[0];
+        let cap = self.map.groups[self.map.arrangement[b.early]].cues;
+        let (mut low, mut high) = (u32::MAX, 0u32);
+        for i in 0..first {
+            if self.section[i] == b.early {
+                low = low.min(self.cues[i].slide);
+                high = high.max(self.cues[i].slide);
+            }
+        }
+        let mut previous =
+            (first > 0).then(|| (self.section[first - 1], self.cues[first - 1].slide));
+        let mut split = 0;
+        for i in &b.cues {
+            let slide = self.cues[*i].slide;
+            let continues = previous.is_some_and(|(section, last)| {
+                section == b.early && last.checked_add(1) == Some(slide)
+            }) && ((high.max(slide) - low.min(slide)) as usize) < cap;
+            if !continues {
+                break;
+            }
+            low = low.min(slide);
+            high = high.max(slide);
+            previous = Some((b.early, slide));
+            split += 1;
+        }
+        split
+    }
+
+    /// Whether the cues placed so far in `section` span more slides than its group has cues.
+    fn overfull(&self, section: usize, upto: usize) -> bool {
+        let (mut low, mut high) = (u32::MAX, 0u32);
+        for i in 0..=upto {
+            if self.section[i] == section {
+                low = low.min(self.cues[i].slide);
+                high = high.max(self.cues[i].slide);
+            }
+        }
+        low != u32::MAX
+            && (high - low) as usize >= self.map.groups[self.map.arrangement[section]].cues
+    }
+
+    /// Tries every split of boundary `j` (the continuity rule's first), then the next boundary. `against`: boundaries so far
+    /// split otherwise than the rule says.
+    fn go(&mut self, j: usize, against: usize) {
+        if self.nodes >= MAX_SEARCH_NODES {
+            return;
+        }
+        self.nodes += 1;
+        if j == self.boundaries.len() {
+            if let Some(placed) = self.place() {
+                let better = match &self.best {
+                    None => true,
+                    Some((hits, other, _, _)) => {
+                        (placed.text_hits, std::cmp::Reverse(against))
+                            > (*hits, std::cmp::Reverse(*other))
+                    }
+                };
+                if better {
+                    self.best = Some((placed.text_hits, against, self.section.clone(), placed));
+                }
+            }
+            return;
+        }
+        let (early, late, cues) = {
+            let b = &self.boundaries[j];
+            (b.early, b.late, b.cues.clone())
+        };
+        let preferred = self.preferred_split(&self.boundaries[j]);
+        let mut order: Vec<usize> = (0..=cues.len()).collect();
+        order.sort_by_key(|split| (split.abs_diff(preferred), *split));
+        for split in order {
+            for (n, i) in cues.iter().enumerate() {
+                self.section[*i] = if n < split { early } else { late };
+            }
+            let last = *cues.last().unwrap_or(&0);
+            if self.overfull(early, last) || self.overfull(late, last) {
+                continue;
+            }
+            self.go(j + 1, against + usize::from(split != preferred));
+        }
+    }
+
+    /// The shifts for the sections as they are now, or `None` when the slides cannot be placed in the file.
+    fn place(&self) -> Option<Placed> {
+        let map = self.map;
+        // Each distinct slide and the file group of the sections that play it.
+        let mut slides: Vec<(u32, usize)> = Vec::new();
+        for (i, cue) in self.cues.iter().enumerate() {
+            let g = map.arrangement[self.section[i]];
+            match slides.iter().find(|(s, _)| *s == cue.slide) {
+                Some((_, other)) if *other != g => return None,
+                Some(_) => {}
+                None => slides.push((cue.slide, g)),
+            }
+        }
+        slides.sort_unstable();
+        // Per slide: the shifts that put it inside its group.
+        let top = self.extras as i64;
+        let mut room: Vec<(i64, i64)> = Vec::with_capacity(slides.len());
+        for (slide, g) in &slides {
+            let start = map.group_start[*g] as i64;
+            let lo = (start - i64::from(*slide)).max(0);
+            let hi = (start + map.groups[*g].cues as i64 - 1 - i64::from(*slide)).min(top);
+            if lo > hi {
+                return None;
+            }
+            room.push((lo, hi));
+        }
+        let on_text = |slide: u32, g: usize, d: i64| {
+            let at = i64::from(slide) + d - map.group_start[g] as i64;
+            usize::try_from(at)
+                .ok()
+                .and_then(|at| map.groups[g].has_text.get(at))
+                .copied()
+                .unwrap_or(false)
+        };
+        // Shifts never decrease along the slides. The best placement has the most slides on text, then the smallest shifts:
+        // `best[i][d]` is the best value of slides 0..=i with slide i at shift d, and `from[i][d]` the shift of slide i - 1.
+        type Value = (usize, std::cmp::Reverse<usize>);
+        let width = self.extras + 1;
+        let mut best: Vec<Vec<Option<Value>>> = vec![vec![None; width]; slides.len()];
+        let mut from: Vec<Vec<usize>> = vec![vec![0; width]; slides.len()];
+        for (i, (slide, g)) in slides.iter().enumerate() {
+            for d in room[i].0..=room[i].1 {
+                let d = d as usize;
+                let own = (usize::from(on_text(*slide, *g, d as i64)), d);
+                let before = if i == 0 {
+                    Some((0, 0, 0))
+                } else {
+                    (0..=d)
+                        .filter_map(|e| {
+                            best[i - 1][e].map(|(hits, std::cmp::Reverse(sum))| (hits, sum, e))
+                        })
+                        .max_by_key(|(hits, sum, e)| {
+                            (*hits, std::cmp::Reverse(*sum), std::cmp::Reverse(*e))
+                        })
+                };
+                if let Some((hits, sum, e)) = before {
+                    best[i][d] = Some((hits + own.0, std::cmp::Reverse(sum + own.1)));
+                    from[i][d] = e;
+                }
+            }
+        }
+        let last = slides.len().checked_sub(1)?;
+        let mut d = (0..width)
+            .filter_map(|d| best[last][d].map(|value| (value, d)))
+            .max_by_key(|(value, d)| (*value, std::cmp::Reverse(*d)))?
+            .1;
+        let text_hits = best[last][d].map_or(0, |(hits, _)| hits);
+        let mut shift = vec![(0u32, 0usize); slides.len()];
+        for i in (0..slides.len()).rev() {
+            shift[i] = (slides[i].0, d);
+            d = from[i][d];
+        }
+        // A group is uncertain when the file has cues in it that no slide number lands on.
+        let mut landed = vec![0usize; map.groups.len()];
+        for (slide, g) in &slides {
+            let _ = slide;
+            landed[*g] += 1;
+        }
+        let uncertain = (0..map.groups.len())
+            .map(|g| landed[g] > 0 && landed[g] < map.groups[g].cues)
+            .collect();
+        Some(Placed {
+            text_hits,
+            shift,
+            uncertain,
+        })
+    }
+
+    /// The steps and the alignment for the winning placement.
+    fn plan(&self, section: &[usize], placed: &Placed) -> CuePlan {
+        let map = self.map;
+        let mut steps = Vec::with_capacity(self.cues.len());
+        let mut check = None;
+        let mut first_shift: Vec<Option<usize>> = vec![None; map.groups.len()];
+        let mut smallest: Vec<Option<u32>> = vec![None; map.groups.len()];
+        for (i, cue) in self.cues.iter().enumerate() {
+            let k = section[i];
+            let g = map.arrangement[k];
+            let d = placed
+                .shift
+                .iter()
+                .find(|(slide, _)| *slide == cue.slide)
+                .map_or(0, |(_, d)| *d);
+            let raw = cue.slide as usize + d;
+            steps.push(Step {
+                time_s: cue.time_s,
+                flat_index: map.entry_base[k] + (raw - map.group_start[g]),
+                raw,
+                section_index: k,
+                kind: StepKind::Cue,
+            });
+            if placed.uncertain[g] {
+                check = check.map_or(Some(k), |c: usize| Some(c.min(k)));
+            }
+            // The shift of the first slide of the group (the smallest slide seen in it).
+            if smallest[g].is_none_or(|first| cue.slide < first) {
+                smallest[g] = Some(cue.slide);
+                first_shift[g] = Some(d);
+            }
+        }
+        let check_section = check
+            .or_else(|| steps.first().map(|s| s.section_index))
+            .unwrap_or(0);
+        // Groups with no cue: the previous shift; before the first group with cues, that one's shift while only blank slides lie
+        // between (else 0).
+        let mut shifts = vec![0usize; map.groups.len()];
+        let mut last = None;
+        for g in 0..map.groups.len() {
+            if let Some(d) = first_shift[g] {
+                last = Some(d);
+            }
+            shifts[g] = last.unwrap_or(0);
+        }
+        if let Some(first) = first_shift.iter().position(Option::is_some) {
+            let d = first_shift[first].unwrap_or(0);
+            for g in (0..first).rev() {
+                if map.groups[g].has_text.iter().any(|t| *t) {
+                    break;
+                }
+                shifts[g] = d;
+            }
+        }
+        CuePlan {
+            steps,
+            alignment: Some(Alignment {
+                extras: self.extras,
+                shifts,
+                check_section,
+                uncertain: placed.uncertain.iter().any(|u| *u),
+            }),
+        }
+    }
 }
 
 /// Even slots over one section, then snapped to bar lines when they can be (see `bars_steps`).
@@ -483,12 +896,13 @@ pub fn build_schedule(
     }
     let cue_max_slide = cues.iter().map(|c| c.slide).max();
     let arrangement_hash = map.arrangement_hash();
-    match cue_steps(map, sections, cues) {
-        Ok(steps) => Ok(Schedule {
+    match cue_plan(map, sections, cues) {
+        Ok(plan) => Ok(Schedule {
             source: Source::Cues,
             cue_problem: None,
-            steps,
+            steps: plan.steps,
             arrangement_hash,
+            alignment: plan.alignment,
             cue_max_slide,
         }),
         Err(problem) => Ok(Schedule {
@@ -496,6 +910,7 @@ pub fn build_schedule(
             cue_problem: Some(problem),
             steps: bars_steps(map, sections, bars),
             arrangement_hash,
+            alignment: None,
             cue_max_slide,
         }),
     }
@@ -512,5 +927,7 @@ pub fn schedule_for_song(
     build_schedule(&map, sections, cues, bars)
 }
 
+#[cfg(test)]
+mod align_tests;
 #[cfg(test)]
 mod tests;

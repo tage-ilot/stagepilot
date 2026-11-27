@@ -290,14 +290,16 @@ fn a_slide_past_the_end_of_the_file_is_a_mismatch_too() {
             file_cues: 4
         })
     );
-    // A template that stops short of the last slide is the same failure.
+    // A template that stops short of the last slides by more than a person could have added is the same failure. (One slide
+    // short is a song with an extra slide at the end: see the alignment tests.)
+    let long = self::song(&[("A", text(6)), ("B", text(6))], &[0, 1]);
     let cues = [cue(1.0, 0), cue(4.0, 1), cue(11.0, 2)];
-    let got = schedule_for_song(&song, &sections, &cues, None).unwrap();
+    let got = schedule_for_song(&long, &sections, &cues, None).unwrap();
     assert_eq!(
         got.cue_problem,
         Some(CueProblem::Mismatch {
             max_slide: 2,
-            file_cues: 4
+            file_cues: 12
         })
     );
 }
@@ -603,7 +605,7 @@ fn a_group_the_file_does_not_have_is_refused() {
 }
 
 #[test]
-fn the_arrangement_hash_changes_with_the_group_order_and_the_cue_counts_and_only_then() {
+fn the_arrangement_hash_depends_only_on_the_order_of_the_groups_the_arrangement_plays() {
     let a = || song(&[("A", text(2)), ("B", text(3))], &[0, 1, 0]);
     let hash = |s: &Song| SongMap::from_song(s).unwrap().arrangement_hash();
     let base = hash(&a());
@@ -619,17 +621,31 @@ fn the_arrangement_hash_changes_with_the_group_order_and_the_cue_counts_and_only
         base,
         hash(&song(&[("A", text(2)), ("B", text(3))], &[0, 1]))
     );
-    // A slide added to a group.
+    // Another group in the arrangement.
     assert_ne!(
+        base,
+        hash(&song(
+            &[("A", text(2)), ("B", text(3)), ("C", text(1))],
+            &[0, 2, 0]
+        ))
+    );
+    // Slides added to or taken out of a group, a group the arrangement does not play, what the slides say and a group's name
+    // are not part of it: the song stays followed.
+    assert_eq!(
         base,
         hash(&song(&[("A", text(3)), ("B", text(3))], &[0, 1, 0]))
     );
-    // What the slides say, or a group's name, is not part of it.
+    assert_eq!(
+        base,
+        hash(&song(&[("A", text(2)), ("B", text(1))], &[0, 1, 0]))
+    );
     let reworded = song(
         &[("A", vec![Some("x"), Some("y")]), ("B", text(3))],
         &[0, 1, 0],
     );
     assert_eq!(base, hash(&reworded));
+    let renamed = song(&[("Verse", text(2)), ("Chorus", text(3))], &[0, 1, 0]);
+    assert_eq!(base, hash(&renamed));
 }
 
 // ---- which slides have text -------------------------------------------------------------------------------------------

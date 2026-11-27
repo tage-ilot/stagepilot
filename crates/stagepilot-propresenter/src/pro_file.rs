@@ -346,6 +346,9 @@ pub struct Group {
     /// For each cue of the group, in the same order as `cue_ids`: whether the slide has a text element with at least one
     /// visible character. A blank slide, a background-only slide and a text element that holds only spaces are `false`.
     pub cue_has_text: Vec<bool>,
+    /// For each cue of the group, in the same order: how many lines of text its slide shows (the most of any text element;
+    /// a line is a stretch of text between line breaks, blank lines not counted). 0 for a slide with no text.
+    pub cue_lines: Vec<usize>,
     /// What its slides say (the text of every text element), to tell two groups of the same name apart.
     signature: Vec<Vec<Vec<u8>>>,
 }
@@ -435,9 +438,16 @@ fn cue_texts(cue: &[u8]) -> Vec<Vec<u8>> {
     out
 }
 
-/// Whether the text of one text element (the `rtf_data` ProPresenter keeps, or plain text) shows at least one character:
-/// RTF control words, font and colour tables, spaces and line breaks do not count.
-pub fn rtf_has_visible_text(rtf: &[u8]) -> bool {
+/// What the RTF walker sees: a character that shows, or a line break that shows nothing itself.
+enum RtfEvent {
+    Visible,
+    LineBreak,
+}
+
+/// Walks the text of one text element (the `rtf_data` ProPresenter keeps, or plain text) and tells `event` about every
+/// character that shows and every line break (`\\par`, `\\line`, a backslash before a new line, a new line in plain text).
+/// RTF control words, font and colour tables and spaces are skipped. The walk stops when `event` says `false`.
+fn walk_rtf(rtf: &[u8], mut event: impl FnMut(RtfEvent) -> bool) {
     const SKIPPED: [&str; 14] = [
         "fonttbl",
         "colortbl",
@@ -457,9 +467,19 @@ pub fn rtf_has_visible_text(rtf: &[u8]) -> bool {
     let visible = |b: u8| b > 0x20 && b != 0x7f;
     let rtf = rtf.trim_ascii_start();
     if !rtf.starts_with(b"{\\rtf") {
-        return String::from_utf8_lossy(rtf)
-            .chars()
-            .any(|c| !c.is_whitespace() && !c.is_control());
+        for c in String::from_utf8_lossy(rtf).chars() {
+            let go = if c == '\n' {
+                event(RtfEvent::LineBreak)
+            } else if !c.is_whitespace() && !c.is_control() {
+                event(RtfEvent::Visible)
+            } else {
+                true
+            };
+            if !go {
+                return;
+            }
+        }
+        return;
     }
     // One entry per open group: true while inside a part that never shows (a table, a `{\*...}` destination).
     let mut skipping: Vec<bool> = Vec::new();
@@ -508,11 +528,17 @@ pub fn rtf_has_visible_text(rtf: &[u8]) -> bool {
                     if rtf.get(at) == Some(&b' ') {
                         at += 1;
                     }
+                    if !hidden && (word == b"par" || word == b"line") && !event(RtfEvent::LineBreak)
+                    {
+                        return;
+                    }
                     if word == b"u" && !hidden {
                         // A unicode character, then the one plain character (or `\'xx`) that stands in for it.
                         let number = String::from_utf8_lossy(&rtf[end..at]).trim().to_string();
-                        if number.parse::<i32>().is_ok_and(|n| n != 32 && n != 160) {
-                            return true;
+                        if number.parse::<i32>().is_ok_and(|n| n != 32 && n != 160)
+                            && !event(RtfEvent::Visible)
+                        {
+                            return;
                         }
                         if rtf[at..].starts_with(b"\\'") {
                             at += 4;
@@ -527,28 +553,70 @@ pub fn rtf_has_visible_text(rtf: &[u8]) -> bool {
                         let value = std::str::from_utf8(hex)
                             .ok()
                             .and_then(|h| u8::from_str_radix(h, 16).ok());
-                        if value.is_some_and(|v| v != 0xa0 && (visible(v) || v >= 0x80)) {
-                            return true;
+                        if value.is_some_and(|v| v != 0xa0 && (visible(v) || v >= 0x80))
+                            && !event(RtfEvent::Visible)
+                        {
+                            return;
                         }
                     }
                     i += 4;
                 } else {
-                    // `\\`, `\{`, `\}` are visible characters; `\~` (a hard space), `\-`, `\_` and the like are not.
-                    if !hidden && matches!(next, b'\\' | b'{' | b'}') {
-                        return true;
+                    // `\\`, `\{`, `\}` are visible characters; `\~` (a hard space), `\-`, `\_` and the like are not. A backslash
+                    // before a new line is a line break.
+                    if !hidden {
+                        let go = if matches!(next, b'\\' | b'{' | b'}') {
+                            event(RtfEvent::Visible)
+                        } else if matches!(next, b'\n' | b'\r') {
+                            event(RtfEvent::LineBreak)
+                        } else {
+                            true
+                        };
+                        if !go {
+                            return;
+                        }
                     }
                     i += 2;
                 }
             }
             _ => {
-                if !skipping.last().copied().unwrap_or(false) && visible(b) {
-                    return true;
+                if !skipping.last().copied().unwrap_or(false)
+                    && visible(b)
+                    && !event(RtfEvent::Visible)
+                {
+                    return;
                 }
                 i += 1;
             }
         }
     }
-    false
+}
+
+/// Whether the text of one text element (the `rtf_data` ProPresenter keeps, or plain text) shows at least one character:
+/// RTF control words, font and colour tables, spaces and line breaks do not count.
+pub fn rtf_has_visible_text(rtf: &[u8]) -> bool {
+    let mut found = false;
+    walk_rtf(rtf, |event| {
+        found = matches!(event, RtfEvent::Visible);
+        !found
+    });
+    found
+}
+
+/// How many lines of text one text element shows: the stretches between line breaks that have a visible character in them
+/// (an empty line, a trailing line break or a line of spaces is not a line).
+pub fn rtf_visible_lines(rtf: &[u8]) -> usize {
+    let (mut lines, mut open) = (0, false);
+    walk_rtf(rtf, |event| {
+        match event {
+            RtfEvent::Visible => open = true,
+            RtfEvent::LineBreak => {
+                lines += usize::from(open);
+                open = false;
+            }
+        }
+        true
+    });
+    lines + usize::from(open)
 }
 
 fn read_music(message: &[u8]) -> Music {
@@ -616,6 +684,7 @@ impl Song {
                         name: first(group, &inner, 2).map(text).unwrap_or_default(),
                         cue_ids: ids,
                         cue_has_text: Vec::new(),
+                        cue_lines: Vec::new(),
                         signature: Vec::new(),
                     });
                 }
@@ -652,6 +721,17 @@ impl Song {
                 .iter()
                 .map(|texts| texts.iter().any(|rtf| rtf_has_visible_text(rtf)))
                 .collect();
+            song.groups[index].cue_lines = song.groups[index]
+                .signature
+                .iter()
+                .map(|texts| {
+                    texts
+                        .iter()
+                        .map(|rtf| rtf_visible_lines(rtf))
+                        .max()
+                        .unwrap_or(0)
+                })
+                .collect();
         }
         if song.uuid.is_empty() && song.groups.is_empty() && song.arrangements.is_empty() {
             return Err(ProError::NotASong);
@@ -661,6 +741,24 @@ impl Song {
 
     fn group(&self, uuid: &str) -> Option<&Group> {
         self.groups.iter().find(|g| same(&g.uuid, uuid))
+    }
+
+    /// The usual number of lines of text on a slide that has text (the commonest count; the smaller one when two tie), which says
+    /// which Lyrics Bus template of Playback fits the file (1, 2 or 4 lines). `None` when no slide has text.
+    pub fn usual_lines(&self) -> Option<usize> {
+        let mut counts: std::collections::BTreeMap<usize, usize> =
+            std::collections::BTreeMap::new();
+        for group in &self.groups {
+            for (lines, has_text) in group.cue_lines.iter().zip(&group.cue_has_text) {
+                if *has_text && *lines > 0 {
+                    *counts.entry(*lines).or_default() += 1;
+                }
+            }
+        }
+        counts
+            .into_iter()
+            .max_by_key(|(lines, count)| (*count, std::cmp::Reverse(*lines)))
+            .map(|(lines, _)| lines)
     }
 
     /// The arrangement the file has selected.

@@ -10,6 +10,8 @@ pub struct SyntheticSong {
     multitracks: Option<u64>,
     /// (group name, the text of each of its slides; `None` is a slide with no text element, a background only)
     groups: Vec<(String, Vec<Option<String>>)>,
+    /// The number the uuid of each group is made from (its position unless `group_with_key` said otherwise).
+    group_keys: Vec<Option<u32>>,
     /// (arrangement name, indexes into `groups`)
     arrangements: Vec<(String, Vec<usize>)>,
     selected: Option<usize>,
@@ -29,6 +31,7 @@ impl SyntheticSong {
             title: title.to_string(),
             multitracks: None,
             groups: Vec::new(),
+            group_keys: Vec::new(),
             arrangements: Vec::new(),
             selected: None,
             key: None,
@@ -57,6 +60,7 @@ impl SyntheticSong {
             name.to_string(),
             slides.iter().map(|s| Some((*s).to_string())).collect(),
         ));
+        self.group_keys.push(None);
         self
     }
 
@@ -68,6 +72,18 @@ impl SyntheticSong {
             name.to_string(),
             slides.iter().map(|s| s.map(str::to_string)).collect(),
         ));
+        self.group_keys.push(None);
+        self
+    }
+
+    /// Like `group_with_blanks`, but the group's uuid is made from `key` instead of its position: a group put in front of
+    /// others keeps the uuids the others had (what ProPresenter does when someone adds a group to a song).
+    #[must_use]
+    pub fn group_with_key(mut self, key: u32, name: &str, slides: &[Option<&str>]) -> Self {
+        self = self.group_with_blanks(name, slides);
+        if let Some(last) = self.group_keys.last_mut() {
+            *last = Some(key);
+        }
         self
     }
 
@@ -100,7 +116,8 @@ impl SyntheticSong {
     }
 
     pub fn group_uuid(&self, index: usize) -> String {
-        fake_uuid(self.seed, 100 + index as u32)
+        let key = self.group_keys.get(index).copied().flatten();
+        fake_uuid(self.seed, 100 + key.unwrap_or(index as u32))
     }
 
     pub fn arrangement_uuid(&self, index: usize) -> String {

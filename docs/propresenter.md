@@ -429,7 +429,7 @@ StagePilot can show a song's lyrics in ProPresenter while Playback plays the son
 StagePilot triggers the matching slide in ProPresenter over its HTTP API. **It is off until the switch is turned on.** With the switch
 off, with no ProPresenter output or Presenter Link, with no Library Link or for a song with nothing to follow, StagePilot never
 triggers anything in ProPresenter, never reads it for this and behaves exactly as before. It never sends MIDI to ProPresenter and
-never writes anything in Playback.
+never writes anything in Playback. The feature is called the **Auto-Presenter**.
 
 ### What is followed
 
@@ -445,13 +445,37 @@ selected one. A song that was edited since, or whose arrangement is something el
 2. **Bars** (when a song has no usable cues). The first slide of a section is shown when the section starts and the section's other text
    slides are spread evenly over it. Blank and background-only slides are shown with the slide after them.
 
-Cues are used only when they fit the file: at least three, the highest slide number is the file's slide count minus one, and every cue falls
-in a section. Otherwise StagePilot says which test failed (for example "Cues do not match the file (cues go to slide 30, file has 54
+Cues are used only when they fit the file: at least three, every cue falls in a section, and the slide numbers fit the file's slides
+(next section). Otherwise StagePilot says which test failed (for example "Cues do not match the file (cues go to slide 30, file has 54
 cues)") and follows by bars.
 
 ProPresenter's slide numbers count the slides of the SELECTED arrangement, so a chorus that is played twice has its slides twice.
 StagePilot turns a cue's number (which counts the slides of the file once each) into ProPresenter's number from the song file, taking the
 play of the group nearest the section Playback is in. That is why repeated sections and groups with the same name stay right.
+
+### Extra slides in the song file
+
+Playback numbers the slides of the song as it was when the Presenter Link wrote it. Someone may add blank or background slides in
+ProPresenter afterwards: 1 or 2 at the start of the presentation, inside a group, between groups or at the end. The Auto-Presenter still
+shows the right lyric slide.
+
+- **Nothing added** (the highest slide number plus one is the file's slide count): the slide number is the file's slide index, exactly as
+  before.
+- **Up to 8 more slides in the file than Playback numbers**: the numbers are matched to the file group by group. A cue near the start of
+  the next section belongs to the section before it only when its slide number is the one after the cue before and that section's group
+  still has room (if that is not clear, the way that puts the most cues on slides with text wins). Within a group, the slides Playback
+  counts are taken to be the slides that have text: a blank slide is the likely extra one. The slide shown is therefore the lyric slide
+  Playback meant, whatever slides were added around it.
+- **Check.** Such a song is still followed by cues but says `Following by Playback cues, aligned with extra slides (check the first slide of
+  <section>)`. Look at that section's first slide the first time: the section named is where a slide inside a group had to be guessed, else
+  the first section that has a cue.
+- **More than 8 more slides, or numbers no way of adding slides explains** (a slide group longer than its file group, the same slide
+  in two groups, a 2 or 4 Line template against a 1 Line file) say `Cues do not match the file (cues go to slide N, file has M cues)`, name
+  the Playback template that fits the file, and the song is followed by bars.
+
+The usual lines of text per slide that has text (the commonest count of line breaks plus one; 1, 2 or 4 are Playback's templates) is read
+from the file. It is what the advice names: `No cues: in Playback choose the ProPresenter 2 Line Template for this song`, and the same
+template after a mismatch. A file whose slides have another number of lines says `a ProPresenter Line Template that matches the file`.
 
 ### What StagePilot does while the song plays
 
@@ -492,14 +516,18 @@ file as `presenter-follow-bindings.json` (ids, file names and slide counts; noth
 ### Where a song lives in ProPresenter (the binding)
 
 A plan song is tied, by its MultiTracks number, to a playlist, the item in it, its presentation, the song file in the `Playback` library and a
-fingerprint of its arrangement (the file's groups with their slide counts, and the order the arrangement plays them in).
+fingerprint of its arrangement: the ordered ids of the groups the `Playback` arrangement plays (and `Playback` being the selected
+arrangement). Slides added to or taken out of a group, or a group the arrangement does not play, do not change it, and the slide map is
+read from the file as it is now every time. A binding saved by an older StagePilot (whose fingerprint counted every group's slides) is
+rebuilt from the file the first time the song is read, without a word on screen.
 
 1. **Remembered** when the Presenter Link adds the song to a playlist (or finds it there already).
 2. **Found on demand** in ProPresenter's ACTIVE playlist (the one last triggered): the item whose file in the `Playback` library carries that
    MultiTracks number and has the `Playback` arrangement selected. The files are read through the Presenter Link's host, directly or through
    the helper.
 
-The fingerprint must equal what the file holds now. Otherwise the song is "Arrangement was changed in ProPresenter" and is not followed.
+The fingerprint must equal what the file holds now. Otherwise (another order, another length, another group in the arrangement) the song
+is "Arrangement was changed in ProPresenter" and is not followed.
 The songs are worked out again when the plan, the ProPresenter settings or a binding change, when the switch is turned on, and every 15
 seconds while no song plays (never while one plays).
 
@@ -509,20 +537,24 @@ seconds while no song plays (never while one plays).
 
 ```
 {enabled, offset_ms, state, message, song: {key, title} | null, section: {index, name} | null, slide, hold_reason, can_try_again,
- songs: [{key, title, following: "cues" | "bars" | null, code, text, advice}]}
+ songs: [{key, title, following: "cues" | "bars" | null, code, text, advice, lines_per_slide, template}]}
 ```
 
 `state` is `off`, `idle` (nothing to follow), `ready` (the song is loaded and not playing), `following`, `held` (a click holds it), `paused`
 (failures) or `not_followed`. `slide` is ProPresenter's number of the slide StagePilot last showed. It is **not** part of `/api/v1/health`: no
 state of following changes the header's Ready or Check-system verdict.
 
+`lines_per_slide` is the usual number of text lines of a slide in the song's file and `template` the Playback Lyrics Bus template that
+fits it (`ProPresenter 1 Line Template`, 2 or 4), both `null` until the file has been read or when it has no text slide.
+
 Each plan song says, in the words of the screen:
 
 | `code` | `text` |
 |---|---|
 | `cues` | Following by Playback cues |
-| `bars` | Following by bars (no Playback cues) (`advice`: No cues: in Playback choose a ProPresenter 1 Line Template for this song) |
-| `cues_do_not_match` | Cues do not match the file (cues go to slide N, file has M cues) (followed by bars) |
+| `cues_aligned` | Following by Playback cues, aligned with extra slides (check the first slide of Intro) |
+| `bars` | Following by bars (no Playback cues) (`advice`: No cues: in Playback choose a ProPresenter 1 Line Template for this song; the 2 or 4 Line Template when the file's slides have 2 or 4 lines) |
+| `cues_do_not_match` | Cues do not match the file (cues go to slide N, file has M cues) (followed by bars; `advice`: In Playback choose the ProPresenter 2 Line Template for this song) |
 | `bars_cues_unusable` | Following by bars (cues not used: a cue after the song end / a cue is in no section / ...) |
 | `arrangement_changed` | Arrangement was changed in ProPresenter |
 | `not_in_playlist` | Not in the ProPresenter playlist |
@@ -543,7 +575,7 @@ Configuration → Presentation, under the **Presenter Link** section (always dra
 - **Locked, not hidden.** While the Presenter Link is not ready (`Presenter Link not ready`) or Playback's Library Link is not ready (`Playback's Library Link not ready`) the box is greyed, nothing in it can be pressed and the reason sits beside the switch. Following itself never starts without both.
 - **Timing** (folded). One small number box, **Offset (ms)**, from -2000 to 2000, saved when you leave the box or press Enter (`propresenter.presenter_follow.offset_ms`). Positive shows every slide earlier. Leave it at 0 until it has been tuned on the rig.
 
-Every song card of the Presenter Link carries one chip from `GET /api/v1/propresenter-follow/status` (`songs[].text`, the table above), each with a mark (`✓` followed by cues, `~` by bars, `!` something to look at, `−` nothing to follow now). A song followed by bars because Playback holds no cues also gets a **No cues** chip and one sentence: *In Playback: Edit, the "..." on the song, MIDI OUT, Lyrics Bus, ProPresenter 1 Line Template, Update.* (the 2 or 4 Line Template when the song file has two or four lines per slide). A song whose cues do not fit the file says `Cues do not match the file (cues go to slide N, file has M cues)` and `Followed by bars`.
+Every song card of the Presenter Link carries one chip from `GET /api/v1/propresenter-follow/status` (`songs[].text`, the table above), each with a mark (`✓` followed by cues, `~` by bars, `!` something to look at, `−` nothing to follow now). A song followed by bars because Playback holds no cues also gets a **No cues** chip and one sentence: *In Playback: Edit, the "..." on the song, MIDI OUT, Lyrics Bus, ProPresenter 1 Line Template, Update.* (the 2 or 4 Line Template when the song file has two or four lines per slide, as the status's `advice` and `template` say). A song whose cues do not fit the file says `Cues do not match the file (cues go to slide N, file has M cues)` and `Followed by bars`.
 
 While the Presentation panel is open the window reads the status every 2 seconds with the switch on, and every 30 seconds with it off; with the panel closed it reads nothing. The switch and the offset are changed only by someone allowed to change the configuration.
 

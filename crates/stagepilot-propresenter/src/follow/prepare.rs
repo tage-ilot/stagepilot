@@ -7,7 +7,9 @@ use super::binding::{
     bindings_in_playlist, bindings_of_items, playlist_items, Binding, BindingStore, FileCache,
     LookError, PlaylistItem,
 };
-use super::{build_schedule, CueProblem, LyricCue, Schedule, Section, Source, Unfollowable};
+use super::{
+    build_schedule, CueProblem, LyricCue, Schedule, Section, Source, Unfollowable, HASH_VERSION,
+};
 use crate::link::api::{ApiError, ProPresenterApi};
 use crate::link::ProPresenterHost;
 use std::collections::HashMap;
@@ -18,6 +20,21 @@ pub const FOLLOWING_BY_CUES: &str = "Following by Playback cues";
 pub const FOLLOWING_BY_BARS: &str = "Following by bars (no Playback cues)";
 pub const NO_CUES_ADVICE: &str =
     "No cues: in Playback choose a ProPresenter 1 Line Template for this song";
+/// The Lyrics Bus template that fits a file whose text slides usually have `lines` lines (what the advice names).
+pub fn template_phrase(lines: Option<usize>) -> String {
+    match lines {
+        // The usual case keeps the words it always had.
+        Some(1) => "a ProPresenter 1 Line Template".to_string(),
+        Some(n @ (2 | 4)) => format!("the ProPresenter {n} Line Template"),
+        _ => "a ProPresenter Line Template that matches the file".to_string(),
+    }
+}
+
+/// The name of the Playback template for a file with `lines` lines per slide, when it is one of Playback's three.
+pub fn template_name(lines: Option<usize>) -> Option<String> {
+    matches!(lines, Some(1 | 2 | 4))
+        .then(|| format!("ProPresenter {} Line Template", lines.unwrap_or(0)))
+}
 pub const ARRANGEMENT_CHANGED: &str = "Arrangement was changed in ProPresenter";
 pub const NOT_IN_PLAYLIST: &str = "Not in the ProPresenter playlist";
 pub const LINK_NOT_READY: &str = "ProPresenter Link not ready";
@@ -47,6 +64,11 @@ pub struct SongInput {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Readiness {
     Cues,
+    /// Followed by cues, but the file has slides Playback does not number (blank or background slides someone added), so the
+    /// numbers were matched to the file by [`super::align`]: Check. `section` is the one whose first slide is worth a look.
+    CuesAligned {
+        section: String,
+    },
     /// Followed by bars; `Some` is the test the cues failed (`None`: it has no cues, which is the plain case).
     Bars(Option<CueProblem>),
     NotInPlayback,
@@ -65,6 +87,14 @@ impl Readiness {
     pub fn text(&self) -> String {
         match self {
             Self::Cues => FOLLOWING_BY_CUES.to_string(),
+            Self::CuesAligned { section } => format!(
+                "{FOLLOWING_BY_CUES}, aligned with extra slides (check the first slide of {})",
+                if section.trim().is_empty() {
+                    "Count Off"
+                } else {
+                    section.trim()
+                }
+            ),
             Self::Bars(None | Some(CueProblem::NoCues | CueProblem::TooFew { .. })) => {
                 FOLLOWING_BY_BARS.to_string()
             }
@@ -86,12 +116,24 @@ impl Readiness {
         }
     }
 
-    /// A second line that says what to do, when there is something to do.
+    /// A second line that says what to do, when there is something to do, for a file whose slides have one line of text.
     pub fn advice(&self) -> Option<String> {
+        self.advice_for(Some(1))
+    }
+
+    /// [`Self::advice`] naming the Playback template that fits a file whose text slides usually have `lines` lines.
+    pub fn advice_for(&self, lines: Option<usize>) -> Option<String> {
         match self {
             Self::Bars(None | Some(CueProblem::NoCues | CueProblem::TooFew { .. })) => {
-                Some(NO_CUES_ADVICE.to_string())
+                Some(format!(
+                    "No cues: in Playback choose {} for this song",
+                    template_phrase(lines)
+                ))
             }
+            Self::Bars(Some(CueProblem::Mismatch { .. })) => Some(format!(
+                "In Playback choose {} for this song",
+                template_phrase(lines)
+            )),
             _ => None,
         }
     }
@@ -99,7 +141,7 @@ impl Readiness {
     /// `cues` or `bars` when the song is followed, else `None`.
     pub fn following(&self) -> Option<&'static str> {
         match self {
-            Self::Cues => Some("cues"),
+            Self::Cues | Self::CuesAligned { .. } => Some("cues"),
             Self::Bars(_) => Some("bars"),
             _ => None,
         }
@@ -109,6 +151,7 @@ impl Readiness {
     pub fn code(&self) -> &'static str {
         match self {
             Self::Cues => "cues",
+            Self::CuesAligned { .. } => "cues_aligned",
             Self::Bars(None | Some(CueProblem::NoCues | CueProblem::TooFew { .. })) => "bars",
             Self::Bars(Some(CueProblem::Mismatch { .. })) => "cues_do_not_match",
             Self::Bars(Some(_)) => "bars_cues_unusable",
@@ -133,6 +176,8 @@ pub struct Prepared {
     pub binding: Binding,
     /// The name of each section (arrangement entry), in playing order.
     pub section_names: Vec<String>,
+    /// The usual lines of text per slide in the song file (which Playback Lyrics Bus template fits it).
+    pub lines_per_slide: Option<usize>,
 }
 
 /// One plan song's verdict.
@@ -144,6 +189,18 @@ pub struct SongStatus {
     pub readiness: Readiness,
     /// Present when the song is followed.
     pub prepared: Option<Arc<Prepared>>,
+}
+
+impl SongStatus {
+    /// The usual lines of text per slide in the song's file, when the file was read.
+    pub fn lines_per_slide(&self) -> Option<usize> {
+        self.prepared.as_ref().and_then(|p| p.lines_per_slide)
+    }
+
+    /// The second line that says what to do, naming the template that fits the file.
+    pub fn advice(&self) -> Option<String> {
+        self.readiness.advice_for(self.lines_per_slide())
+    }
 }
 
 /// The reader of ProPresenter's playlists and song files.
@@ -286,7 +343,16 @@ impl Preparer {
             match self.judge(host, song, binding, &mut cache).await {
                 Ok(prepared) => {
                     let readiness = match prepared.schedule.source {
-                        Source::Cues => Readiness::Cues,
+                        Source::Cues => match &prepared.schedule.alignment {
+                            None => Readiness::Cues,
+                            Some(alignment) => Readiness::CuesAligned {
+                                section: prepared
+                                    .section_names
+                                    .get(alignment.check_section)
+                                    .cloned()
+                                    .unwrap_or_default(),
+                            },
+                        },
                         Source::Bars => Readiness::Bars(prepared.schedule.cue_problem.clone()),
                     };
                     out.push(SongStatus {
@@ -380,9 +446,18 @@ impl Preparer {
         let Ok(map) = parsed.map.as_ref() else {
             return Err(Readiness::ArrangementChanged);
         };
-        if map.arrangement_hash() != binding.arrangement_hash
-            || parsed.multitracks_id != Some(binding.content_id)
-        {
+        if parsed.multitracks_id != Some(binding.content_id) {
+            return Err(Readiness::ArrangementChanged);
+        }
+        let mut binding = binding;
+        if binding.hash_version < HASH_VERSION {
+            // Saved when the fingerprint still counted every group's slides: slides added since are no reason to stop. It is
+            // rebuilt from the file as it is now, and remembered.
+            binding.arrangement_hash = map.arrangement_hash();
+            binding.hash_version = HASH_VERSION;
+            binding.group_cues = map.groups().iter().map(|g| g.cues).collect();
+            let _ = self.store.remember(binding.clone());
+        } else if map.arrangement_hash() != binding.arrangement_hash {
             return Err(Readiness::ArrangementChanged);
         }
         let schedule =
@@ -397,6 +472,7 @@ impl Preparer {
             schedule,
             binding,
             section_names: song.sections.iter().map(|s| s.name.clone()).collect(),
+            lines_per_slide: map.lines_per_slide(),
         })
     }
 }

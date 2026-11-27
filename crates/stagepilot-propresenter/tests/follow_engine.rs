@@ -4,7 +4,7 @@
 //! and the fake says which RAW cue of the file each flat number really showed (it flattens the file's arrangement on its own).
 
 use serde_json::Value;
-use stagepilot_propresenter::follow::binding::{BindingStore, MemoryBindingStore};
+use stagepilot_propresenter::follow::binding::{Binding, BindingStore, MemoryBindingStore};
 use stagepilot_propresenter::follow::engine::{
     FollowState, Follower, Input, PlaybackNow, SongView, Timing, HOLD_REASON,
 };
@@ -12,7 +12,7 @@ use stagepilot_propresenter::follow::prepare::{
     Preparer, Readiness, SongInput, SongStatus, ARRANGEMENT_CHANGED, FOLLOWING_BY_BARS,
     FOLLOWING_BY_CUES, LINK_NOT_READY, NOT_IN_PLAYLIST,
 };
-use stagepilot_propresenter::follow::{LyricCue, Section};
+use stagepilot_propresenter::follow::{LyricCue, Section, HASH_VERSION};
 use stagepilot_propresenter::link::api::fake::{entry_uuid, FakeApi, Loading, Trigger};
 use stagepilot_propresenter::link::api::ApiError;
 use stagepilot_propresenter::link::fake::FakeHost;
@@ -122,10 +122,15 @@ struct Rig {
 
 /// A playlist `Sunday` with `Oh My Soul` (item 0), `Second Song` (item 1) and `Plain Song` (item 2), all `Playback` copies.
 fn rig() -> Rig {
+    rig_with(oh_my_soul())
+}
+
+/// [`rig`] with another file for `Oh My Soul` (one with slides added, say).
+fn rig_with(oh_my_soul: SyntheticSong) -> Rig {
     let host = Arc::new(
         FakeHost::new()
             .with_library("Playback")
-            .with_file("Playback", "Oh My Soul.pro", &oh_my_soul().build())
+            .with_file("Playback", "Oh My Soul.pro", &oh_my_soul.build())
             .with_file(
                 "Playback",
                 "Second Song.pro",
@@ -934,4 +939,303 @@ async fn cues_that_do_not_fit_the_file_are_said_in_plain_words_and_the_song_goes
         .await;
     assert_eq!(statuses[1].readiness, Readiness::NoSections);
     assert_eq!(statuses[2].readiness, Readiness::SectionsChanged);
+}
+
+// ---- extra slides in the song file --------------------------------------------------------------------------------------------
+
+/// The fixture song with blank background slides added: `at_start` as a new first group that the `Playback` arrangement does not
+/// play, `in_count_off` more in the Count Off group in front of its own blank slide, `in_intro` at the start of the Intro group.
+fn oh_my_soul_with_extras(at_start: usize, in_count_off: usize, in_intro: usize) -> SyntheticSong {
+    let f = fixture();
+    let mut song = SyntheticSong::new("Oh My Soul").id(1001).seed(1);
+    let offset = usize::from(at_start > 0);
+    if at_start > 0 {
+        song = song.group_with_key(900, "Background", &vec![None; at_start]);
+    }
+    for (i, (name, cues)) in f.groups.iter().enumerate() {
+        let mut slides: Vec<Option<&str>> = (0..*cues)
+            .map(|_| if i == 0 { None } else { Some("la") })
+            .collect();
+        let extra = match i {
+            0 => in_count_off,
+            1 => in_intro,
+            _ => 0,
+        };
+        for _ in 0..extra {
+            slides.insert(0, None);
+        }
+        song = song.group_with_key(i as u32, name, &slides);
+    }
+    let arrangement: Vec<usize> = ARRANGEMENT.iter().map(|g| g + offset).collect();
+    song.arrangement("Playback", &arrangement).selected(0)
+}
+
+/// Plays the song right through, one check just after each Playback cue: the trigger log and, for each cue, the RAW cue index
+/// of the file that is on screen (the fake works it out from the file's own arrangement).
+async fn play_through(song: SyntheticSong) -> (Vec<String>, Vec<usize>, SongView) {
+    let rig = rig_with(song);
+    let all = songs(&rig, true).await;
+    assert!(
+        all[0].readiness_text.starts_with(FOLLOWING_BY_CUES),
+        "{}",
+        all[0].readiness_text
+    );
+    let f = fixture();
+    let mut follower = Follower::new(Timing::default());
+    let mut clock = Clock::start(0.0);
+    let mut raws = Vec::new();
+    for cue in &f.cues {
+        let secs = cue.time_s + 0.05 - clock.position;
+        advance(
+            &mut follower,
+            &rig.api,
+            &all[0],
+            &mut clock,
+            (secs * 10.0).ceil() / 10.0,
+            true,
+            0,
+        )
+        .await;
+        raws.push(rig.api.raw_on_screen().unwrap());
+    }
+    (log(&rig.api), raws, all[0].clone())
+}
+
+#[tokio::test]
+async fn the_fixture_with_two_extra_background_slides_at_the_start_triggers_the_exact_same_lyric_slides(
+) {
+    let f = fixture();
+    let (plain_log, plain_raws, _) = play_through(oh_my_soul()).await;
+    assert_eq!(
+        plain_raws,
+        f.cues.iter().map(|c| c.slide as usize).collect::<Vec<_>>(),
+        "nothing added: the raw cue Playback named"
+    );
+    assert_eq!(
+        &plain_log[..4],
+        &strings(&["item:0", "slide:1", "slide:2", "slide:3"])[..]
+    );
+
+    // Two blank slides in front of the Count Off's own: every slide of the arrangement is two further on, and so is every raw cue.
+    let (log_in_count_off, raws, view) = play_through(oh_my_soul_with_extras(0, 2, 0)).await;
+    assert_eq!(
+        &log_in_count_off[..4],
+        &strings(&["item:0", "slide:3", "slide:4", "slide:5"])[..],
+        "Playback's slide 1 is the Intro's first slide, now the file's slide 3"
+    );
+    let want: Vec<String> = plain_log
+        .iter()
+        .map(|entry| match entry.strip_prefix("slide:") {
+            Some(n) => format!("slide:{}", n.parse::<usize>().unwrap() + 2),
+            None => entry.clone(),
+        })
+        .collect();
+    assert_eq!(log_in_count_off, want);
+    let want_raws: Vec<usize> = f.cues.iter().map(|c| c.slide as usize + 2).collect();
+    assert_eq!(raws, want_raws);
+    assert!(
+        view.readiness_text.contains("aligned with extra slides"),
+        "{}",
+        view.readiness_text
+    );
+
+    // Two blank slides as a new first group the arrangement does not play: the numbers ProPresenter has do not move, the file's
+    // own cue indexes do.
+    let (log_new_group, raws, view) = play_through(oh_my_soul_with_extras(2, 0, 0)).await;
+    assert_eq!(log_new_group, plain_log);
+    assert_eq!(raws, want_raws);
+    assert_eq!(
+        view.readiness_text,
+        "Following by Playback cues, aligned with extra slides (check the first slide of Intro)"
+    );
+    let prepared = view.prepared.as_ref().unwrap();
+    assert_eq!(prepared.schedule.alignment.as_ref().unwrap().extras, 2);
+    assert_eq!(
+        prepared.schedule.source,
+        stagepilot_propresenter::follow::Source::Cues
+    );
+
+    // Two blank slides at the start of the Intro, in front of the first lyric slide, are in the middle of the arrangement.
+    let (log_in_intro, raws, _) = play_through(oh_my_soul_with_extras(0, 0, 2)).await;
+    assert_eq!(
+        &log_in_intro[..4],
+        &strings(&["item:0", "slide:3", "slide:4", "slide:5"])[..]
+    );
+    assert_eq!(raws, want_raws);
+}
+
+#[tokio::test]
+async fn a_binding_saved_before_the_hash_changed_is_rebuilt_silently() {
+    let rig = rig();
+    let only: BTreeSet<String> = ["Oh My Soul.pro".to_string()].into_iter().collect();
+    rig.preparer
+        .remember_playlist(&*rig.host, &*rig.api, &rig.playlist, &only)
+        .await
+        .unwrap();
+    // What an older StagePilot saved: a hash that counted every group's slides, and no version.
+    let saved = rig.store.all()[&1001].clone();
+    assert_eq!(saved.hash_version, HASH_VERSION);
+    let old = Binding {
+        arrangement_hash: "hash-of-the-slide-counts".into(),
+        hash_version: 0,
+        ..saved.clone()
+    };
+    rig.store.remember(old).unwrap();
+    let statuses = rig
+        .preparer
+        .prepare(&*rig.host, &*rig.api, &inputs(true), true)
+        .await;
+    assert_eq!(statuses[0].readiness, Readiness::Cues);
+    assert_eq!(
+        rig.store.all()[&1001],
+        saved,
+        "remembered again with the new hash"
+    );
+    // The next pass compares the new hash.
+    let statuses = rig
+        .preparer
+        .prepare(&*rig.host, &*rig.api, &inputs(true), true)
+        .await;
+    assert_eq!(statuses[0].readiness, Readiness::Cues);
+}
+
+#[tokio::test]
+async fn slides_added_after_the_song_was_added_keep_it_followed_and_a_new_order_does_not() {
+    let rig = rig();
+    let only: BTreeSet<String> = ["Oh My Soul.pro".to_string()].into_iter().collect();
+    rig.preparer
+        .remember_playlist(&*rig.host, &*rig.api, &rig.playlist, &only)
+        .await
+        .unwrap();
+    let with_file = |song: SyntheticSong| {
+        Arc::new(FakeHost::new().with_library("Playback").with_file(
+            "Playback",
+            "Oh My Soul.pro",
+            &song.build(),
+        ))
+    };
+    // Two slides added in front of the Intro, and a new group at the front: still the same arrangement.
+    for song in [
+        oh_my_soul_with_extras(0, 0, 2),
+        oh_my_soul_with_extras(1, 1, 0),
+    ] {
+        let host = with_file(song);
+        let preparer = Preparer::new(rig.store.clone());
+        let statuses = preparer
+            .prepare(&*host, &*rig.api, &inputs(true), true)
+            .await;
+        assert!(
+            matches!(statuses[0].readiness, Readiness::CuesAligned { .. }),
+            "{:?}",
+            statuses[0].readiness
+        );
+        assert_eq!(statuses[0].readiness.following(), Some("cues"));
+        assert_eq!(statuses[0].readiness.code(), "cues_aligned");
+        assert!(statuses[0].prepared.is_some());
+    }
+    // The same slides, played in another order: not the arrangement StagePilot wrote.
+    let mut swapped = ARRANGEMENT;
+    swapped.swap(2, 3);
+    let f = fixture();
+    let mut song = SyntheticSong::new("Oh My Soul").id(1001).seed(1);
+    for (i, (name, cues)) in f.groups.iter().enumerate() {
+        let slides: Vec<Option<&str>> = (0..*cues)
+            .map(|_| if i == 0 { None } else { Some("la") })
+            .collect();
+        song = song.group_with_blanks(name, &slides);
+    }
+    let host = with_file(song.arrangement("Playback", &swapped).selected(0));
+    let preparer = Preparer::new(rig.store.clone());
+    let statuses = preparer
+        .prepare(&*host, &*rig.api, &inputs(true), true)
+        .await;
+    assert_eq!(statuses[0].readiness, Readiness::ArrangementChanged);
+    assert_eq!(statuses[0].prepared, None);
+}
+
+#[tokio::test]
+async fn the_advice_names_the_template_that_fits_the_file() {
+    // A song whose slides have two lines each: Count Off, then a 6-slide Verse and a 6-slide Chorus.
+    let two_lines = |title: &str, id: u64, lines: &str| {
+        let slide = |n: usize| format!("w{n}{lines}x{n}");
+        let verse: Vec<String> = (0..6).map(slide).collect();
+        let chorus: Vec<String> = (6..12).map(slide).collect();
+        let verse: Vec<&str> = verse.iter().map(String::as_str).collect();
+        let chorus: Vec<&str> = chorus.iter().map(String::as_str).collect();
+        SyntheticSong::new(title)
+            .id(id)
+            .seed(5)
+            .group_with_blanks("", &[None])
+            .group("Verse", &verse)
+            .group("Chorus", &chorus)
+            .arrangement("Playback", &[0, 1, 2])
+            .selected(0)
+    };
+    for (lines, template) in [
+        ("", "a ProPresenter 1 Line Template"),
+        ("\n", "the ProPresenter 2 Line Template"),
+        (
+            "\ny\n",
+            "a ProPresenter Line Template that matches the file",
+        ),
+    ] {
+        let host = Arc::new(FakeHost::new().with_library("Playback").with_file(
+            "Playback",
+            "Plain Song.pro",
+            &two_lines("Plain Song", 1003, lines).build(),
+        ));
+        let api = Arc::new(FakeApi::new(host.clone(), Loading::Immediately));
+        let playlist = api.add_playlist(
+            "Sunday",
+            None,
+            vec![FakeApi::presentation_item(
+                &entry_uuid("Playback", "Plain Song.pro"),
+                "Plain Song",
+                "Playback",
+                0.0,
+            )],
+        );
+        api.focus_playlist(&playlist, 0);
+        let preparer = Preparer::new(Arc::new(MemoryBindingStore::default()));
+        let song = |cues: Vec<LyricCue>| SongInput {
+            key: "plain".into(),
+            title: "Plain Song".into(),
+            playback_song_id: Some(13),
+            content_id: Some(1003),
+            sections: plain_sections(),
+            cues,
+        };
+        // No cues.
+        let no_cues = preparer
+            .prepare(&*host, &*api, &[song(Vec::new())], true)
+            .await;
+        assert_eq!(
+            no_cues[0].advice().as_deref(),
+            Some(format!("No cues: in Playback choose {template} for this song").as_str())
+        );
+        // Cues that stop far short of the file's 13 slides: the numbers do not fit, and the advice names the same template.
+        let short = vec![
+            LyricCue {
+                time_s: 4.5,
+                slide: 1,
+            },
+            LyricCue {
+                time_s: 8.0,
+                slide: 2,
+            },
+            LyricCue {
+                time_s: 14.0,
+                slide: 3,
+            },
+        ];
+        let mismatch = preparer.prepare(&*host, &*api, &[song(short)], true).await;
+        assert_eq!(
+            mismatch[0].readiness.text(),
+            "Cues do not match the file (cues go to slide 3, file has 13 cues)"
+        );
+        assert_eq!(
+            mismatch[0].advice().as_deref(),
+            Some(format!("In Playback choose {template} for this song").as_str())
+        );
+    }
 }

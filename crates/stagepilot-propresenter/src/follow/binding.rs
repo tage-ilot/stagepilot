@@ -9,7 +9,7 @@
 //!
 //! The arrangement hash is part of the binding: a file whose arrangement is not the one that was remembered is not followed.
 
-use super::{MapError, SongMap};
+use super::{MapError, SongMap, HASH_VERSION};
 use crate::link::api::{ApiError, ProPresenterApi};
 use crate::link::{LibraryFile, LinkError, ProPresenterHost, PLAYBACK_LIBRARY};
 use crate::pro_file::Song;
@@ -31,9 +31,14 @@ pub struct Binding {
     pub presentation_uuid: String,
     /// The song file in the `Playback` library, with `.pro`.
     pub file: String,
-    /// `SongMap::arrangement_hash` of the file when the song was bound.
+    /// `SongMap::arrangement_hash` of the file when the song was bound: the ordered ids of the groups the `Playback`
+    /// arrangement plays.
     pub arrangement_hash: String,
-    /// The cue count of each group of the file, in file order (what the hash depends on, kept to say what changed).
+    /// Which version of the hash `arrangement_hash` is. Bindings saved before the hash stopped depending on cue counts have none
+    /// (0): they are rebuilt from the file as it is, silently, the first time the song is judged.
+    #[serde(default)]
+    pub hash_version: u8,
+    /// The cue count of each group of the file, in file order, when the song was bound (for information only).
     #[serde(default)]
     pub group_cues: Vec<usize>,
 }
@@ -328,6 +333,7 @@ pub async fn bindings_of_items(
             presentation_uuid: item.presentation_uuid.clone(),
             file,
             arrangement_hash: map.arrangement_hash(),
+            hash_version: HASH_VERSION,
             group_cues: map.groups().iter().map(|g| g.cues).collect(),
         });
     }
@@ -361,6 +367,7 @@ mod tests {
             presentation_uuid: "PU".into(),
             file: "Song.pro".into(),
             arrangement_hash: "abc".into(),
+            hash_version: HASH_VERSION,
             group_cues: vec![1, 4],
         }
     }
@@ -390,6 +397,24 @@ mod tests {
         assert!(store.all().is_empty());
         store.remember(binding(1)).unwrap();
         assert_eq!(store.all().len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_binding_saved_before_the_hash_had_a_version_reads_as_version_0() {
+        let dir = std::env::temp_dir().join(format!("sp-binding-old-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("b.json");
+        std::fs::write(
+            &path,
+            r#"{"schema_version":1,"songs":[{"content_id":7,"playlist_id":"PL","item_index":3,
+                "presentation_uuid":"PU","file":"Song.pro","arrangement_hash":"old","group_cues":[1,4]}]}"#,
+        )
+        .unwrap();
+        let all = FileBindingStore::new(&path).all();
+        assert_eq!(all[&7].hash_version, 0);
+        assert_eq!(all[&7].arrangement_hash, "old");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

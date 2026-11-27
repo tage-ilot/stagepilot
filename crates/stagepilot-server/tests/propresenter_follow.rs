@@ -563,6 +563,12 @@ async fn a_song_with_no_cues_is_followed_by_bars_and_the_status_gives_the_advice
         status["songs"][0]["advice"],
         "No cues: in Playback choose a ProPresenter 1 Line Template for this song"
     );
+    // The file's slides have one line of text each: the template that fits it.
+    assert_eq!(status["songs"][0]["lines_per_slide"], 1);
+    assert_eq!(
+        status["songs"][0]["template"],
+        "ProPresenter 1 Line Template"
+    );
     // The Verse (4 s to 20 s) has four slides, one every four seconds: at 9 s the second is due (flat 2).
     w.play(9.0);
     until("flat 2", || w.api.slides_triggered().last() == Some(&2)).await;
