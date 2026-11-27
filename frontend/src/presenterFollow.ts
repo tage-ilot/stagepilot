@@ -1,5 +1,6 @@
 // Following Playback with the song's lyrics in ProPresenter: the shapes of `GET /api/v1/propresenter-follow/status` and the words of the
 // screen. The backend (docs/propresenter.md, "Following Playback") decides everything; this file only says it in the operator's words.
+import type { TriggerRecord } from "../../generated/ts/TriggerRecord";
 import type { StatusWords } from "./components/addSongsStatus";
 
 /** What the follower is doing (`state` of the status). */
@@ -40,6 +41,8 @@ export interface FollowStatus {
   hold_reason: string | null;
   can_try_again: boolean;
   songs: FollowSong[];
+  /** The last 20 triggers, oldest first: how late each was against its cue, how long ProPresenter took to answer and when the status poll first saw the slide (all in milliseconds). For the rig; the window does not show it. */
+  recent_triggers: TriggerRecord[];
 }
 
 /** The range the backend accepts for the timing offset. */
@@ -113,7 +116,8 @@ export function followLine(status: FollowStatus | null, enabled: boolean, error:
       return { text: `Following: ${section || "Playback"}${slide}`, mark: "\u2713", tone: "success", state: "following" };
     }
     case "ready":
-      return { text: song ? `Ready: ${song} starts when Playback plays it` : "Ready: waiting for Playback to play the song", mark: MARK_IDLE, tone: "idle", state: "ready" };
+      // A song that was shown and is now stopped or paused is not being followed: say so (never "Following").
+      return { text: song && status.slide === null ? `Ready: ${song} starts when Playback plays it` : "Ready: waiting for Playback to play the song", mark: MARK_IDLE, tone: "idle", state: "ready" };
     case "held":
       return { text: status.hold_reason || status.message, mark: "!", tone: "warning", state: "held" };
     case "paused":

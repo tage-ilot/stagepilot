@@ -156,8 +156,13 @@ async fn world(with_cues: bool) -> World {
 
 /// `focus`: ProPresenter's active playlist is the Sunday playlist (a person triggered an item of it last).
 async fn world_with(with_cues: bool, focus: bool) -> World {
+    world_from(with_cues, focus, PersistentSettings::default()).await
+}
+
+/// [`world_with`] on settings that already hold something (a big file of them, say).
+async fn world_from(with_cues: bool, focus: bool, base: PersistentSettings) -> World {
     let _ = rustls::crypto::ring::default_provider().install_default();
-    let settings = SettingsService::ephemeral_persistent(PersistentSettings::default());
+    let settings = SettingsService::ephemeral_persistent(base);
     let rt = Runtime::with_backends(Arc::new(settings), false, OutputBackends::fake_midi());
     let mut next = rt.settings_service.snapshot();
     next.integration_modes.timer_output = TimerOutput::Propresenter;
@@ -213,6 +218,14 @@ async fn world_with(with_cues: bool, focus: bool) -> World {
 impl World {
     fn start(&self) {
         self.rt.propresenter_follow.spawn(Arc::downgrade(&self.rt));
+    }
+
+    /// The switch on in the settings, without going through the route (big settings are slow to send).
+    fn switch_direct(&self, enabled: bool, offset_ms: i32) {
+        let mut next = self.rt.settings_service.snapshot();
+        next.propresenter.presenter_follow.enabled = enabled;
+        next.propresenter.presenter_follow.offset_ms = offset_ms;
+        self.rt.settings_service.save(next).unwrap();
     }
 
     fn play(&self, position: f64) {
@@ -739,12 +752,16 @@ async fn an_arrangement_changed_after_it_was_added_is_not_followed() {
 
 // ---- the real client ------------------------------------------------------------------------------------------------------
 
-#[tokio::test]
-async fn following_uses_the_heartbeat_the_playback_client_holds() {
+/// The real Playback client, talking to a fake Playback that beats only when told to, and a Runtime that follows it.
+async fn live() -> (
+    Arc<Runtime>,
+    stagepilot_playback::testkit::FakePlayback,
+    Arc<FakeApi>,
+) {
     use stagepilot_playback::plugin::PluginOptions;
     use stagepilot_playback::testkit::FakePlayback;
     let w = world(true).await;
-    // The real Playback client, talking to a fake Playback that beats every 100 ms; the scripted probe is taken away.
+    // The real Playback client, talking to a fake Playback that beats only when told to; the scripted probe is taken away.
     let fake = FakePlayback::start().await;
     {
         let mut s = fake.state.lock().unwrap();
@@ -752,7 +769,6 @@ async fn following_uses_the_heartbeat_the_playback_client_holds() {
         s.song = 11;
         s.length = 120.0;
     }
-    fake.auto_beat(Duration::from_millis(100));
     let service = SettingsService::ephemeral_persistent(PersistentSettings::default());
     let options = PluginOptions {
         step_timeout: Duration::from_secs(2),
@@ -785,7 +801,20 @@ async fn following_uses_the_heartbeat_the_playback_client_holds() {
     persistent.integration_modes.midi_source = stagepilot_core::config::MidiSource::PlaybackApi;
     persistent.propresenter.presenter_follow.enabled = true;
     rt.playback.save_settings(persistent).await.unwrap();
+    for _ in 0..300 {
+        fake.beat();
+        if rt.playback.connection().connected {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     until("connected", || rt.playback.connection().connected).await;
+    (rt, fake, api)
+}
+
+#[tokio::test]
+async fn following_uses_the_heartbeat_the_playback_client_holds() {
+    let (rt, fake, api) = live().await;
     // Playback plays song 11 at 26 s: the cue at 24 s (flat slide 6) is the one to show.
     {
         let mut s = fake.state.lock().unwrap();
@@ -805,4 +834,196 @@ async fn following_uses_the_heartbeat_the_playback_client_holds() {
     fake.beat();
     until("the seek is followed", || api.raw_on_screen() == Some(2)).await;
     rt.stop().await;
+}
+
+// ---- the first slide at the moment Play starts -------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_first_slide_comes_with_playbacks_play_command_not_with_the_next_heartbeat() {
+    let (rt, fake, api) = live().await;
+    // The follower is driven by hand (the tasks are stopped), so every step is one call; only the websocket takes real time.
+    rt.propresenter_follow.stop();
+    let service = &rt.propresenter_follow;
+    service.read_if_due_for_test(&rt).await;
+    assert_eq!(service.status_json(&rt)["songs"][0]["code"], "cues");
+    let items = || {
+        use stagepilot_propresenter::link::api::fake::Trigger;
+        api.triggers()
+            .iter()
+            .map(|t| match t {
+                Trigger::Item { index, .. } => format!("item:{index}"),
+                Trigger::Slide(n) => format!("slide:{n}"),
+            })
+            .collect::<Vec<_>>()
+    };
+
+    // The song is selected and stays stopped (a heartbeat after it proves the select was taken): nothing is triggered.
+    fake.send_raw(r#"{"setlistSelectSong":{"setlistSongID":11}}"#);
+    let beats = rt.playback.status().heartbeat_serial;
+    fake.beat();
+    until("the heartbeat after the select", || {
+        rt.playback.status().heartbeat_serial > beats
+    })
+    .await;
+    service.tick_for_test(&rt).await;
+    assert!(items().is_empty(), "{:?}", items());
+    let beats = rt.playback.status().heartbeat_serial;
+
+    // Play: the command reaches StagePilot before any heartbeat shows it; the item is triggered in the next step.
+    let sent = std::time::Instant::now();
+    fake.send_raw(r#"{"transportPlay":{"playing":true}}"#);
+    until("the play command", || {
+        rt.playback.moment().is_some_and(|m| m.playing)
+    })
+    .await;
+    let seen = sent.elapsed();
+    assert_eq!(
+        rt.playback.status().heartbeat_serial,
+        beats,
+        "no heartbeat since the play"
+    );
+    service.tick_for_test(&rt).await;
+    assert_eq!(items(), strings(&["item:1"]));
+    assert!(seen < Duration::from_millis(300), "{seen:?}");
+    assert_eq!(rt.playback.status().heartbeat_serial, beats);
+    let status = service.status_json(&rt);
+    assert_eq!(status["recent_triggers"][0]["kind"], "item");
+    assert_eq!(status["recent_triggers"][0]["ok"], true);
+
+    // Pause and play on again: the same start, so nothing is shown again.
+    fake.send_raw(r#"{"transportPlay":{"playing":false}}"#);
+    until("the pause", || {
+        rt.playback.moment().is_some_and(|m| !m.playing)
+    })
+    .await;
+    service.tick_for_test(&rt).await;
+    assert_eq!(service.status_json(&rt)["state"], "ready");
+    fake.send_raw(r#"{"transportPlay":{"playing":true}}"#);
+    until("the resume", || {
+        rt.playback.moment().is_some_and(|m| m.playing)
+    })
+    .await;
+    service.tick_for_test(&rt).await;
+    assert_eq!(items(), strings(&["item:1"]));
+
+    // A seek on Playback is followed in the next step, without a heartbeat: 26 s is the cue at 24 s (flat slide 6).
+    fake.send_raw(r#"{"waveformSeek":{"sequenceTime":26.0}}"#);
+    until("the seek", || {
+        rt.playback.moment().is_some_and(|m| m.position > 25.0)
+    })
+    .await;
+    service.tick_for_test(&rt).await;
+    assert_eq!(items(), strings(&["item:1", "slide:6"]));
+    assert_eq!(rt.playback.status().heartbeat_serial, beats);
+
+    // The song is stopped, taken back to the top and played again: its item is shown again, at once.
+    fake.send_raw(r#"{"transportPlay":{"playing":false}}"#);
+    fake.send_raw(r#"{"waveformSeek":{"sequenceTime":0.0}}"#);
+    until("the stop and the seek", || {
+        rt.playback
+            .moment()
+            .is_some_and(|m| !m.playing && m.position < 1.0)
+    })
+    .await;
+    fake.send_raw(r#"{"transportPlay":{"playing":true}}"#);
+    until("the second start", || {
+        rt.playback
+            .moment()
+            .is_some_and(|m| m.playing && m.starts == 2)
+    })
+    .await;
+    service.tick_for_test(&rt).await;
+    assert_eq!(items(), strings(&["item:1", "slide:6", "item:1"]));
+    assert_eq!(rt.playback.status().heartbeat_serial, beats);
+    rt.stop().await;
+}
+
+#[tokio::test]
+async fn a_play_command_for_a_song_that_cannot_be_followed_or_with_the_switch_off_triggers_nothing()
+{
+    let (rt, fake, api) = live().await;
+    rt.propresenter_follow.stop();
+    let service = &rt.propresenter_follow;
+    service.read_if_due_for_test(&rt).await;
+    // The switch off: the play command is seen and nothing is sent.
+    let mut next = rt.settings_service.snapshot();
+    next.propresenter.presenter_follow.enabled = false;
+    rt.settings_service.save(next).unwrap();
+    fake.send_raw(r#"{"transportPlay":{"playing":true}}"#);
+    until("the play command", || {
+        rt.playback.moment().is_some_and(|m| m.playing)
+    })
+    .await;
+    service.tick_for_test(&rt).await;
+    assert!(api.triggers().is_empty());
+    // The link down (the reader's songs are not followable): the same.
+    let mut next = rt.settings_service.snapshot();
+    next.propresenter.presenter_follow.enabled = true;
+    next.propresenter.enabled = false;
+    next.integration_modes.timer_output = TimerOutput::Simulated;
+    rt.settings_service.save(next).unwrap();
+    service.work_out_again();
+    service.read_if_due_for_test(&rt).await;
+    service.tick_for_test(&rt).await;
+    assert!(api.triggers().is_empty(), "{:?}", api.triggers());
+    rt.stop().await;
+}
+
+// ---- the cost of following ------------------------------------------------------------------------------------------------
+
+/// About 50 MB of saved settings: 20 000 songs' lighting data with a long name each (what the rig's settings.json was).
+fn fifty_megabytes() -> PersistentSettings {
+    let mut base = PersistentSettings::default();
+    let name = "x".repeat(2_500);
+    for i in 0..20_000 {
+        let key = format!("song-{i}");
+        base.lights.cue_maps.insert(
+            key.clone(),
+            serde_json::from_value(json!({"song_key": key, "song_title": name})).unwrap(),
+        );
+    }
+    base
+}
+
+#[tokio::test]
+async fn the_tick_and_the_reader_never_copy_the_settings_however_big_they_are() {
+    let w = world_from(true, true, fifty_megabytes()).await;
+    w.switch_direct(true, 0);
+    let service = &w.rt.propresenter_follow;
+    // The reader works the songs out once; the follower follows a playing song.
+    service.read_if_due_for_test(&w.rt).await;
+    w.play(5.0);
+    service.tick_for_test(&w.rt).await;
+    assert_eq!(log(&w), strings(&["item:1", "slide:1"]));
+
+    // 100 ticks and 20 looks of the reader (the reader looks twice a second, the tick ten times): no copy of the settings.
+    let copies = w.rt.settings_service.copies();
+    let began = std::time::Instant::now();
+    for _ in 0..100 {
+        service.tick_for_test(&w.rt).await;
+    }
+    for _ in 0..20 {
+        service.read_if_due_for_test(&w.rt).await;
+    }
+    let spent = began.elapsed();
+    println!("100 ticks and 20 reader looks with 50 MB of settings: {spent:?}");
+    assert_eq!(
+        w.rt.settings_service.copies(),
+        copies,
+        "a tick or a look copied the settings"
+    );
+    assert!(
+        spent < Duration::from_secs(5),
+        "100 ticks took {spent:?}: something big is copied or parsed per tick"
+    );
+
+    // A save is noticed: the next tick reads the section again (once), and the new offset is in use.
+    let mut next = w.rt.settings_service.snapshot();
+    next.propresenter.presenter_follow.offset_ms = 500;
+    w.rt.settings_service.save(next).unwrap();
+    let copies = w.rt.settings_service.copies();
+    service.tick_for_test(&w.rt).await;
+    service.tick_for_test(&w.rt).await;
+    assert!(w.rt.settings_service.copies() <= copies + 1);
+    assert_eq!(w.status().await["offset_ms"], 500);
 }

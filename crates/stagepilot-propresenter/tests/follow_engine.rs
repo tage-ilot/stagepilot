@@ -256,6 +256,7 @@ async fn advance(
             playback: Some(PlaybackNow {
                 position: clock.position,
                 playing,
+                ..PlaybackNow::default()
             }),
             song: Some(song),
         };
@@ -655,6 +656,7 @@ async fn with_the_switch_off_the_fake_sees_no_call_at_all() {
             playback: Some(PlaybackNow {
                 position: clock.position,
                 playing: true,
+                ..PlaybackNow::default()
             }),
             song: Some(&all[0]),
         };
@@ -700,6 +702,7 @@ async fn a_song_that_cannot_be_followed_and_no_song_at_all_send_nothing() {
             Some(PlaybackNow {
                 position: 1.0,
                 playing: true,
+                ..PlaybackNow::default()
             }),
             None,
         ),
@@ -1341,4 +1344,271 @@ async fn the_four_line_series_against_the_one_line_file_triggers_each_cue_of_eve
     assert_eq!(log, want_log);
     // The fake works the raw cue out from the file's own arrangement: each trigger showed the cue of the lines.
     assert_eq!(&got_raw[1..], &want_raw[..]);
+}
+
+// ---- the first slide the moment the song starts; the numbers for the rig -----------------------------------------------------
+
+/// One step at `now` with Playback where the test says (and `starts` as the follower's start counter).
+async fn look(
+    follower: &mut Follower,
+    api: &FakeApi,
+    song: &SongView,
+    now: f64,
+    playback: PlaybackNow,
+) {
+    let input = Input {
+        now,
+        enabled: true,
+        offset_ms: 0,
+        playback: Some(playback),
+        song: Some(song),
+    };
+    follower.step(api, &input).await;
+}
+
+fn at(position: f64, playing: bool, starts: u64) -> PlaybackNow {
+    PlaybackNow {
+        position,
+        playing,
+        age_s: 0.0,
+        starts,
+    }
+}
+
+#[tokio::test]
+async fn the_item_is_shown_in_the_step_that_learns_of_the_start_and_once_per_start() {
+    let rig = rig();
+    let all = songs(&rig, true).await;
+    let (oms, second) = (&all[0], &all[1]);
+    let mut follower = Follower::new(Timing::default());
+    // Loaded and stopped (or merely selected): nothing is triggered, however long it lasts.
+    for i in 0..30 {
+        look(
+            &mut follower,
+            &rig.api,
+            oms,
+            f64::from(i) * 0.1,
+            at(0.0, false, 0),
+        )
+        .await;
+    }
+    assert!(log(&rig.api).is_empty());
+    assert_eq!(follower.handle().status().state, FollowState::Ready);
+
+    // The start signal (Playback's transportPlay, before any heartbeat: the position is the one the event carries, 0 s): the
+    // item (cue 0, the first slide with its background) is triggered in this very step.
+    look(&mut follower, &rig.api, oms, 3.0, at(0.0, true, 1)).await;
+    assert_eq!(log(&rig.api), strings(&["item:0"]));
+    assert_eq!(follower.handle().status().state, FollowState::Following);
+
+    // Playing on (the position moves with the clock, a heartbeat is one more anchor): the item is not shown again, the cues
+    // at 3.53 s and 8.17 s are slides 1 and 2.
+    let mut now = 3.0;
+    let mut position = 0.0;
+    while position < 9.0 {
+        now += 0.1;
+        position += 0.1;
+        look(&mut follower, &rig.api, oms, now, at(position, true, 1)).await;
+    }
+    assert_eq!(log(&rig.api), strings(&["item:0", "slide:1", "slide:2"]));
+
+    // Pause and resume of the same song (`starts` does not move): nothing is shown again, and while paused the line says that
+    // nothing is followed.
+    for _ in 0..20 {
+        now += 0.1;
+        look(&mut follower, &rig.api, oms, now, at(position, false, 1)).await;
+    }
+    let status = follower.handle().status();
+    assert_eq!(
+        (status.state, status.message.as_str()),
+        (
+            FollowState::Ready,
+            "Ready: waiting for Playback to play the song"
+        )
+    );
+    assert_eq!(status.slide, Some(2), "the slide on screen is still known");
+    for _ in 0..20 {
+        now += 0.1;
+        position += 0.1;
+        look(&mut follower, &rig.api, oms, now, at(position, true, 1)).await;
+    }
+    assert_eq!(log(&rig.api), strings(&["item:0", "slide:1", "slide:2"]));
+    assert_eq!(follower.handle().status().state, FollowState::Following);
+
+    // The same song starts again from the top (`starts` moved): its item is shown again at once, not on a later beat.
+    now += 0.1;
+    look(&mut follower, &rig.api, oms, now, at(0.0, true, 2)).await;
+    assert_eq!(
+        log(&rig.api),
+        strings(&["item:0", "slide:1", "slide:2", "item:0"])
+    );
+
+    // The next song of the service: its own item in the step that learns of the start.
+    now += 0.1;
+    look(&mut follower, &rig.api, second, now, at(0.0, true, 3)).await;
+    assert_eq!(log(&rig.api)[4..], strings(&["item:1"]));
+    assert_eq!(rig.api.active_file().as_deref(), Some("Second Song"));
+}
+
+#[tokio::test]
+async fn a_song_started_in_the_middle_shows_the_item_and_then_the_wanted_slide_in_one_step() {
+    let rig = rig();
+    let all = songs(&rig, true).await;
+    let mut follower = Follower::new(Timing::default());
+    // Seek to 90 s while stopped, then play: the signal carries 90 s.
+    look(&mut follower, &rig.api, &all[0], 0.0, at(90.0, false, 0)).await;
+    assert!(log(&rig.api).is_empty());
+    look(&mut follower, &rig.api, &all[0], 0.1, at(90.0, true, 0)).await;
+    assert_eq!(log(&rig.api), strings(&["item:0", "slide:24"]));
+}
+
+#[tokio::test]
+async fn a_start_for_a_song_that_cannot_be_followed_or_with_the_switch_off_triggers_nothing() {
+    let rig = rig();
+    let statuses = rig
+        .preparer
+        .prepare(&*rig.host, &*rig.api, &inputs(true), true)
+        .await; // no active playlist: not found
+    rig.api.clear_calls();
+    let not_there = view(&statuses[0]);
+    let mut follower = Follower::new(Timing::default());
+    look(&mut follower, &rig.api, &not_there, 0.0, at(0.0, true, 1)).await;
+    assert!(rig.api.calls().is_empty());
+    // Switch off: the start is not looked at either.
+    let all = songs(&rig, true).await;
+    let input = Input {
+        now: 1.0,
+        enabled: false,
+        offset_ms: 0,
+        playback: Some(at(0.0, true, 2)),
+        song: Some(&all[0]),
+    };
+    follower.step(&*rig.api, &input).await;
+    assert!(rig.api.calls().is_empty());
+    assert!(follower.handle().recent_triggers().is_empty());
+}
+
+/// A clock that moves 40 ms at every reading: the answer of a trigger is the time between two readings.
+fn ticking(step_s: f64) -> stagepilot_propresenter::follow::engine::Clock {
+    let now = Arc::new(std::sync::Mutex::new(0.0_f64));
+    Arc::new(move || {
+        let mut now = now.lock().unwrap();
+        *now += step_s;
+        *now
+    })
+}
+
+#[tokio::test]
+async fn every_trigger_is_written_down_with_its_lateness_the_answer_time_and_when_the_poll_saw_it()
+{
+    use stagepilot_propresenter::follow::engine::{TriggerKind, TriggerWhy};
+    let rig = rig();
+    let all = songs(&rig, true).await;
+    // A frozen clock: the lateness is the position's own (nothing else passes while a step runs).
+    let mut follower = Follower::new(Timing::default()).with_clock(Arc::new(|| 0.0));
+    // The start signal was received 30 ms before this step looked at it.
+    let first = PlaybackNow {
+        age_s: 0.03,
+        ..at(0.0, true, 1)
+    };
+    look(&mut follower, &rig.api, &all[0], 10.0, first).await;
+    // 70 ms after the cue at 3.53 s (flat slide 1).
+    look(&mut follower, &rig.api, &all[0], 10.1, at(3.6, true, 1)).await;
+    look(&mut follower, &rig.api, &all[0], 10.2, at(3.7, true, 1)).await;
+    let recent = follower.handle().recent_triggers();
+    assert_eq!(recent.len(), 2, "{recent:?}");
+    let (item, slide) = (&recent[0], &recent[1]);
+    assert_eq!(
+        (item.seq, item.kind, item.why, item.slide, item.ok),
+        (1, TriggerKind::Item, TriggerWhy::Play, 0, true)
+    );
+    assert_eq!(item.late_ms, Some(30.0), "since the signal came in");
+    // The poll saw the item (slide 0) on its first look after it, 100 ms later (the fast poll while one waits to be seen).
+    assert_eq!(item.seen_ms, Some(100.0));
+    assert_eq!(
+        (slide.seq, slide.kind, slide.why, slide.slide),
+        (2, TriggerKind::Slide, TriggerWhy::Cue, 1)
+    );
+    assert_eq!(
+        slide.late_ms,
+        Some(70.0),
+        "the position minus the cue's time"
+    );
+    assert_eq!(slide.seen_ms, Some(100.0));
+    assert_eq!(item.song, "Oh My Soul");
+
+    // A seek far past a cue is a catch-up, and it says so.
+    look(&mut follower, &rig.api, &all[0], 10.3, at(30.0, true, 1)).await;
+    let last = follower.handle().recent_triggers().pop().unwrap();
+    assert_eq!(last.why, TriggerWhy::CatchUp);
+    assert_eq!(last.seen_ms, None, "not seen yet");
+}
+
+#[tokio::test]
+async fn the_answer_time_is_what_the_clock_measured_around_the_request_and_only_twenty_are_kept() {
+    let rig = rig();
+    let all = songs(&rig, true).await;
+    let mut follower = Follower::new(Timing::default()).with_clock(ticking(0.04));
+    look(&mut follower, &rig.api, &all[0], 0.0, at(0.0, true, 1)).await;
+    look(&mut follower, &rig.api, &all[0], 0.1, at(3.6, true, 1)).await;
+    let recent = follower.handle().recent_triggers();
+    assert_eq!(
+        recent.iter().map(|r| r.answer_ms).collect::<Vec<_>>(),
+        vec![40.0, 40.0]
+    );
+    // Seek between two slides: every step triggers one. Only the last twenty stay, oldest first.
+    let mut now = 0.2;
+    for i in 0..30 {
+        now += 0.1;
+        let position = if i % 2 == 0 { 9.0 } else { 3.6 };
+        look(&mut follower, &rig.api, &all[0], now, at(position, true, 1)).await;
+    }
+    let recent = follower.handle().recent_triggers();
+    assert_eq!(recent.len(), 20);
+    assert_eq!(recent.last().unwrap().seq, 32);
+    assert_eq!(recent.first().unwrap().seq, 13);
+}
+
+#[tokio::test]
+async fn a_failed_trigger_is_written_down_as_failed() {
+    let rig = rig();
+    let all = songs(&rig, true).await;
+    let mut follower = Follower::new(Timing::default());
+    rig.api.fail_triggers(Some(ApiError::Status(500)));
+    look(&mut follower, &rig.api, &all[0], 0.0, at(0.0, true, 1)).await;
+    let recent = follower.handle().recent_triggers();
+    assert_eq!(recent.len(), 1);
+    assert!(!recent[0].ok);
+    assert_eq!(recent[0].seen_ms, None);
+}
+
+#[tokio::test]
+async fn the_position_moves_on_by_itself_so_a_slide_never_waits_for_a_heartbeat() {
+    // No new anchor for 10 s: the caller's extrapolated position is all the follower gets, and every cue is triggered on the
+    // first 100 ms step after it, however far the last heartbeat is.
+    let rig = rig();
+    let all = songs(&rig, true).await;
+    let mut follower = Follower::new(Timing::default()).with_clock(Arc::new(|| 0.0));
+    let mut now = 0.0;
+    let mut position = 0.0;
+    look(&mut follower, &rig.api, &all[0], now, at(position, true, 1)).await;
+    while position < 12.0 {
+        now += 0.1;
+        position += 0.1;
+        let aged = PlaybackNow {
+            age_s: position,
+            ..at(position, true, 1)
+        };
+        look(&mut follower, &rig.api, &all[0], now, aged).await;
+    }
+    let slides: Vec<_> = follower
+        .handle()
+        .recent_triggers()
+        .into_iter()
+        .filter(|r| r.slide > 0)
+        .collect();
+    assert_eq!(slides.len(), 3, "{slides:?}");
+    for r in slides {
+        assert!(r.late_ms.unwrap() <= 100.0, "{r:?}");
+    }
 }

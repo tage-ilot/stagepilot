@@ -1829,12 +1829,15 @@ pub fn effective_settings(rt: &Runtime) -> PlaybackLibrarySettings {
 
 /// The same from the settings service alone (the automatic update reads it without a `Runtime`).
 pub fn settings_from(settings_service: &SettingsService) -> PlaybackLibrarySettings {
-    let saved = settings_service.snapshot();
-    let mut library = saved.playback_library;
+    // Read in place: only the library section and the Playback host are copied, never the whole settings.
+    let (mut library, host) = settings_service.with_persistent(|saved| {
+        (
+            saved.playback_library.clone(),
+            saved.playback_api.host.clone(),
+        )
+    });
     if library.address.is_empty() {
-        if let Some(host) = saved
-            .playback_api
-            .host
+        if let Some(host) = host
             .as_deref()
             .map(str::trim)
             .filter(|host| !host.is_empty())

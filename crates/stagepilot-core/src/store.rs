@@ -41,6 +41,11 @@ impl StateStore {
         self.lock().clone()
     }
 
+    /// Reads the state in place, without a copy of it. The lock is held while `read` runs: keep it short.
+    pub fn with_state<R>(&self, read: impl FnOnce(&ApplicationState) -> R) -> R {
+        read(&self.lock())
+    }
+
     /// Apply `mutation`, bump the revision, stamp `updated_at`, notify observers, return the
     /// resulting snapshot.
     pub fn mutate<F: FnOnce(&mut ApplicationState)>(&self, mutation: F) -> ApplicationState {

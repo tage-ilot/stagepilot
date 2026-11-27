@@ -13,7 +13,7 @@ export const followSongs = (...verdicts: Partial<FollowSong>[]): FollowSong[] =>
 export const NO_CUES_SONG: Partial<FollowSong> = { code: "bars", text: "Following by bars (no Playback cues)", following: "bars", advice: "No cues: in Playback choose a ProPresenter 1 Line Template for this song" };
 
 export const followStatus = (over: Partial<FollowStatus> = {}): FollowStatus => ({
-  enabled: true, offset_ms: 0, state: "idle", message: "Nothing to follow", song: null, section: null, slide: null, hold_reason: null, can_try_again: false, songs: followSongs(), ...over,
+  enabled: true, offset_ms: 0, state: "idle", message: "Nothing to follow", song: null, section: null, slide: null, hold_reason: null, can_try_again: false, recent_triggers: [], songs: followSongs(), ...over,
 });
 
 export const followController = (over: Partial<PresenterFollowController> = {}): PresenterFollowController => ({

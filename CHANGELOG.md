@@ -2,7 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The Auto-Presenter's first slide appears as the song starts.** With the Auto-Presenter on, the song's first slide (the one that usually carries the song's own background) is shown in ProPresenter the moment you press Play in Playback, not up to a second and a half later when Playback's next heartbeat arrived. A song started in the middle shows that first slide and then the right slide at once; pausing and resuming does not show it again, starting the song again from the top does, and so does the next song. A seek in Playback is followed at once too. Nothing changes with the switch off, for a song that cannot be followed, or when a song is only selected.
+- **The Auto-Presenter status keeps the last 20 triggers with their timing** (`recent_triggers`: how late each left against its cue, how long ProPresenter took to answer and when the slide was first seen on screen, in milliseconds), and logs one debug line for each, so the next rig run can tell where the delay between a cue and the slide on the output goes. Nothing is shown in the window or at the default log level.
+
 ### Fixed
+
+- **The Auto-Presenter no longer says "Following" while Playback is stopped or paused.** The summary line says `Ready: waiting for Playback to play the song` until the song plays again.
+- **The Auto-Presenter no longer copies the whole settings file ten times a second.** On the rig the settings file was 49 MB and StagePilot used 86 to 122 % of a core while idle with the switch on; the follower and the song reader now copy only what they need (the switch, the offset, ProPresenter's address) and only after a save, and read the plan where it lies.
 
 - **The Auto-Presenter follows a song with the 2 Line and 4 Line template too when Playback sends a slide a bar before its section, and the first slide of a repeated section shows at its own repeat.** On a real song, Playback's cue for the first slide of a section can come up to a bar (about 3 s) before the section starts; StagePilot only allowed 2 s, so it lost count of Playback's lines per slide and refused the song (`Cues do not match the file`) and a repeated section (like a Tag played four times) showed its first slide at the wrong repeat. Both are fixed, and a song that matches by lines says `Aligned by lines`.
 - **The locked Auto-Presenter card names the real cause right after an install, and `No cues: following by bars` no longer looks like an error.** While the Library Link waits for you to allow the keychain prompt, the card says to allow it instead of sending you to the setup; the no-cues chip uses the calm information look.
