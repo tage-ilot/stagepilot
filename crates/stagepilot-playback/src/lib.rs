@@ -1,4 +1,5 @@
 //! Playback WebSocket client, normalizer, discovery, arbiter and lengths.
+pub mod anchor;
 pub mod api;
 pub mod arbiter;
 pub mod arrangement;

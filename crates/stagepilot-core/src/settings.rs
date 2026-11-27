@@ -1109,6 +1109,10 @@ pub struct SettingsService {
     /// How many saves this process has made (0 at start). Bumped in the one place every save passes
     /// through, so a recording, a loudness take, a cue-map save and a settings save all count.
     revision: AtomicU64,
+    /// How many whole copies of the settings have been handed out (`snapshot`, `effective_snapshot`,
+    /// `effective_runtime_settings`). A copy is a copy of every song's rows, so a loop that makes one per tick is a
+    /// cost; tests read this to prove none does.
+    copies: AtomicU64,
 }
 
 impl SettingsService {
@@ -1130,6 +1134,7 @@ impl SettingsService {
                 secret_unread: false,
             }),
             revision: AtomicU64::new(0),
+            copies: AtomicU64::new(0),
         }
     }
 
@@ -1350,11 +1355,38 @@ impl SettingsService {
     }
 
     pub fn snapshot(&self) -> PersistentSettings {
+        self.copies.fetch_add(1, Ordering::Relaxed);
         self.lock().persistent.clone()
+    }
+
+    /// How many whole copies of the settings have been made since the process started (see the field).
+    pub fn copies(&self) -> u64 {
+        self.copies.load(Ordering::Relaxed)
+    }
+
+    /// Reads the saved settings in place: no copy is made, and `read` should return only what it needs (the lock is held while
+    /// it runs, so it must be quick and must not call back into the service).
+    pub fn with_persistent<R>(&self, read: impl FnOnce(&PersistentSettings) -> R) -> R {
+        read(&self.lock().persistent)
+    }
+
+    /// Only the ProPresenter section of the effective runtime settings: a copy of the section, not of every song's rows.
+    pub fn effective_propresenter_settings(&self) -> ProPresenterSettings {
+        let mut s = self.lock();
+        if s.runtime.is_none() {
+            let r = self.resolve(&s.persistent.clone());
+            self.copies.fetch_add(1, Ordering::Relaxed);
+            s.runtime = Some(r);
+        }
+        s.runtime.as_ref().map_or_else(
+            || RuntimeSettings::demo().propresenter,
+            |r| r.propresenter.clone(),
+        )
     }
 
     /// Persisted settings with the environment's effective values layered in (`effective_snapshot`).
     pub fn effective_snapshot(&self) -> PersistentSettings {
+        self.copies.fetch_add(1, Ordering::Relaxed);
         let s = self.lock();
         let Some(runtime) = &s.runtime else {
             return s.persistent.clone();
@@ -1380,6 +1412,7 @@ impl SettingsService {
     }
 
     pub fn effective_runtime_settings(&self) -> RuntimeSettings {
+        self.copies.fetch_add(1, Ordering::Relaxed);
         let mut s = self.lock();
         if s.runtime.is_none() {
             let r = self.resolve(&s.persistent.clone());

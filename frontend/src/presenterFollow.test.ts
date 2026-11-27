@@ -18,6 +18,15 @@ describe("the status line", () => {
     expect(followLine(followStatus({ state: "following", section: { index: 0, name: "" }, slide: null }), true, null).text).toBe("Following: Count Off");
   });
 
+  it("never says Following while Playback is stopped or paused: the song that was shown waits for the next Play", () => {
+    const song = { key: "k1", title: "Holy Forever" };
+    // A song loaded and not played yet keeps its own words; one that was shown (a slide is known) and stopped says it waits.
+    expect(followLine(followStatus({ state: "ready", song, slide: null }), true, null).text).toBe("Ready: Holy Forever starts when Playback plays it");
+    const stopped = followLine(followStatus({ state: "ready", song, slide: 6, message: "Ready: waiting for Playback to play the song" }), true, null);
+    expect(stopped).toMatchObject({ text: "Ready: waiting for Playback to play the song", state: "ready", tone: "idle" });
+    expect(stopped.text).not.toMatch(/Following/);
+  });
+
   it("says in words that a person's click holds the song, and that failures paused it (both with a mark)", () => {
     const held = followLine(followStatus({ state: "held", message: "Paused: someone changed the slide in ProPresenter", hold_reason: "Paused: someone changed the slide in ProPresenter" }), true, null);
     expect(held).toMatchObject({ text: "Paused: someone changed the slide in ProPresenter", mark: "!", tone: "warning" });

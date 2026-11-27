@@ -502,12 +502,25 @@ say), in the status below.
 
 ### What StagePilot does while the song plays
 
-- **A song starts.** The playlist item is shown (`GET /v1/playlist/{playlist}/{item}/trigger`, which shows the first slide, the Count Off),
-  the active presentation is read (`GET /v1/presentation/active`) to be sure it is the song's own, and the wanted slide is triggered
-  (`GET /v1/presentation/active/{n}/trigger`). A song started in the middle works the same: the slide for that second is shown at once.
-- **The wanted slide comes from the position.** About ten times a second the position Playback reports (it beats about once a second,
-  and the position is moved on between beats) is compared with the song's schedule: the last slide due at the position plus the offset.
-  Seeks and section loops are therefore followed by themselves, unlike the countdown timer, which ignores loops.
+- **A song starts, and its first slide appears as it starts.** Playback's own Play command is the earliest sign there is (the same
+  one the countdown timer and the lights act on); StagePilot does not wait for the next heartbeat, which can be a second late. Within
+  one 100 ms step of that command the playlist item is shown (`GET /v1/playlist/{playlist}/{item}/trigger`, the song's first slide
+  with the background that usually belongs to the song), the active presentation is read (`GET /v1/presentation/active`) to be sure it
+  is the song's own, and the wanted slide is triggered (`GET /v1/presentation/active/{n}/trigger`). A song started in the middle (a seek
+  and then Play) shows the item and then the wanted slide at once. The item is shown once per start: not again when the same song is
+  paused and resumed or after a seek, again when the song is started again from the top, and for the next song of the service. A song
+  that is only selected or loaded and stays stopped shows nothing; neither does a song that cannot be followed, a switch that is off
+  or a link that is down. (Without Playback's fast transport setting, or when Playback moves on to the next song by itself, the first
+  heartbeat is the first sign, as before.)
+- **The wanted slide comes from the position, never from a heartbeat.** About ten times a second the position is compared with the
+  song's schedule: the last slide due at the position plus the offset. The position is the last thing Playback told us (a heartbeat,
+  or a Play or seek command that came after it) taken at the moment it was received, moved on by the time since while the song plays.
+  So a slide never waits for the next heartbeat, and a seek on Playback (which carries its new position) is followed in the next step.
+  A section jump or loop carries no position: it is followed by the next heartbeat (at most about a second). A heartbeat that was
+  already on its way when a command came (it still shows the old play state or place, and arrives within 1.5 s of the command) is
+  ignored; the next one is believed. The only unknown is how long a heartbeat was on its way (a few milliseconds on a LAN); the rig
+  measured Playback's clock against the wall clock at rate 1.0001 with a residual of 7 ms, so there is no drift to correct. Seeks and
+  section loops are therefore followed by themselves, unlike the countdown timer, which ignores loops.
 - **Pause, stop and the end of the song** trigger nothing: the slide stays. On resume the wanted slide is shown if it is another one.
 - **The right song must be on screen.** If another presentation is active before a slide is triggered, the playlist item is shown again,
   at most once every 2 seconds.
@@ -519,6 +532,14 @@ say), in the status below.
 - **Failures.** A trigger that fails is tried again no sooner than a second later. The first failure and then one a minute are written to the
   log. After five failed triggers in a row following is paused ("Paused: ProPresenter did not take 5 slide changes in a row ...") until the
   next song or the **Try again** button (`POST /api/v1/propresenter-follow/try-again`). It never retries in a tight loop.
+- **The numbers for the rig.** Every trigger is written down (the last 20 are in the status as `recent_triggers`): how late it left
+  against the moment it was due, how long ProPresenter took to answer, and how long after it the status poll first saw the slide on
+  screen. Together they split the delay between a slide's cue and the slide on the output into StagePilot, the beat of Playback's cues and
+  ProPresenter itself. Each also goes into the log as one `presenter_follow_trigger` line at DEBUG level (never in the default log).
+  While a trigger waits to be seen, ProPresenter's slide is read every 100 ms instead of every 250 ms.
+- **The cost of following is small.** The 100 ms step and the reader never copy the settings or the service plan: what they need (the
+  switch, the offset, ProPresenter's address) is copied once and again only after a save, and the plan is read where it lies. A
+  `settings.json` of 49 MB (every song's lighting data) no longer costs a core while the switch is on.
 - **Nothing here waits for anything else.** Following runs in two tasks of its own (one that follows every 100 ms and one that reads
   ProPresenter's playlist and song files), so a slow ProPresenter can delay a slide but never the countdown timer, the lights or the screen.
 
@@ -560,11 +581,20 @@ seconds while no song plays (never while one plays).
 
 ```
 {enabled, offset_ms, state, message, song: {key, title} | null, section: {index, name} | null, slide, hold_reason, can_try_again,
- songs: [{key, title, following: "cues" | "bars" | null, code, text, advice, lines_per_slide, playback_lines, template}]}
+ songs: [{key, title, following: "cues" | "bars" | null, code, text, advice, lines_per_slide, playback_lines, template}],
+ recent_triggers: [{seq, song, kind: "item" | "slide", why: "play" | "cue" | "catch_up", slide, ok, late_ms, answer_ms, seen_ms}]}
 ```
 
-`state` is `off`, `idle` (nothing to follow), `ready` (the song is loaded and not playing), `following`, `held` (a click holds it), `paused`
-(failures) or `not_followed`. `slide` is ProPresenter's number of the slide StagePilot last showed. It is **not** part of `/api/v1/health`: no
+`state` is `off`, `idle` (nothing to follow), `ready` (the song is loaded and not playing, or was shown and Playback is stopped or paused:
+`Ready: waiting for Playback to play the song`; the summary never says `Following` then), `following` (the song plays), `held` (a click holds
+it), `paused` (failures) or `not_followed`.
+
+`recent_triggers` holds the last 20 triggers, oldest first, numbers in milliseconds with one decimal. `late_ms` is how late the trigger left
+against its moment on Playback's clock: for a slide the position (with the offset) minus the time of its cue when the request was sent, for
+the item the time since StagePilot learned that the song plays (`null` for the slide before the first cue). `why` is `play` (the item),
+`cue` (the position reached the cue) or `catch_up` (the position jumped: a seek, a loop, a song started in the middle; `late_ms` then says
+how far past the cue it was). `answer_ms` is how long ProPresenter took to answer the trigger; `seen_ms` how long after the trigger the status
+poll first saw that slide on screen (`null` until it did, or when it never did within 5 seconds, or when the next trigger came first). `slide` is ProPresenter's number of the slide StagePilot last showed. It is **not** part of `/api/v1/health`: no
 state of following changes the header's Ready or Check-system verdict.
 
 `lines_per_slide` is the usual number of text lines of a slide in the song's file and `template` the Playback Lyrics Bus template that

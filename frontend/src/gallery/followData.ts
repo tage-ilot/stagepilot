@@ -31,7 +31,7 @@ const LINK_GONE: Verdict = { code: "link_not_ready", text: "ProPresenter Link no
 const LIBRARY_GONE: Verdict = { code: "library_not_ready", text: "Playback's Library Link not ready" };
 
 const status = (over: Partial<FollowStatus>): FollowStatus => ({
-  enabled: true, offset_ms: 0, state: "idle", message: "Nothing to follow", song: null, section: null, slide: null, hold_reason: null, can_try_again: false, songs: songs(CUES), ...over,
+  enabled: true, offset_ms: 0, state: "idle", message: "Nothing to follow", song: null, section: null, slide: null, hold_reason: null, can_try_again: false, recent_triggers: [], songs: songs(CUES), ...over,
 });
 const playing = { song: { key: "k1", title: "Holy Forever" }, section: { index: 3, name: "Chorus" } };
 

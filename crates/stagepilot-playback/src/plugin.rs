@@ -435,6 +435,8 @@ struct Shared {
     discovery_abort: Option<tokio::task::AbortHandle>,
     /// Why the Library Link's order is not in use, as one plain line (information only).
     library_note: Option<String>,
+    /// Where the song is between heartbeats (see `anchor`): the earliest signal of a start or a seek.
+    tracker: crate::anchor::PositionTracker,
 }
 
 struct Inner {
@@ -562,6 +564,7 @@ impl PlaybackPlugin {
             discovery_cancel: CancelToken::new(),
             discovery_abort: None,
             library_note: None,
+            tracker: crate::anchor::PositionTracker::default(),
         }));
         let mut dispatcher = ArbitratedDispatcher::new(
             arbiter.clone(),
@@ -602,6 +605,16 @@ impl PlaybackPlugin {
 
     pub fn status(&self) -> PlaybackStatus {
         self.inner.status()
+    }
+
+    /// Where Playback's song is right now: the newest of the last heartbeat and the transport and seek events that came after it,
+    /// moved on while it plays. `None` without a connection or a song. See `anchor`.
+    pub fn moment(&self) -> Option<crate::anchor::Moment> {
+        let s = lock(&self.inner.shared);
+        if !s.active {
+            return None;
+        }
+        s.tracker.moment(Instant::now())
     }
 
     pub fn connection(&self) -> PlaybackConnection {
@@ -1316,6 +1329,7 @@ impl Inner {
                 let mut s = lock(&self.shared);
                 s.active = true;
                 s.seen_serial = 0;
+                s.tracker.clear();
                 s.generation
             };
             let weak: Weak<Inner> = Arc::downgrade(self);
@@ -1335,6 +1349,7 @@ impl Inner {
             let mut s = lock(&self.shared);
             s.active = false;
             s.generation += 1;
+            s.tracker.clear();
             s.mapper.discard_pending();
             s.client.clone()
         };
@@ -1419,6 +1434,14 @@ impl Inner {
             if !s.active || generation != s.generation {
                 return;
             }
+            let received = Instant::now();
+            s.tracker.observe(
+                received,
+                status.connected && !status.loading_setlist,
+                status.heartbeat,
+                status.heartbeat_serial,
+                events,
+            );
             let fresh = status.heartbeat.is_some() && status.heartbeat_serial != s.seen_serial;
             if fresh {
                 s.heartbeat = status.heartbeat;
