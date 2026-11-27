@@ -60,6 +60,7 @@ import type {
   ProPresenterPlaylist,
 } from "./propresenterLink";
 import type { ProPresenterScan } from "./propresenterScan";
+import type { FollowStatus } from "./presenterFollow";
 
 const SERVER_PORT_KEY = "stagepilot.server-port";
 const configuredOrigin = import.meta.env.VITE_STAGEPILOT_API_URL as string | undefined;
@@ -516,6 +517,9 @@ export const startProPresenterHelperInstall = (address?: string) =>
 /** Ends the setup session (the command stops working at once). */
 export const endProPresenterHelperInstall = () =>
   requestJson<{ ended: boolean }>("/api/v1/propresenter-link/helper-install", { method: "DELETE" });
+// Following Playback with the lyrics in ProPresenter (the switch itself is `propresenter.presenter_follow` in the settings). The status never feeds the header's verdict.
+export const getPresenterFollowStatus = () => requestJson<FollowStatus>("/api/v1/propresenter-follow/status", { cache: "no-store" });
+export const presenterFollowTryAgain = () => requestJson<FollowStatus>("/api/v1/propresenter-follow/try-again", { method: "POST" });
 export const getProPresenterPlaylists = () =>
   requestJson<{ playlists: ProPresenterPlaylist[] }>("/api/v1/propresenter-link/playlists");
 /** Which of these song titles ProPresenter's Songs library has (file names only: nothing is written, the screen is not touched). */

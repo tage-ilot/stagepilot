@@ -23,16 +23,18 @@ export interface StatusChipProps extends StatusWords {
   testId?: string;
   /** In a list row: as wide as the chip column, so the chips line up. */
   column?: boolean;
+  /** A long phrase may wrap inside its card (the chip shrinks to the width it has) instead of running over the card's edge. */
+  wrap?: boolean;
   /** The icon is a small spinner (a step that is running). */
   spinner?: boolean;
   /** Said after the word for a screen reader only (`: Working`). */
   sr?: string;
 }
 
-export function StatusChip({ word, mark, tone, title, testId, column = false, spinner = false, sr }: StatusChipProps) {
+export function StatusChip({ word, mark, tone, title, testId, column = false, wrap = false, spinner = false, sr }: StatusChipProps) {
   return (
     <span
-      className={cx("inline-flex min-w-0 items-center gap-1.5 border bg-surface-950 px-2 py-0.5 text-[0.8125rem] font-semibold leading-snug", column ? "w-fit max-w-full sm:w-full" : "flex-none", CHIP_TONE[tone] ?? CHIP_TONE.idle)}
+      className={cx("inline-flex min-w-0 items-center gap-1.5 border bg-surface-950 px-2 py-0.5 text-[0.8125rem] font-semibold leading-snug", column ? "w-fit max-w-full sm:w-full" : wrap ? "max-w-full" : "flex-none", CHIP_TONE[tone] ?? CHIP_TONE.idle)}
       data-testid={testId}
       data-tone={tone}
       title={title}

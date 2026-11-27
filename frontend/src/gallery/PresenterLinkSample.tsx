@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import type { PresenterFollowController } from "../hooks/usePresenterFollow";
 import { PresenterLinkSection } from "../components/PresenterLinkSection";
 import { PRESENTER_LINK_OPEN_KEY } from "../components/proPresenterLinkState";
 import { Button } from "../components/ui/Button";
@@ -7,17 +8,19 @@ import { Panel } from "../components/ui/Panel";
 import { PresenterApiContext, type PresenterApi } from "../hooks/presenterApi";
 import type { Song } from "../types";
 import { linkController, linkOf } from "./fixtures";
+import { useMadeUpFollow } from "./followData";
+import type { FollowStatus } from "../presenterFollow";
 import { madeUpPresenterApi, NAMES_IN_PROPRESENTER, PLAN_NAMES, type Scenario, withoutPlayback, withPlayback } from "./presenterLinkData";
 import { Fresh, Scripted, type Step } from "./Scripted";
 
 /** The Presenter Link as it sits in the Presentation panel (the real panel frame, in the Presentation colour), asked of a made-up StagePilot. */
-export function Sample({ scenario, steps = [], playback = false, songs, playing = false, link = linkController(linkOf("ready")), gap, open = true, plan = PLAN_NAMES }: { scenario?: Scenario; steps?: Step[]; playback?: boolean; /** How many of Playback's songs (four by default). */ songs?: number; playing?: boolean; link?: ReturnType<typeof linkController>; gap?: number; /** The remembered open flag the sample starts from: open (the body is what the state shows) or folded, as a new install is. */ open?: boolean; /** The loaded plan's Planning Center songs. */ plan?: { songs: Song[] } }) {
+export function Sample({ scenario, steps = [], playback = false, songs, playing = false, link = linkController(linkOf("ready")), gap, open = true, plan = PLAN_NAMES, follow, library }: { scenario?: Scenario; steps?: Step[]; playback?: boolean; /** How many of Playback's songs (four by default). */ songs?: number; playing?: boolean; link?: ReturnType<typeof linkController>; gap?: number; /** The remembered open flag the sample starts from: open (the body is what the state shows) or folded, as a new install is. */ open?: boolean; /** The loaded plan's Planning Center songs. */ plan?: { songs: Song[] }; /** Following Playback (the switch, the status and each song's chip); left out, the section draws as it did before. */ follow?: PresenterFollowController; /** The Library Link, when the state is about it (otherwise Playback's songs come from `playback`). */ library?: ReturnType<typeof withPlayback> }) {
   const [api] = useState<PresenterApi>(() => madeUpPresenterApi(scenario));
   return (
     <Fresh flags={{ [PRESENTER_LINK_OPEN_KEY]: open }}>
       <PresenterApiContext.Provider value={api}>
         <Scripted gap={gap} patient steps={steps}>
-          <Panel tone="presentation" variant="setup"><PresenterLinkSection library={playback ? withPlayback(songs) : withoutPlayback()} link={link} plan={plan} playing={playing} /></Panel>
+          <Panel tone="presentation" variant="setup"><PresenterLinkSection follow={follow} library={library ?? (playback ? withPlayback(songs) : withoutPlayback())} link={link} plan={plan} playing={playing} /></Panel>
         </Scripted>
       </PresenterApiContext.Provider>
     </Fresh>
@@ -41,5 +44,12 @@ export function Swap({ steps }: { steps: Step[] }) {
       </PresenterApiContext.Provider>
     </Fresh>
   );
+}
+
+
+/** The Presenter Link with Follow Playback in ProPresenter under it. The follower answers from made-up data and the switch really switches (it swaps between `on` and the off answer). */
+export function Follow({ on, enabled = true, steps, offsetMs, link = linkController(linkOf("ready")), library = withPlayback() }: { on: FollowStatus; enabled?: boolean; steps?: Step[]; offsetMs?: number; link?: ReturnType<typeof linkController>; library?: ReturnType<typeof withPlayback> }) {
+  const follow = useMadeUpFollow({ on, enabled, offsetMs });
+  return <Sample follow={follow} library={library} link={link} steps={steps} />;
 }
 

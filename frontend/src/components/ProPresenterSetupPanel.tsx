@@ -21,6 +21,7 @@ import { ProPresenterLinkBlock } from "./ProPresenterLinkBlock";
 import { PresenterLinkSection } from "./PresenterLinkSection";
 import { VerseVisionButton } from "./VerseVisionButton";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
+import type { PresenterFollowController } from "../hooks/usePresenterFollow";
 
 const DEFAULT_TIMEOUT_SECONDS = 3;
 const CHOOSE_TIMER = "Choose a timer";
@@ -42,6 +43,7 @@ export function ProPresenterSetupPanel({
   onClose,
   onDirtyChange,
   link,
+  follow,
   library,
   plan,
   playing = false,
@@ -59,6 +61,8 @@ export function ProPresenterSetupPanel({
   onDirtyChange?: (dirty: boolean) => void;
   /** The optional Presenter Link (its line, pill and setup in the Live Link block). Left out, the block holds the connection and the ProPresenter API line only. */
   link?: ProPresenterLinkController;
+  /** Following Playback with the lyrics in ProPresenter (its switch, status and timing sit in the Presenter Link area). */
+  follow?: PresenterFollowController;
   /** The Playback library (the Library Link): when it has given the songs of the upcoming plan, the Presenter Link section lists those instead of the plan's Planning Center names. */
   library?: PlaybackLibraryController;
   /** The loaded service plan: its song names are the Presenter Link list until Playback has given the songs. */
@@ -296,7 +300,7 @@ export function ProPresenterSetupPanel({
       )}
       content={(
         <>
-          {link ? <PresenterLinkSection library={library} link={link} plan={plan} playing={playing} /> : undefined}
+          {link ? <PresenterLinkSection follow={follow} library={library} link={link} plan={plan} playing={playing} /> : undefined}
           <VerseVisionButton />
         </>
       )}
