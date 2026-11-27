@@ -33,6 +33,10 @@ use sha2::{Digest, Sha256};
 
 /// How far before a section's start a cue may come and still be that section's (Playback sends cues ahead of the lyric).
 pub const SECTION_LEAD_S: f64 = 2.0;
+/// How far before a section's start the FIRST slide of a section may be sent and still be that section's. Playback sends it up to
+/// one bar ahead (3.2 to 3.4 s at 71 bpm in the real recording), more than [`SECTION_LEAD_S`]; such a cue is only the next
+/// section's when it cannot be the continuation of the section it is in (see [`assign`]).
+pub const SECTION_LEAD_MAX_S: f64 = 4.0;
 /// Fewest cues a song needs to be followed by them.
 pub const MIN_CUES: usize = 3;
 /// The arrangement the Presenter Link writes and the follower reads.
@@ -477,10 +481,14 @@ fn exact_or_aligned(
         }
         return align(map, sections, sorted, extras, mismatch);
     }
+    let sections_of = if map.arrangement.len() == sections.len() {
+        assign(map, sections, sorted, &|g| map.groups[g].cues)?
+    } else {
+        late_sections(sections, sorted)?
+    };
     let mut steps = Vec::with_capacity(sorted.len());
-    for cue in sorted {
+    for (cue, k) in sorted.iter().zip(sections_of) {
         let raw = cue.slide as usize;
-        let k = section_for(sections, cue)?;
         let unresolved = || CueProblem::NoSection {
             time_s: cue.time_s,
             slide: cue.slide,
@@ -514,6 +522,70 @@ fn section_for(sections: &[Section], cue: &LyricCue) -> Result<usize, CueProblem
             slide: cue.slide,
         },
     })
+}
+
+/// The section a cue could belong to, looking up to [`SECTION_LEAD_MAX_S`] ahead: the section `section_for` finds, or the next
+/// one when the cue comes within that time of its start and an earlier cue already sits in the section `section_for` finds or
+/// later (so this cue is not the first of that section, and may well be the first slide of the next one). A section's own first
+/// cue is never moved on, however short the section.
+pub(super) fn late_sections(
+    sections: &[Section],
+    sorted: &[LyricCue],
+) -> Result<Vec<usize>, CueProblem> {
+    let mut placed: Vec<usize> = Vec::with_capacity(sorted.len());
+    for cue in sorted {
+        let k = section_for(sections, cue)?;
+        let far = sections
+            .get(k + 1)
+            .is_some_and(|next| next.start - SECTION_LEAD_MAX_S <= cue.time_s);
+        placed.push(if far && placed.last().is_some_and(|before| *before >= k) {
+            k + 1
+        } else {
+            k
+        });
+    }
+    Ok(placed)
+}
+
+/// The arrangement entry (the section) of each cue. A cue just before the next section starts and still inside the one before
+/// goes by continuity: it continues the earlier section when its slide is the previous slide plus one and that section's group
+/// (`room` cues of it, in the numbering the cues use) still has room, else it starts the next. That is also how the first slide
+/// of a repeated section reaches its own repeat when it arrives a bar early.
+pub(super) fn assign(
+    map: &SongMap,
+    sections: &[Section],
+    sorted: &[LyricCue],
+    room: &dyn Fn(usize) -> usize,
+) -> Result<Vec<usize>, CueProblem> {
+    let late = late_sections(sections, sorted)?;
+    let mut entry: Vec<usize> = Vec::with_capacity(sorted.len());
+    let mut seen: Vec<Option<(u32, u32)>> = vec![None; sections.len()];
+    for (i, cue) in sorted.iter().enumerate() {
+        let late = late[i];
+        let early = late
+            .checked_sub(1)
+            .filter(|before| cue.time_s < sections[*before].end);
+        let pick = match early {
+            Some(before)
+                if i > 0
+                    && entry[i - 1] == before
+                    && sorted[i - 1].slide.checked_add(1) == Some(cue.slide)
+                    && seen[before].is_some_and(|(low, high)| {
+                        ((high.max(cue.slide) - low.min(cue.slide)) as usize)
+                            < room(map.arrangement[before])
+                    }) =>
+            {
+                before
+            }
+            _ => late,
+        };
+        seen[pick] = Some(match seen[pick] {
+            Some((low, high)) => (low.min(cue.slide), high.max(cue.slide)),
+            None => (cue.slide, cue.slide),
+        });
+        entry.push(pick);
+    }
+    Ok(entry)
 }
 
 // ---- extra slides in the file (SPEC "Revision 2") -----------------------------------------------------------------------
@@ -580,16 +652,15 @@ pub fn align(
 ) -> Result<CuePlan, CueProblem> {
     // Which sections each cue could be in: the one `section_at` finds and the one before it when the cue is also before that
     // one's end.
-    let mut late = Vec::with_capacity(sorted.len());
-    let mut early = Vec::with_capacity(sorted.len());
-    for cue in sorted {
-        let k = section_for(sections, cue)?;
-        late.push(k);
-        early.push(
+    let late = late_sections(sections, sorted)?;
+    let early: Vec<Option<usize>> = sorted
+        .iter()
+        .zip(&late)
+        .map(|(cue, k)| {
             k.checked_sub(1)
-                .filter(|before| cue.time_s < sections[*before].end),
-        );
-    }
+                .filter(|before| cue.time_s < sections[*before].end)
+        })
+        .collect();
     let mut boundaries: Vec<Boundary> = Vec::new();
     for i in 0..sorted.len() {
         let Some(before) = early[i] else { continue };
@@ -1011,5 +1082,7 @@ pub fn schedule_for_song(
 mod align_tests;
 #[cfg(test)]
 mod lines_tests;
+#[cfg(test)]
+mod rig_tests;
 #[cfg(test)]
 mod tests;

@@ -104,7 +104,7 @@ fn playback_run(layout: &Layout, n: usize) -> (Vec<Section>, Vec<LyricCue>) {
 }
 
 /// [`assert_follows`] for a file that is `numbered` (the song as Playback counted it) with nothing added.
-fn assert_follows(
+pub(super) fn assert_follows(
     layout: &Layout,
     sections: &[Section],
     cues: &[LyricCue],
@@ -198,7 +198,7 @@ fn assert_follows_numbered(
     schedule
 }
 
-fn lines_fit(schedule: &Schedule) -> Option<LineFit> {
+pub(super) fn lines_fit(schedule: &Schedule) -> Option<LineFit> {
     schedule.alignment.as_ref().and_then(|a| a.lines)
 }
 

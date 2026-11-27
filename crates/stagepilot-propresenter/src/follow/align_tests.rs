@@ -486,7 +486,7 @@ fn cues_that_fit_no_way_of_adding_slides_are_refused() {
     ]);
     assert!(cue_steps(&map, &sections, &good).is_ok());
     // Four slides in a group of three cannot be explained by any extra slide.
-    let crowded = at(&[(1.0, 0), (3.0, 1), (5.0, 2), (7.0, 3), (14.0, 4), (17.0, 5)]);
+    let crowded = at(&[(1.0, 0), (2.0, 1), (3.0, 2), (5.5, 3), (14.0, 4), (17.0, 5)]);
     assert_eq!(cue_steps(&map, &sections, &crowded), Err(mismatch.clone()));
     // The same slide in two groups.
     let twice = at(&[
