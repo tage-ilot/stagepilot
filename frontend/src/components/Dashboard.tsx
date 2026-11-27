@@ -67,6 +67,7 @@ import { libraryNotices, libraryPillLine } from "./playbackLibrary";
 import { playbackStreamRows } from "./playbackStatus";
 import { PlanningCenterSetupPanel } from "./PlanningCenterSetupPanel";
 import { ProPresenterSetupPanel } from "./ProPresenterSetupPanel";
+import { usePresenterFollow } from "../hooks/usePresenterFollow";
 import { useProPresenterLink } from "../hooks/useProPresenterLink";
 import { SetupChecklist } from "./SetupChecklist";
 import { StatusCard } from "./StatusCard";
@@ -436,6 +437,9 @@ function ReferenceItemRow({ item, hoverWarmup }: { item: SkippedServiceItem; hov
   );
 }
 
+/** Settings the window saves itself have nowhere to go (a gallery, a test): nothing else holds a copy. */
+const noSettings = () => undefined;
+
 export function Dashboard({
   capabilities = LOCAL_CAPABILITIES,
   state,
@@ -497,6 +501,7 @@ export function Dashboard({
   cleanLightingGlitches,
   clearAllLightingCues = () => undefined,
   noteSettingsRevision,
+  applySettings,
   updater,
 }: {
   capabilities?: AccessCapabilities;
@@ -565,6 +570,8 @@ export function Dashboard({
   clearAllLightingCues?: (songs: Song[], method: LightingMethod) => void;
   /** The backend's save count of the settings, read by the Lightkey strip; a copy of the settings with an older one is reloaded. */
   noteSettingsRevision?: (revision: number | undefined) => void;
+  /** Puts settings the window just saved itself (the follow switch) into the copy every other save starts from. */
+  applySettings?: (settings: SettingsResponse) => void;
   updater?: UpdaterController;
 }) {
   const { canOperate, canConfigure } = capabilities;
@@ -886,6 +893,7 @@ export function Dashboard({
   const { shown, phase, closeEnded } = usePanelPresence(canConfigure ? activeConnection : null, revealMs, null, { swap: true });
   // The optional ProPresenter Link: asked only while ProPresenter is saved and the Presentation panel (which shows it) is open.
   const propresenterLink = useProPresenterLink(canConfigure && Boolean(propresenter?.enabled), shown === "propresenter");
+  const presenterFollow = usePresenterFollow(canConfigure && Boolean(propresenter?.enabled), shown === "propresenter", settings, applySettings ?? noSettings);
   const [panelDirty, setPanelDirty] = useState(false);
   // A one-time note about a pick that ended by itself ("Back to the upcoming service"); closing it hides that note.
   const [dismissedNotice, setDismissedNotice] = useState<string | null>(null);
@@ -1136,6 +1144,7 @@ export function Dashboard({
         )}
           {shown === "propresenter" && (
           <ProPresenterSetupPanel
+            follow={presenterFollow}
             library={library}
             link={propresenterLink}
             plan={state.plan}

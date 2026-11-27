@@ -1283,5 +1283,6 @@ export function useStagePilot() {
     clearAllLightingCues,
     activateConfiguredServices,
     noteSettingsRevision,
+    applySettings: setSettings,
   };
 }

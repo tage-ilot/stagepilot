@@ -85,6 +85,9 @@ fn lib_song(
             .collect(),
         artwork: None,
         rental_expires_utc: None,
+        lyric_cues: Vec::new(),
+        lyric_cue_count: 0,
+        lyric_cue_max_slide: None,
     }
 }
 

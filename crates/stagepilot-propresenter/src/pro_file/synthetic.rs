@@ -8,8 +8,8 @@ use super::{len_record, uuid_message, varint_record, KeyScale};
 pub struct SyntheticSong {
     title: String,
     multitracks: Option<u64>,
-    /// (group name, the text of each of its slides)
-    groups: Vec<(String, Vec<String>)>,
+    /// (group name, the text of each of its slides; `None` is a slide with no text element, a background only)
+    groups: Vec<(String, Vec<Option<String>>)>,
     /// (arrangement name, indexes into `groups`)
     arrangements: Vec<(String, Vec<usize>)>,
     selected: Option<usize>,
@@ -55,7 +55,18 @@ impl SyntheticSong {
     pub fn group(mut self, name: &str, slides: &[&str]) -> Self {
         self.groups.push((
             name.to_string(),
-            slides.iter().map(|s| (*s).to_string()).collect(),
+            slides.iter().map(|s| Some((*s).to_string())).collect(),
+        ));
+        self
+    }
+
+    /// A group whose slides may have no text element at all (`None`: a background only, like a blank Count Off or an
+    /// instrumental slide). `Some("")` is a text element that shows nothing.
+    #[must_use]
+    pub fn group_with_blanks(mut self, name: &str, slides: &[Option<&str>]) -> Self {
+        self.groups.push((
+            name.to_string(),
+            slides.iter().map(|s| s.map(str::to_string)).collect(),
         ));
         self
     }
@@ -142,16 +153,18 @@ impl SyntheticSong {
                 cue_number += 1;
                 let cue_uuid = fake_uuid(self.seed, 1000 + cue_number);
                 body.extend(len_record(2, &uuid_message(&cue_uuid)));
-                let rtf = len_record(5, text.as_bytes());
-                let graphic = len_record(13, &rtf);
-                let element = len_record(1, &graphic);
-                let base = len_record(1, &element);
-                let presentation = len_record(1, &base);
-                let slide = len_record(2, &presentation);
-                let action = len_record(23, &slide);
                 let mut cue = len_record(1, &uuid_message(&cue_uuid));
                 cue.extend(len_record(2, format!("cue {cue_number}").as_bytes()));
-                cue.extend(len_record(10, &action));
+                if let Some(text) = text {
+                    let rtf = len_record(5, text.as_bytes());
+                    let graphic = len_record(13, &rtf);
+                    let element = len_record(1, &graphic);
+                    let base = len_record(1, &element);
+                    let presentation = len_record(1, &base);
+                    let slide = len_record(2, &presentation);
+                    let action = len_record(23, &slide);
+                    cue.extend(len_record(10, &action));
+                }
                 cues.push(len_record(13, &cue));
             }
             out.extend(len_record(12, &body));

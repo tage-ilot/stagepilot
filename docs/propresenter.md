@@ -423,6 +423,139 @@ Playback plays a song in.
 
 To look at all of this without ProPresenter, see `docs/preview-live-link.md` ("The ProPresenter Link").
 
+## Following Playback
+
+StagePilot can show a song's lyrics in ProPresenter while Playback plays the song: when Playback reaches a verse, a chorus or a line,
+StagePilot triggers the matching slide in ProPresenter over its HTTP API. **It is off until the switch is turned on.** With the switch
+off, with no ProPresenter output or Presenter Link, with no Library Link or for a song with nothing to follow, StagePilot never
+triggers anything in ProPresenter, never reads it for this and behaves exactly as before. It never sends MIDI to ProPresenter and
+never writes anything in Playback.
+
+### What is followed
+
+Only a song that StagePilot put into the playlist itself (or finds there unchanged): its song file in the `Playback` library carries
+the `Playback` arrangement that Presenter Link wrote, one entry per Playback section, repeats separate, and that arrangement is the
+selected one. A song that was edited since, or whose arrangement is something else, is not followed and the screen says why.
+
+### Where the timing comes from
+
+1. **Playback's lyric cues** (best). In Playback choose, for the song, Edit, the "..." on the song, MIDI OUT, Lyrics Bus, "ProPresenter 1 Line
+   Template" (or the 2 or 4 Line one that matches the lines per slide of the song file), then Update. Playback then holds one cue for each
+   lyric slide. A cue says the second it fires and the slide's number in the song file. Cues come a little before the lyric.
+2. **Bars** (when a song has no usable cues). The first slide of a section is shown when the section starts and the section's other text
+   slides are spread evenly over it. Blank and background-only slides are shown with the slide after them.
+
+Cues are used only when they fit the file: at least three, the highest slide number is the file's slide count minus one, and every cue falls
+in a section. Otherwise StagePilot says which test failed (for example "Cues do not match the file (cues go to slide 30, file has 54
+cues)") and follows by bars.
+
+ProPresenter's slide numbers count the slides of the SELECTED arrangement, so a chorus that is played twice has its slides twice.
+StagePilot turns a cue's number (which counts the slides of the file once each) into ProPresenter's number from the song file, taking the
+play of the group nearest the section Playback is in. That is why repeated sections and groups with the same name stay right.
+
+### What StagePilot does while the song plays
+
+- **A song starts.** The playlist item is shown (`GET /v1/playlist/{playlist}/{item}/trigger`, which shows the first slide, the Count Off),
+  the active presentation is read (`GET /v1/presentation/active`) to be sure it is the song's own, and the wanted slide is triggered
+  (`GET /v1/presentation/active/{n}/trigger`). A song started in the middle works the same: the slide for that second is shown at once.
+- **The wanted slide comes from the position.** About ten times a second the position Playback reports (it beats about once a second,
+  and the position is moved on between beats) is compared with the song's schedule: the last slide due at the position plus the offset.
+  Seeks and section loops are therefore followed by themselves, unlike the countdown timer, which ignores loops.
+- **Pause, stop and the end of the song** trigger nothing: the slide stays. On resume the wanted slide is shown if it is another one.
+- **The right song must be on screen.** If another presentation is active before a slide is triggered, the playlist item is shown again,
+  at most once every 2 seconds.
+- **A click in ProPresenter holds the song.** After every trigger StagePilot remembers the slide it expects and reads ProPresenter's current
+  slide about four times a second (`GET /v1/presentation/slide_index`). When it is another slide or another presentation more than 0.6
+  seconds after StagePilot's own trigger, a person clicked: the status says "Paused: someone changed the slide in ProPresenter" and nothing
+  more is triggered for that song until its schedule moves into another section (a seek or loop that stays in the same section does not end
+  it), when the song's slide for that moment is shown again. A new song, or turning the switch off and on, also ends it.
+- **Failures.** A trigger that fails is tried again no sooner than a second later. The first failure and then one a minute are written to the
+  log. After five failed triggers in a row following is paused ("Paused: ProPresenter did not take 5 slide changes in a row ...") until the
+  next song or the **Try again** button (`POST /api/v1/propresenter-follow/try-again`). It never retries in a tight loop.
+- **Nothing here waits for anything else.** Following runs in two tasks of its own (one that follows every 100 ms and one that reads
+  ProPresenter's playlist and song files), so a slow ProPresenter can delay a slide but never the countdown timer, the lights or the screen.
+
+### Settings
+
+`propresenter.presenter_follow` in `settings.json` (an older file without it reads as off; it is left out of the saved file while it holds the
+defaults, so an older StagePilot never meets it):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | The master switch. |
+| `offset_ms` | `0` | From -2000 to 2000. Positive shows every slide earlier. Tune it on the rig: Playback's cues come about half a second to a second before the lyric. |
+
+It is saved with the other settings (`PUT /api/v1/settings`), behind the same PIN and origin rules as every other write route, so a remote
+viewer cannot change it. A save that leaves the key out keeps what was set. The binding of each song (below) is saved beside the settings
+file as `presenter-follow-bindings.json` (ids, file names and slide counts; nothing secret, no words of a song).
+
+### Where a song lives in ProPresenter (the binding)
+
+A plan song is tied, by its MultiTracks number, to a playlist, the item in it, its presentation, the song file in the `Playback` library and a
+fingerprint of its arrangement (the file's groups with their slide counts, and the order the arrangement plays them in).
+
+1. **Remembered** when the Presenter Link adds the song to a playlist (or finds it there already).
+2. **Found on demand** in ProPresenter's ACTIVE playlist (the one last triggered): the item whose file in the `Playback` library carries that
+   MultiTracks number and has the `Playback` arrangement selected. The files are read through the Presenter Link's host, directly or through
+   the helper.
+
+The fingerprint must equal what the file holds now. Otherwise the song is "Arrangement was changed in ProPresenter" and is not followed.
+The songs are worked out again when the plan, the ProPresenter settings or a binding change, when the switch is turned on, and every 15
+seconds while no song plays (never while one plays).
+
+### The status
+
+`GET /api/v1/propresenter-follow/status` answers, whatever the switch says:
+
+```
+{enabled, offset_ms, state, message, song: {key, title} | null, section: {index, name} | null, slide, hold_reason, can_try_again,
+ songs: [{key, title, following: "cues" | "bars" | null, code, text, advice}]}
+```
+
+`state` is `off`, `idle` (nothing to follow), `ready` (the song is loaded and not playing), `following`, `held` (a click holds it), `paused`
+(failures) or `not_followed`. `slide` is ProPresenter's number of the slide StagePilot last showed. It is **not** part of `/api/v1/health`: no
+state of following changes the header's Ready or Check-system verdict.
+
+Each plan song says, in the words of the screen:
+
+| `code` | `text` |
+|---|---|
+| `cues` | Following by Playback cues |
+| `bars` | Following by bars (no Playback cues) (`advice`: No cues: in Playback choose a ProPresenter 1 Line Template for this song) |
+| `cues_do_not_match` | Cues do not match the file (cues go to slide N, file has M cues) (followed by bars) |
+| `bars_cues_unusable` | Following by bars (cues not used: a cue after the song end / a cue is in no section / ...) |
+| `arrangement_changed` | Arrangement was changed in ProPresenter |
+| `not_in_playlist` | Not in the ProPresenter playlist |
+| `link_not_ready` | ProPresenter Link not ready |
+| `switch_off` | Switch is off |
+| `not_in_playback` | Not in Playback's setlist |
+| `sections_changed` | The song's sections changed in Playback since it was added to ProPresenter |
+| `no_sections` | Playback has not given this song's sections yet |
+| `library_not_ready` | Playback's Library Link not ready |
+
+### The window
+
+Configuration → Presentation, under the **Presenter Link** section (always drawn, like the section itself), holds one box, **Follow Playback in ProPresenter**:
+
+- **The switch.** Off until you turn it on; it is saved with the other settings (`propresenter.presenter_follow.enabled`) and turned off the same way. The window reads the switch before it writes, so what you set elsewhere is never put back to an older value.
+- **One status line.** A mark and words, never a colour alone: `Off`; `Following: Chorus, slide 3` (the section Playback is in, and ProPresenter's slide counted the way ProPresenter's window counts, from 1: its Count Off is slide 1); `Ready: ...` while a song is loaded and not playing; `Paused: someone changed the slide in ProPresenter` (a click in ProPresenter holds the song until the next section; there is nothing to press); `Paused: ProPresenter did not take 5 slide changes in a row (...)`; `Not following: ...` with the reason when the song that plays cannot be followed. The same words, shortened, end the folded header of the Presenter Link while something needs to be seen.
+- **Try again** appears only when following is paused by failures (`POST /api/v1/propresenter-follow/try-again`). It is the only button of the box.
+- **Locked, not hidden.** While the Presenter Link is not ready (`Presenter Link not ready`) or Playback's Library Link is not ready (`Playback's Library Link not ready`) the box is greyed, nothing in it can be pressed and the reason sits beside the switch. Following itself never starts without both.
+- **Timing** (folded). One small number box, **Offset (ms)**, from -2000 to 2000, saved when you leave the box or press Enter (`propresenter.presenter_follow.offset_ms`). Positive shows every slide earlier. Leave it at 0 until it has been tuned on the rig.
+
+Every song card of the Presenter Link carries one chip from `GET /api/v1/propresenter-follow/status` (`songs[].text`, the table above), each with a mark (`✓` followed by cues, `~` by bars, `!` something to look at, `−` nothing to follow now). A song followed by bars because Playback holds no cues also gets a **No cues** chip and one sentence: *In Playback: Edit, the "..." on the song, MIDI OUT, Lyrics Bus, ProPresenter 1 Line Template, Update.* (the 2 or 4 Line Template when the song file has two or four lines per slide). A song whose cues do not fit the file says `Cues do not match the file (cues go to slide N, file has M cues)` and `Followed by bars`.
+
+While the Presentation panel is open the window reads the status every 2 seconds with the switch on, and every 30 seconds with it off; with the panel closed it reads nothing. The switch and the offset are changed only by someone allowed to change the configuration.
+
+### What has not been tried on the real rig
+
+Everything above was tested against fakes (a fake ProPresenter that numbers slides like the real one, and the recorded numbers of one real
+song). Still to measure with a real ProPresenter and Playback: how far Playback's cues come before the lyric (the offset to set), the 2
+second lead used to place a cue in a section, ProPresenter's own answers to `/v1/presentation/active` and `/v1/presentation/slide_index`
+while a song is shown, how long a trigger takes, that `/trigger` really follows the selected arrangement for a repeated group in a Presenter
+Link copy, and how it behaves with a real operator clicking. Bars are spread evenly: snapping them to the song's bar lines needs the beat grid,
+which the plan does not carry yet.
+
 ## VerseVision
 
 The **VerseVision** button under the settings of the Presentation panel opens VerseVision, which builds verse slides in ProPresenter from a pastor's notes, on the same address and behind the same PIN as the dashboard. It uses this connection (host and port) and works on the computer StagePilot runs on. See [versevision.md](versevision.md).

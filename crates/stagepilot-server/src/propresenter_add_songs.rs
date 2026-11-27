@@ -148,6 +148,16 @@ impl AddSongsService {
         *self.plan.lock().unwrap_or_else(|p| p.into_inner()) = plan;
     }
 
+    /// The stand-in for ProPresenter's API set by a test, if any.
+    pub(crate) fn api_stand_in(&self) -> Option<Arc<dyn ProPresenterApi>> {
+        self.api.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    /// The stand-in for Playback's plan set by a test, if any.
+    pub(crate) fn plan_stand_in(&self) -> Option<LibraryPlan> {
+        self.plan.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
     fn api_for(&self, rt: &Runtime) -> Arc<dyn ProPresenterApi> {
         if let Some(api) = self.api.lock().unwrap_or_else(|p| p.into_inner()).clone() {
             return api;
@@ -952,6 +962,7 @@ async fn apply(State(rt): State<Rt>, body: Bytes) -> Json {
     });
     let task_rt = rt.clone();
     let task_id = job_id.clone();
+    let playlist_id = stored.playlist_id.clone();
     tokio::spawn(async move {
         let mut ending = Ending {
             rt: task_rt.clone(),
@@ -964,6 +975,25 @@ async fn apply(State(rt): State<Rt>, body: Bytes) -> Json {
         };
         let guard = PlayingGuard(task_rt.clone());
         let report = engine.run(&prepared, &guard, &progress).await;
+        // Following needs to know where each song went: remembered now, while the playlist is as the job left it.
+        let files: std::collections::BTreeSet<String> = report
+            .songs
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s.status,
+                    stagepilot_propresenter::link::add_songs::SongStatus::Added
+                        | stagepilot_propresenter::link::add_songs::SongStatus::AlreadyThere
+                )
+            })
+            .filter_map(|s| s.file.as_ref().map(|f| format!("{f}.pro")))
+            .collect();
+        if report.playlist_changed || !files.is_empty() {
+            task_rt
+                .propresenter_follow
+                .remember_after_add(&task_rt, &playlist_id, files)
+                .await;
+        }
         ending.done = true;
         task_rt
             .propresenter_add_songs

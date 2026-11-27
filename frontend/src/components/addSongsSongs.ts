@@ -1,4 +1,5 @@
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
+import type { FollowSong } from "../presenterFollow";
 import type { LibraryPlan, LibrarySong, ServicePlan } from "../types";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 
@@ -21,6 +22,8 @@ export interface AddSongsRow {
   song: LibrarySong | null;
   /** Playback gave the song no number, so StagePilot cannot name it to ProPresenter's side. */
   unnamed: boolean;
+  /** The plan song's key as the follow status names it (Playback library plan key; the Planning Center id for a name); null when there is none. */
+  planKey: string | null;
 }
 
 /** A title as ProPresenter would read it: letters and digits only (no accents, no case), one space between words. Two rows with the same text are the same song. */
@@ -42,9 +45,9 @@ function withIds<T extends { title: string }>(rows: T[]): (T & { id: string })[]
 /** The setlist songs the loaded plan is paired with (an uncertain or missing pairing has no Playback song to add). In Playback's setlist order. */
 export function addSongsRows(plan: LibraryPlan | null | undefined): AddSongsRow[] {
   if (!plan?.enabled || plan.state !== "ready" || !plan.setlist) return [];
-  const songs = plan.songs.flatMap((planSong) => (planSong.library ? [planSong.library] : []));
-  const ordered = songs.map((song, index) => ({ song, index })).sort((a, b) => a.song.position - b.song.position || a.index - b.index).map((entry) => entry.song);
-  return withIds(ordered.map((song) => ({
+  const songs = plan.songs.flatMap((planSong) => (planSong.library ? [{ song: planSong.library, planKey: planSong.key }] : []));
+  const ordered = songs.map((entry, index) => ({ ...entry, index })).sort((a, b) => a.song.position - b.song.position || a.index - b.index);
+  return withIds(ordered.map(({ song, planKey }) => ({
     ref: song.setlist_song_id === null ? "" : String(song.setlist_song_id),
     title: song.title,
     source: "playback" as const,
@@ -54,6 +57,7 @@ export function addSongsRows(plan: LibraryPlan | null | undefined): AddSongsRow[
     sections: song.sections.map((section) => section.name.trim() || "Count Off"),
     song,
     unnamed: song.setlist_song_id === null,
+    planKey,
   })));
 }
 
@@ -69,6 +73,7 @@ export function planNameRows(plan: Pick<ServicePlan, "songs"> | null | undefined
     sections: [] as string[],
     song: null,
     unnamed: false,
+    planKey: song.source_song_id ?? song.id,
   })));
 }
 
@@ -90,4 +95,20 @@ export function addToProPresenterAvailable(link: Pick<ProPresenterLinkController
 /** The rows of the one list: Playback's setlist while it has given the songs, else the plan's Planning Center names. */
 export function presenterRows(link: Pick<ProPresenterLinkController, "status"> | undefined, library: Pick<PlaybackLibraryController, "status" | "plan"> | undefined, plan: Pick<ServicePlan, "songs"> | null | undefined): AddSongsRow[] {
   return addToProPresenterAvailable(link, library) ? addSongsRows(library?.plan) : planNameRows(plan);
+}
+
+/**
+ * What the follow status says about each row: by the plan song's key first (Playback's plan key, or the Planning Center id), then by the
+ * title (the same id a row has), because a status made while the switch is off knows the plan's own songs by their own keys.
+ */
+export function followByRow(rows: readonly AddSongsRow[], songs: readonly FollowSong[] | undefined): Map<string, FollowSong> {
+  const found = new Map<string, FollowSong>();
+  if (!songs?.length) return found;
+  const byKey = new Map(songs.map((song) => [song.key, song]));
+  const byTitle = new Map(withIds(songs.map((song) => ({ title: song.title }))).map((entry, index) => [entry.id, songs[index]!]));
+  for (const row of rows) {
+    const song = (row.planKey !== null ? byKey.get(row.planKey) : undefined) ?? byTitle.get(row.id);
+    if (song) found.set(row.id, song);
+  }
+  return found;
 }

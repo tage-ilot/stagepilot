@@ -74,6 +74,8 @@ pub struct Runtime {
         Arc<crate::propresenter_helper_install::ProPresenterHelperInstall>,
     /// The songs-to-playlist feature: previews waiting to be applied, its one job at a time, the playlist list.
     pub propresenter_add_songs: Arc<crate::propresenter_add_songs::AddSongsService>,
+    /// Following Playback with the song's lyrics in ProPresenter: the switch, the bindings, the follower and its status.
+    pub propresenter_follow: Arc<crate::propresenter_follow::FollowService>,
     /// The network scan for ProPresenter's API (`propresenter_scan`): one at a time, nothing saved.
     pub propresenter_scan: Arc<stagepilot_propresenter::scan::ScanService>,
     link_connect: Mutex<Option<tokio::task::JoinHandle<()>>>,
@@ -317,6 +319,20 @@ impl Runtime {
             stagepilot_core::settings::default_settings_path(settings_service.environ())
                 .with_file_name("propresenter-playlist-backups")
         };
+        // Where each plan song lives in ProPresenter sits beside the settings file too; test and demo runtimes keep it in memory.
+        let follow_bindings: Arc<dyn stagepilot_propresenter::follow::binding::BindingStore> =
+            if options.memory_tokens {
+                Arc::new(stagepilot_propresenter::follow::binding::MemoryBindingStore::default())
+            } else {
+                Arc::new(
+                    stagepilot_propresenter::follow::binding::FileBindingStore::new(
+                        stagepilot_core::settings::default_settings_path(
+                            settings_service.environ(),
+                        )
+                        .with_file_name("presenter-follow-bindings.json"),
+                    ),
+                )
+            };
         let pco = PcoRuntime::new(settings_service.clone(), options);
         if settings.integration_modes.service_source == ServiceSource::Demo {
             let demo = Arc::new(
@@ -404,6 +420,9 @@ impl Runtime {
             propresenter_link,
             propresenter_add_songs: Arc::new(crate::propresenter_add_songs::AddSongsService::new(
                 add_songs_backup_dir,
+            )),
+            propresenter_follow: Arc::new(crate::propresenter_follow::FollowService::new(
+                follow_bindings,
             )),
             propresenter_scan: Arc::new(stagepilot_propresenter::scan::ScanService::system()),
             link_connect: Mutex::new(None),
@@ -595,6 +614,9 @@ impl Runtime {
         *self.link_connect.lock().unwrap_or_else(|p| p.into_inner()) = Some(
             crate::propresenter_link::connect_at_start(Arc::downgrade(self)),
         );
+        // Following Playback: two tasks of their own (the 100 ms follower and the slow reader of ProPresenter), idle while the
+        // switch is off. Nothing here is a plugin and nothing here is part of the verdict.
+        self.propresenter_follow.spawn(Arc::downgrade(self));
         self.plugins.start_all().await;
         // Proactive OAuth refresh: one lifespan-owned task polling a stop signal.
         let _ = self.oauth_stop.send(false);
@@ -643,6 +665,7 @@ impl Runtime {
             let _ = task.await;
         }
         let _ = self.oauth_stop.send(true);
+        self.propresenter_follow.stop();
         if let Some(task) = self
             .helper_update_task
             .lock()

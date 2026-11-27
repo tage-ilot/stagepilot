@@ -183,6 +183,23 @@ pub struct LibraryArtwork {
     pub etag: String,
 }
 
+/// Lyric cues kept per song (a real song has about 70; the cap only guards odd answers).
+pub const MAX_LYRIC_CUES: usize = 3_000;
+/// The Lyrics bus of Playback's MIDI buses, and the note it sends the ProPresenter slide number on.
+const LYRICS_BUS_ID: i64 = 1;
+const LYRICS_NOTE: i64 = 19;
+/// The highest slide number believed (a song file has a few dozen slides; this only drops absurd numbers).
+const MAX_LYRIC_SLIDE: i64 = 100_000;
+
+/// One lyric cue Playback holds for a song: at `time_s` on the played clock it shows ProPresenter slide `slide`, which is
+/// the 0-based index of the cue in the song file (all groups in file order, whatever the arrangement). Kept in memory for
+/// following; never in the plan answer (see `LibrarySong::lyric_cue_count`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LyricCue {
+    pub time_s: f64,
+    pub slide: u32,
+}
+
 /// One section of the arranged song, on Playback's played clock (seconds from the start).
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -241,6 +258,25 @@ pub struct LibrarySong {
     pub artwork: Option<LibraryArtwork>,
     /// When a rented song stops being available (RFC 3339), null when it is not a rental.
     pub rental_expires_utc: Option<String>,
+    /// The song's lyric cues (the Lyrics bus, note 19, of the song's own answer), sorted by time, equal pairs once, at
+    /// most `MAX_LYRIC_CUES`. Empty when the song has none or its answer was not read. Never sent in the plan answer:
+    /// only `lyric_cue_count` and `lyric_cue_max_slide` are.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub lyric_cues: Vec<LyricCue>,
+    /// How many lyric cues the song has (0 when none or not read).
+    pub lyric_cue_count: u32,
+    /// The highest slide number among the lyric cues, null when there are none.
+    pub lyric_cue_max_slide: Option<u32>,
+}
+
+impl LibrarySong {
+    /// Sets the cues and the two numbers that summarise them, so the three never disagree.
+    pub fn set_lyric_cues(&mut self, cues: Vec<LyricCue>) {
+        self.lyric_cue_count = u32::try_from(cues.len()).unwrap_or(u32::MAX);
+        self.lyric_cue_max_slide = cues.iter().map(|c| c.slide).max();
+        self.lyric_cues = cues;
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -583,6 +619,9 @@ fn parse_song(item: &Value, index: usize) -> Option<LibrarySong> {
         sections: Vec::new(),
         artwork: artwork_of(item),
         rental_expires_utc: instant_of(item, "rental_expires_utc"),
+        lyric_cues: Vec::new(),
+        lyric_cue_count: 0,
+        lyric_cue_max_slide: None,
     })
 }
 
@@ -726,12 +765,45 @@ pub fn artwork_of(object: &Value) -> Option<LibraryArtwork> {
     })
 }
 
+/// `midi[]` of a song's own answer as lyric cues: only the Lyrics bus (`bus_id` 1) and note 19 count, `velocity` is the
+/// slide number and `time_s` the second on the played clock. An entry that is not an object, has another bus or note, a
+/// time that is not a number between 0 and a day, or a slide that is not a whole number from 0 is dropped on its own; the
+/// rest are sorted by time, equal (time, slide) pairs kept once, and at most `MAX_LYRIC_CUES` kept.
+pub fn parse_lyric_cues(midi: &Value) -> Vec<LyricCue> {
+    let Some(list) = midi.as_array() else {
+        return Vec::new();
+    };
+    let mut cues: Vec<LyricCue> = list
+        .iter()
+        .filter_map(|event| {
+            if whole_number(event.get("bus_id"))? != LYRICS_BUS_ID
+                || whole_number(event.get("note"))? != LYRICS_NOTE
+            {
+                return None;
+            }
+            let time_s = section_second(event.get("time_s"))?;
+            let slide = whole_number(event.get("velocity"))?;
+            (0..=MAX_LYRIC_SLIDE).contains(&slide).then_some(LyricCue {
+                time_s,
+                slide: u32::try_from(slide).ok()?,
+            })
+        })
+        .collect();
+    cues.sort_by(|a, b| a.time_s.total_cmp(&b.time_s).then(a.slide.cmp(&b.slide)));
+    cues.dedup();
+    cues.truncate(MAX_LYRIC_CUES);
+    cues
+}
+
 /// Adds what `/songs/<id>` knows to a song: the sections (their number and the usable ones), the
-/// arrangement's name when the setlist did not give one, and the cover when the setlist item had
-/// none. Odd answers change nothing.
+/// arrangement's name when the setlist did not give one, the cover when the setlist item had
+/// none, and the lyric cues (`midi[]`; a `midi` list that is there replaces them, even with none). Odd answers change nothing.
 pub fn apply_detail(song: &mut LibrarySong, detail: &Value) {
     if song.artwork.is_none() {
         song.artwork = artwork_of(detail);
+    }
+    if let Some(midi) = detail.get("midi").filter(|m| m.is_array()) {
+        song.set_lyric_cues(parse_lyric_cues(midi));
     }
     let Some(arrangement) = detail.get("arrangement_detail") else {
         return;
@@ -1154,6 +1226,9 @@ mod tests {
             sections: Vec::new(),
             artwork: None,
             rental_expires_utc: None,
+            lyric_cues: Vec::new(),
+            lyric_cue_count: 0,
+            lyric_cue_max_slide: None,
         }
     }
 
@@ -1720,6 +1795,112 @@ mod tests {
         // A detail with no sections list leaves them as they were.
         apply_detail(&mut one, &json!({"arrangement_detail": {"title": "x"}}));
         assert_eq!((one.section_count, one.sections.len()), (Some(2), 1));
+    }
+
+    fn event(bus: Value, note: Value, velocity: Value, time_s: Value) -> Value {
+        json!({"bus_id": bus, "note": note, "velocity": velocity, "time_s": time_s, "channel": 0, "type": 1,
+               "duration_s": 0.0, "description": "x"})
+    }
+
+    #[test]
+    fn lyric_cues_are_the_lyrics_bus_note_19_only_sorted_and_deduped() {
+        let midi = json!([
+            event(json!(1), json!(19), json!(3), json!(20.5)),
+            event(json!(1), json!(19), json!(1), json!(3.5)),
+            // a StagePilot cue on another bus and another note on the lyrics bus
+            event(json!(4), json!(112), json!(0), json!(1.0)),
+            event(json!(1), json!(20), json!(5), json!(2.0)),
+            event(json!(2), json!(19), json!(5), json!(2.0)),
+            // the same cue twice, and the same time with another slide
+            event(json!(1), json!(19), json!(1), json!(3.5)),
+            event(json!(1.0), json!(19.0), json!(2.0), json!(3.5)),
+        ]);
+        let got: Vec<(f64, u32)> = parse_lyric_cues(&midi)
+            .iter()
+            .map(|c| (c.time_s, c.slide))
+            .collect();
+        assert_eq!(got, vec![(3.5, 1), (3.5, 2), (20.5, 3)]);
+    }
+
+    #[test]
+    fn a_junk_midi_entry_is_dropped_on_its_own() {
+        let midi = json!([
+            "text",
+            null,
+            7,
+            {},
+            event(json!("1"), json!(19), json!(1), json!(1.0)),
+            event(json!(1), json!(19), json!(-1), json!(1.0)),
+            event(json!(1), json!(19), json!(1.5), json!(1.0)),
+            event(json!(1), json!(19), json!(200_000), json!(1.0)),
+            event(json!(1), json!(19), json!(1), json!(-0.5)),
+            event(json!(1), json!(19), json!(1), json!(1e9)),
+            event(json!(1), json!(19), json!(1), json!("soon")),
+            event(json!(1), json!(19), Value::Null, json!(1.0)),
+            event(json!(1), json!(19), json!(0), json!(0.0)),
+            event(json!(1), json!(19), json!(4), json!(86_400.0)),
+        ]);
+        let got: Vec<(f64, u32)> = parse_lyric_cues(&midi)
+            .iter()
+            .map(|c| (c.time_s, c.slide))
+            .collect();
+        assert_eq!(got, vec![(0.0, 0), (86_400.0, 4)]);
+        assert!(parse_lyric_cues(&json!("many")).is_empty());
+        assert!(parse_lyric_cues(&json!({"a": 1})).is_empty());
+    }
+
+    #[test]
+    fn at_most_3000_lyric_cues_are_kept_the_earliest() {
+        let midi: Vec<Value> = (0..3_500)
+            .map(|n| event(json!(1), json!(19), json!(n % 100), json!(f64::from(n))))
+            .collect();
+        let got = parse_lyric_cues(&Value::Array(midi));
+        assert_eq!(got.len(), MAX_LYRIC_CUES);
+        assert_eq!(got.last().unwrap().time_s, 2_999.0);
+    }
+
+    #[test]
+    fn the_detail_sets_the_cues_and_their_summary_and_a_missing_midi_list_changes_nothing() {
+        let mut s = song("Song One", 1);
+        assert_eq!((s.lyric_cue_count, s.lyric_cue_max_slide), (0, None));
+        apply_detail(
+            &mut s,
+            &json!({"midi": [
+                event(json!(1), json!(19), json!(7), json!(9.0)),
+                event(json!(1), json!(19), json!(2), json!(4.0)),
+                event(json!(4), json!(112), json!(9), json!(5.0)),
+            ]}),
+        );
+        assert_eq!((s.lyric_cue_count, s.lyric_cue_max_slide), (2, Some(7)));
+        assert_eq!(s.lyric_cues.len(), 2);
+        // Another detail with no `midi`, or one that is not a list, leaves them.
+        apply_detail(&mut s, &json!({"arrangement_detail": {"sections": []}}));
+        apply_detail(&mut s, &json!({"midi": "none"}));
+        assert_eq!(s.lyric_cue_count, 2);
+        // A list that is there replaces them, empty or not.
+        apply_detail(&mut s, &json!({"midi": []}));
+        assert_eq!((s.lyric_cue_count, s.lyric_cue_max_slide), (0, None));
+        assert!(s.lyric_cues.is_empty());
+    }
+
+    #[test]
+    fn the_cue_list_is_never_serialised_only_its_summary() {
+        let mut s = song("Song One", 1);
+        s.set_lyric_cues(vec![
+            LyricCue {
+                time_s: 1.0,
+                slide: 3,
+            },
+            LyricCue {
+                time_s: 2.0,
+                slide: 4,
+            },
+        ]);
+        let value = serde_json::to_value(&s).unwrap();
+        assert_eq!(value["lyric_cue_count"], json!(2));
+        assert_eq!(value["lyric_cue_max_slide"], json!(4));
+        assert!(value.get("lyric_cues").is_none(), "{value}");
+        assert!(!value.to_string().contains("time_s"), "{value}");
     }
 
     #[test]

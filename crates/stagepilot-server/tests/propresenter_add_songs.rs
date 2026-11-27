@@ -72,6 +72,9 @@ fn lib_song(
             .collect(),
         artwork: None,
         rental_expires_utc: None,
+        lyric_cues: Vec::new(),
+        lyric_cue_count: 0,
+        lyric_cue_max_slide: None,
     }
 }
 
@@ -349,6 +352,12 @@ async fn apply_is_a_job_that_adds_the_songs_and_reports_each_song_and_step() {
     assert_eq!(job["state"], "done", "{job}");
     assert_eq!(job["report"]["outcome"], "done", "{}", job["report"]);
     assert_eq!(job["report"]["differences"], json!([]));
+    // Following Playback needs to know where each song went: the job remembered every song it added or found.
+    let bindings = w.rt.propresenter_follow.bindings();
+    let mut ids: Vec<u64> = bindings.keys().copied().collect();
+    ids.sort_unstable();
+    assert_eq!(ids, vec![1001, 1002, 2002], "{bindings:?}");
+    assert!(bindings.values().all(|b| b.playlist_id == w.playlist));
     assert!(job["report"]["version"]
         .as_str()
         .unwrap()

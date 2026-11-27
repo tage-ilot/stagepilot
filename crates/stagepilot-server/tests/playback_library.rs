@@ -49,6 +49,8 @@ struct Behaviour {
     items: Vec<Value>,
     /// What `/songs/<id>` says about `arrangement_detail.sections` (default: seven timed sections).
     sections: Option<Value>,
+    /// What `/songs/<id>` says as `midi` (`None`: the key is not there).
+    midi: Option<Value>,
     /// Song ids whose own answer is an error.
     broken_songs: Vec<i64>,
     /// The cover the fake serves for every song (`None`: 404), and how.
@@ -339,9 +341,11 @@ async fn answer(State(helper): State<Helper>, uri: Uri, headers: HeaderMap) -> R
                     .collect(),
             )
         });
-        return json_ok(
-            json!({"setlist_song_id": id, "arrangement_detail": {"title": "Short", "sections": sections}}),
-        );
+        let mut answer = json!({"setlist_song_id": id, "arrangement_detail": {"title": "Short", "sections": sections}});
+        if let Some(midi) = &b.midi {
+            answer["midi"] = midi.clone();
+        }
+        return json_ok(answer);
     }
     StatusCode::NOT_FOUND.into_response()
 }
@@ -1185,6 +1189,92 @@ async fn a_song_with_no_usable_section_has_an_empty_list_and_an_old_helper_has_n
     assert!(one.sections.is_empty());
     assert_eq!(one.section_count, Some(3));
     assert!(one.artwork.is_none());
+}
+
+// ---- lyric cues (follow lyrics, stage 1) --------------------------------------------------------
+
+fn midi_event(bus: i64, note: i64, velocity: i64, time_s: f64) -> Value {
+    json!({"time_s": time_s, "note": note, "velocity": velocity, "channel": 0, "type": 1,
+           "bus_id": bus, "duration_s": 0.0, "description": "x"})
+}
+
+#[tokio::test]
+async fn the_plan_says_how_many_lyric_cues_a_song_has_and_never_lists_them() {
+    let helper = Helper::new();
+    helper.set(|b| {
+        b.midi = Some(json!([
+            midi_event(1, 19, 2, 8.5),
+            midi_event(1, 19, 1, 3.5),
+            midi_event(4, 112, 0, 1.0),
+            midi_event(1, 19, 1, 3.5),
+            midi_event(1, 19, 9, 20.0),
+            {"note": 19},
+            "junk"
+        ]));
+    });
+    let address = helper.serve().await;
+    let (router, runtime) = app().await;
+    runtime
+        .store
+        .mutate(|s| s.plan = Some(plan("2026-11-22", &["Song One", "Song Two"])));
+    let _ = call(
+        &router,
+        "PUT",
+        "/api/v1/playback-library/settings",
+        Some(json!({"address": address})),
+    )
+    .await;
+    let (status, body) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let one = &body["songs"][0]["library"];
+    assert_eq!(one["lyric_cue_count"], json!(3));
+    assert_eq!(one["lyric_cue_max_slide"], json!(9));
+    assert!(!body.to_string().contains("lyric_cues"), "{body}");
+    assert!(!body.to_string().contains("velocity"), "{body}");
+    // The cues themselves are kept for following, sorted and with the doubled one once.
+    let result = runtime
+        .playback_library
+        .plan(
+            &settings_for(&address),
+            Some(&plan("2026-11-22", &["Song One"])),
+            false,
+        )
+        .await;
+    let cues = &first_song(&result).lyric_cues;
+    let got: Vec<(f64, u32)> = cues.iter().map(|c| (c.time_s, c.slide)).collect();
+    assert_eq!(got, vec![(3.5, 1), (8.5, 2), (20.0, 9)]);
+}
+
+#[tokio::test]
+async fn a_song_with_no_midi_has_no_cues_and_an_answer_over_the_size_cap_is_still_refused() {
+    let helper = Helper::new();
+    let address = helper.serve().await;
+    let result = PlaybackLibrary::new()
+        .plan(
+            &settings_for(&address),
+            Some(&plan("2026-11-22", &["Song One"])),
+            false,
+        )
+        .await;
+    let one = result.songs[0].library.as_ref().unwrap();
+    assert_eq!((one.lyric_cue_count, one.lyric_cue_max_slide), (0, None));
+    assert_eq!(one.section_count, Some(7));
+    // An answer over the helper size cap (256 KB) is the same as no answer for that song: no sections, no cues.
+    let big: Vec<Value> = (0..4000)
+        .map(|n| midi_event(1, 19, i64::from(n % 50), f64::from(n)))
+        .collect();
+    let helper = Helper::new();
+    helper.set(|b| b.midi = Some(Value::Array(big)));
+    let address = helper.serve().await;
+    let result = PlaybackLibrary::new()
+        .plan(
+            &settings_for(&address),
+            Some(&plan("2026-11-22", &["Song One"])),
+            false,
+        )
+        .await;
+    let one = result.songs[0].library.as_ref().unwrap();
+    assert_eq!((one.lyric_cue_count, one.section_count), (0, None));
 }
 
 // ---- the cheap change check (F-P1c) -----------------------------------------------------------

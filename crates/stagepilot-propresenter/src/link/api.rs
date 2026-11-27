@@ -97,6 +97,24 @@ impl LibraryEntry {
     }
 }
 
+/// The playlist item ProPresenter triggered last on its presentation layer (`GET /v1/playlist/active`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivePlaylist {
+    pub playlist_uuid: String,
+    pub playlist_name: String,
+    /// The item's id is the presentation's uuid for a song.
+    pub item_uuid: String,
+    pub item_index: usize,
+}
+
+/// Where ProPresenter's presentation layer is now (`GET /v1/presentation/slide_index`): the active presentation and the
+/// slide in it, counted in the SELECTED arrangement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlidePosition {
+    pub presentation_uuid: String,
+    pub index: usize,
+}
+
 /// What ProPresenter says is on its outputs (`GET /v1/status/layers`).
 ///
 /// On the real rig the answer is `{"video_input":true,"media":false,"slide":false,"announcements":false,"props":false,
@@ -172,6 +190,17 @@ pub trait ProPresenterApi: Send + Sync {
     async fn library(&self, id: &str) -> Result<Vec<LibraryEntry>, ApiError>;
     /// `GET /v1/status/layers`: what is on ProPresenter's outputs right now.
     async fn layers(&self) -> Result<Layers, ApiError>;
+    /// `GET /v1/playlist/active`: the playlist and item last triggered on the presentation layer; `None` when there is none.
+    async fn active_playlist(&self) -> Result<Option<ActivePlaylist>, ApiError>;
+    /// `GET /v1/playlist/{playlist_id}/{index}/trigger`: shows the item (its first slide) in ProPresenter.
+    async fn trigger_playlist_item(&self, playlist_id: &str, index: usize) -> Result<(), ApiError>;
+    /// `GET /v1/presentation/active/{index}/trigger`: shows slide `index` of the active presentation, counted in its selected
+    /// arrangement (ProPresenter answers 404 for a number that arrangement does not have).
+    async fn trigger_slide(&self, index: usize) -> Result<(), ApiError>;
+    /// `GET /v1/presentation/active`: the uuid of the active presentation; `None` when there is none.
+    async fn active_presentation(&self) -> Result<Option<String>, ApiError>;
+    /// `GET /v1/presentation/slide_index`: the active presentation and its current slide; `None` when there is none.
+    async fn slide_position(&self) -> Result<Option<SlidePosition>, ApiError>;
 }
 
 fn text(value: &Value, name: &str) -> Option<String> {
@@ -254,6 +283,39 @@ pub fn parse_library(value: &Value) -> Option<Vec<LibraryEntry>> {
             })
             .collect(),
     )
+}
+
+fn whole(value: &Value) -> Option<usize> {
+    value.as_u64().and_then(|n| usize::try_from(n).ok())
+}
+
+/// Reads `GET /v1/playlist/active`: `{presentation: {playlist: {uuid, name, index}, item: {uuid, name, index}}, announcements}`.
+/// Only the presentation layer counts; a missing or null layer is `None`.
+pub fn parse_active_playlist(value: &Value) -> Option<ActivePlaylist> {
+    let layer = value.get("presentation")?;
+    let playlist = layer.get("playlist")?;
+    let item = layer.get("item")?;
+    Some(ActivePlaylist {
+        playlist_uuid: text(playlist, "uuid").filter(|u| !u.is_empty())?,
+        playlist_name: text(playlist, "name").unwrap_or_default(),
+        item_uuid: text(item, "uuid").filter(|u| !u.is_empty())?,
+        item_index: whole(item.get("index")?)?,
+    })
+}
+
+/// Reads `GET /v1/presentation/active`: `{presentation: {id: {uuid, name, index}, groups: [...]}}`; the uuid only.
+pub fn parse_active_presentation(value: &Value) -> Option<String> {
+    let presentation = value.get("presentation")?;
+    text(presentation.get("id")?, "uuid").filter(|u| !u.is_empty())
+}
+
+/// Reads `GET /v1/presentation/slide_index`: `{presentation_index: {index, presentation_id: {uuid, name, index}} | null}`.
+pub fn parse_slide_position(value: &Value) -> Option<SlidePosition> {
+    let at = value.get("presentation_index")?;
+    Some(SlidePosition {
+        presentation_uuid: text(at.get("presentation_id")?, "uuid").filter(|u| !u.is_empty())?,
+        index: whole(at.get("index")?)?,
+    })
 }
 
 /// The real thing, over plain HTTP.
@@ -394,6 +456,50 @@ impl ProPresenterApi for HttpApi {
     async fn layers(&self) -> Result<Layers, ApiError> {
         parse_layers(&self.get("/v1/status/layers").await?).ok_or(ApiError::Unreadable)
     }
+
+    async fn active_playlist(&self) -> Result<Option<ActivePlaylist>, ApiError> {
+        match self.get("/v1/playlist/active").await {
+            Ok(value) => Ok(parse_active_playlist(&value)),
+            Err(ApiError::NotFound) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn trigger_playlist_item(&self, playlist_id: &str, index: usize) -> Result<(), ApiError> {
+        self.call(
+            reqwest::Method::GET,
+            &format!("/v1/playlist/{}/{index}/trigger", plain_id(playlist_id)?),
+            None,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    async fn trigger_slide(&self, index: usize) -> Result<(), ApiError> {
+        self.call(
+            reqwest::Method::GET,
+            &format!("/v1/presentation/active/{index}/trigger"),
+            None,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    async fn active_presentation(&self) -> Result<Option<String>, ApiError> {
+        match self.get("/v1/presentation/active").await {
+            Ok(value) => Ok(parse_active_presentation(&value)),
+            Err(ApiError::NotFound) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn slide_position(&self) -> Result<Option<SlidePosition>, ApiError> {
+        match self.get("/v1/presentation/slide_index").await {
+            Ok(value) => Ok(parse_slide_position(&value)),
+            Err(ApiError::NotFound) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
 }
 
 pub mod fake;
@@ -493,5 +599,55 @@ mod tests {
         for bad in ["", "a/b", "a b", "../x", "a?b", &"a".repeat(81)] {
             assert_eq!(plain_id(bad), Err(ApiError::BadId), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn the_follow_reads_are_parsed_and_junk_is_none() {
+        let active = json!({"presentation": {"playlist": {"uuid": "PL", "name": "Sunday", "index": 2},
+            "item": {"uuid": "IT", "name": "Song", "index": 4}}, "announcements": null});
+        assert_eq!(
+            parse_active_playlist(&active),
+            Some(ActivePlaylist {
+                playlist_uuid: "PL".into(),
+                playlist_name: "Sunday".into(),
+                item_uuid: "IT".into(),
+                item_index: 4
+            })
+        );
+        for none in [
+            json!({"presentation": null}),
+            json!({"announcements": {}}),
+            json!({"presentation": {"playlist": {"uuid": "", "name": "x", "index": 0}, "item": {"uuid": "I", "name": "x", "index": 0}}}),
+            json!({"presentation": {"playlist": {"uuid": "P", "name": "x", "index": 0}, "item": {"uuid": "I", "name": "x", "index": -1}}}),
+            json!([]),
+        ] {
+            assert_eq!(parse_active_playlist(&none), None, "{none}");
+        }
+        let presentation = json!({"presentation": {"id": {"uuid": "PU", "name": "Song", "index": 0}, "groups": []}});
+        assert_eq!(
+            parse_active_presentation(&presentation).as_deref(),
+            Some("PU")
+        );
+        assert_eq!(
+            parse_active_presentation(&json!({"presentation": null})),
+            None
+        );
+        assert_eq!(parse_active_presentation(&json!({})), None);
+        let slide = json!({"presentation_index": {"index": 13, "presentation_id": {"uuid": "PU", "name": "Song", "index": 0}}});
+        assert_eq!(
+            parse_slide_position(&slide),
+            Some(SlidePosition {
+                presentation_uuid: "PU".into(),
+                index: 13
+            })
+        );
+        assert_eq!(
+            parse_slide_position(&json!({"presentation_index": null})),
+            None
+        );
+        assert_eq!(
+            parse_slide_position(&json!({"presentation_index": {"index": "3"}})),
+            None
+        );
     }
 }
