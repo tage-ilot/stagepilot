@@ -67,6 +67,7 @@ fn wanted(ref_id: &str, title: &str, position: u32, id: Option<u64>, names: &[&s
         sections: sections(names),
         rental_expired: false,
         as_is: false,
+        plan_name: None,
     }
 }
 
@@ -81,6 +82,7 @@ fn titled(ref_id: &str, title: &str, position: u32) -> WantedSong {
         sections: Vec::new(),
         rental_expired: false,
         as_is: true,
+        plan_name: None,
     }
 }
 
@@ -431,6 +433,84 @@ async fn a_song_not_in_propresenter_is_imported_then_copied_when_it_can_be() {
     assert_eq!(
         plan.songs[0].file.as_deref(),
         Some("Beta (MultiTracks) (1)")
+    );
+}
+
+/// A song a person paired by hand keeps the plan song's own name; everything else (the song found by its number, the sections,
+/// the key) comes from the Playback song.
+fn named(mut song: WantedSong, plan_name: &str) -> WantedSong {
+    song.plan_name = Some(plan_name.to_string());
+    song
+}
+
+#[tokio::test]
+async fn a_pair_made_by_hand_is_copied_and_listed_under_the_plan_songs_own_name() {
+    let rig = rig(Loading::Immediately);
+    import_returns(&rig, 2002, "Delta", 0xD4000000);
+    let songs = vec![
+        // Found in Songs by Playback's number although the plan calls it something else.
+        named(
+            wanted(
+                "11",
+                "Alpha",
+                1,
+                Some(1001),
+                &["Count Off", "Intro", "Verse 1", "Chorus", "Chorus"],
+            ),
+            "Our Own Alpha",
+        ),
+        // Not in ProPresenter: imported (named after the plan song), then copied.
+        named(
+            wanted("12", "Delta", 2, Some(2002), &["Intro", "Chorus"]),
+            "Our Own Delta",
+        ),
+        // Matched by name: nothing changes.
+        wanted("13", "Beta", 3, Some(1002), &["Chorus", "Intro"]),
+    ];
+    let req = request(&rig, songs, worship());
+    let plan = rig.engine.preview(&req).await.unwrap();
+    assert_eq!(plan.songs[0].action, SongAction::Copy);
+    assert_eq!(plan.songs[0].title, "Our Own Alpha");
+    assert_eq!(plan.songs[0].file.as_deref(), Some("Our Own Alpha (1)"));
+    assert_eq!(plan.songs[0].source.as_deref(), Some("Songs / Alpha.pro"));
+    assert_eq!(plan.songs[1].import_as.as_deref(), Some("Our Own Delta"));
+    assert_eq!(plan.songs[1].file.as_deref(), Some("Our Own Delta (1)"));
+    assert_eq!(plan.songs[2].title, "Beta");
+    assert_eq!(plan.songs[2].file.as_deref(), Some("Beta (1)"));
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
+    assert!(report.differences.is_empty(), "{:?}", report.differences);
+    let files: Vec<String> = rig
+        .host
+        .files_of("Playback")
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+    assert_eq!(
+        files,
+        [
+            "Beta (1).pro",
+            "Our Own Alpha (1).pro",
+            "Our Own Delta (1).pro"
+        ]
+    );
+    let copy = Song::read(&rig.host.file("Playback", "Our Own Alpha (1).pro").unwrap()).unwrap();
+    assert_eq!(copy.selected_arrangement().unwrap().name, "Playback");
+    assert_eq!(copy.multitracks_id, Some(1001));
+    assert_eq!(copy.music.user_text, "Eb");
+    let names = names_of(&rig.api.stored(&rig.playlist));
+    assert!(
+        names.windows(3).any(|w| w
+            == [
+                "Our Own Alpha (1)".to_string(),
+                "Our Own Delta (1)".to_string(),
+                "Beta (1)".to_string()
+            ]),
+        "{names:?}"
     );
 }
 

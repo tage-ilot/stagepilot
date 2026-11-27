@@ -1,6 +1,7 @@
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import type { PlaybackStatusResponse } from "../types";
 import { MatchupRow } from "./MatchupRow";
+import type { PairActions } from "./PairByHand";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import { PlaybackSetlistLine } from "./PlaybackSetlistLine";
 import { classicRows, countStamps, libraryMatchesPlan, libraryRows, type MatchRow, type MatchupInput } from "./songMatchup";
@@ -49,6 +50,10 @@ export function PlaybackArrangement({ status, draft, library }: { status: Playba
   if (!rows.length && !(showLine && noSetlist)) return null;
 
   const skips = mode === "classic" || live;
+  // Pairing a song by hand is part of the library's matchup: the scan-only view has no titles to pair by.
+  const pair: PairActions | undefined = mode === "library" && library
+    ? { canPair: library.canPair, busy: library.pending === "pair", error: library.error, pair: library.pairSong, undo: library.unpairSong }
+    : undefined;
   const planIds = plan.map((song) => song.id);
   const missing = [...planSkips].filter((id) => !planIds.includes(id));
   const counts = countStamps(rows);
@@ -100,7 +105,7 @@ export function PlaybackArrangement({ status, draft, library }: { status: Playba
           {libraryPlan?.stale && libraryPlan.message && mode === "library" && <p className="text-sm text-ink-muted">{libraryPlan.message}</p>}
           <div className="arr-cols font-type-kicker text-type-kicker uppercase text-ink-muted" aria-hidden="true"><span>Service plan</span><span /><span>Playback</span></div>
           <ol className="arr-list m-0 grid list-none gap-0 p-0" aria-label="Song pairs">
-            {rows.map((row) => <MatchupRow key={row.id} row={row} draft={draft} skips={skips} hideKeyAndBpm />)}
+            {rows.map((row) => <MatchupRow key={row.id} row={row} draft={draft} skips={skips} hideKeyAndBpm pair={pair} />)}
           </ol>
         </>
       )}

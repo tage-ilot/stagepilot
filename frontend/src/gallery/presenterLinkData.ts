@@ -49,7 +49,7 @@ const librarySong = (item: (typeof SET)[number], index: number): LibrarySong => 
   sections: item.sections.map((name, i) => ({ name, start: i * 20, end: i * 20 + 19 })), artwork: null, rental_expires_utc: null, lyric_cue_count: 0, lyric_cue_max_slide: null,
 });
 const planSong = (item: (typeof SET)[number], index: number): LibraryPlanSong => ({
-  key: `k${index + 1}`, title: item.title, plan_position: index + 1, plan_seconds: 300, plan_key: null, status: "matched", confidence: "exact", library: librarySong(item, index), candidate: null,
+  key: `k${index + 1}`, title: item.title, plan_position: index + 1, plan_seconds: 300, plan_key: null, status: "matched", confidence: "exact", library: librarySong(item, index), candidate: null, pair_choices: [],
 });
 /** The setlist with its first `count` songs (four, or all ten for the preview with every status). */
 export const setlistOf = (count = 4): LibraryPlan => ({

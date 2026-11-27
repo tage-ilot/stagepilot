@@ -195,6 +195,8 @@ section does not warn about it. Planning Center names go in **as they are** in P
    arrangement. About 10 seconds later the playlist is read back and every difference from the plan (order, names, kinds,
    durations, the arrangement of each new song) is listed. A song whose copy is already in the playlist is not added twice.
 
+**A song paired by hand.** A plan song whose name differs from Playback's can be paired with the Playback song by a person (the Song order section of the Playback configuration, \"Pairing a song of another name by hand\" in `docs/playback-api.md`). Such a pair is an exact pair for everything above: the song is found in ProPresenter by the **Playback song's** MultiTracks number and its sections and key are Playback's, and the Auto-Presenter follows it like any other song (it finds the copy by that number too). Only the name differs: the Playback title still decides the title rule in step 4 (it is the name the file in ProPresenter carries), but a copy StagePilot **makes** for it, and with it the playlist entry, is named after the **plan song** (`wanted.plan_name`: `Our Name For It (1)` rather than `Battle Belongs (1)`), and the song's row in the preview shows the plan song's name. A copy that already plays what Playback plays is used as it is and keeps the name it has.
+
 **Where.** `after_header: "<name>"` is the end of that header's section (before the next header, or the end of the list); `end`
 is after the last item. A header that does not exist, or that appears twice, blocks the change.
 

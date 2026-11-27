@@ -218,6 +218,20 @@ describe("the song cards", () => {
     expect(text.parentElement?.className).not.toMatch(/truncate/);
   });
 
+  it("a song paired by hand is a card of the Playback song with a Paired by you chip, and the plan song's name in its hover text", async () => {
+    const library = libraryPlan([
+      librarySongOf("Our Name For It", 1, { confidence: "by_hand", library: librarySong({ title: "Battle Belongs", position: 1, setlist_song_id: 31, content_id: 23126 }) }),
+      librarySongOf("Gratitude", 2, { library: librarySong({ title: "Gratitude", position: 2, setlist_song_id: 32, content_id: 31877 }) }),
+    ]);
+    render(<PresenterLinkSection library={libraryController("ready", { plan: library })} link={linkController(helperStatus("ready"))} plan={null} />);
+    await ready();
+    const paired = card("Battle Belongs");
+    const chip = within(paired).getByText("Paired by you");
+    expect(chip).toHaveAttribute("title", expect.stringContaining("“Our Name For It” in the plan goes with “Battle Belongs” in Playback"));
+    expect(paired).toHaveTextContent("mtID-23126");
+    expect(within(card("Gratitude")).queryByText("Paired by you")).toBeNull();
+  });
+
   it("a Planning Center card is just the title and a Planning Center chip", async () => {
     draw(false);
     await ready();

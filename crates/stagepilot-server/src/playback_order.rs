@@ -16,7 +16,7 @@
 //! plain reason it is not used is handed to the plugin, which shows it in the status. The reason is
 //! information only and never touches the verdict.
 
-use crate::playback_library::{effective_settings, note_in_use, plan_titles};
+use crate::playback_library::{effective_settings, note_in_use};
 use crate::runtime::Runtime;
 use stagepilot_playback::library::PlanTitle;
 use stagepilot_playback::library_order::{decide, Evidence, LibraryOrder, Verdict};
@@ -70,7 +70,9 @@ async fn look(rt: &Runtime, fresh: bool, needs_use: bool) -> Looked {
         rt.playback_library.open_setlist(&settings).await
     };
     let plan = rt.store.snapshot().plan;
-    let titles: Option<Vec<PlanTitle>> = plan.as_ref().map(plan_titles);
+    let titles: Option<Vec<PlanTitle>> = plan
+        .as_ref()
+        .map(|plan| rt.playback_library.plan_titles(plan));
     let plan_ids: Vec<String> = plan
         .iter()
         .flat_map(|plan| plan.songs.iter().map(|song| song.id.clone()))

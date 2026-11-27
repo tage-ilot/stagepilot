@@ -14,7 +14,7 @@ const playback = (over: Partial<LibrarySong> = {}): LibrarySong => ({
 const song = (title: string, position: number, library: Partial<LibrarySong> | null, over: Partial<LibraryPlanSong> = {}): LibraryPlanSong => ({
   key: `k-${title}`, title, plan_position: position, plan_seconds: 300, plan_key: null,
   status: library ? "matched" : "missing", confidence: library ? "exact" : null,
-  library: library ? playback({ title, position, ...library }) : null, candidate: null, ...over,
+  library: library ? playback({ title, position, ...library }) : null, candidate: null, pair_choices: [], ...over,
 });
 const ready = (songs: LibraryPlanSong[], over: Partial<LibraryPlan> = {}): LibraryPlan => ({
   enabled: true, state: "ready", message: null, plan_date: "2026-11-22",

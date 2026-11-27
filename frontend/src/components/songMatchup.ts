@@ -1,4 +1,4 @@
-import type { LibraryPlan, LibraryPlanSong, LibrarySong, MatchConfidence } from "../types";
+import type { LibraryPlan, LibraryPlanSong, LibrarySong, MatchConfidence, PairChoice } from "../types";
 import { formatLength, lengthDifference } from "./playbackLibrary";
 import { arrangeSongs, CLOSE_SECONDS, LIKELY_DIFFERENT_SECONDS, secondsApart } from "./songPairing";
 
@@ -53,6 +53,16 @@ export interface PlaybackCell {
   skipped: boolean;
 }
 
+/** What a person can do about the pairing of one plan song, on its row (Song order): pick the Playback song, or undo a pick. */
+export interface RowPairing {
+  /** The plan song's key (`LibraryPlanSong.key`), which the backend pairs by. */
+  planKey: string;
+  /** The Playback songs a person may pick, the alike one first. Empty: Playback has no other song to pair. */
+  choices: PairChoice[];
+  /** A person paired this row ("Paired by you"): the action is Undo, not Pick. */
+  byHand: boolean;
+}
+
 export interface MatchRow {
   id: string;
   kind: "pair" | "plan-only" | "playback-only";
@@ -62,6 +72,8 @@ export interface MatchRow {
   playback: PlaybackCell | null;
   /** The plain sentences under the row: every difference, in the order they matter. */
   notes: string[];
+  /** Only a library row of a song that is not paired, only uncertain, or paired by hand. */
+  pairing?: RowPairing;
   /** The whole row as one sentence for a screen reader. */
   sentence: string;
 }
@@ -114,6 +126,12 @@ export function lengthWords(song: LibraryPlanSong): string | null {
   return different ? `Playback counts this song down to ${different.playback}; the plan says ${different.plan}.` : null;
 }
 
+/** The word on a row's stamp: `Matched`, but `Close match` for a close pair and `Paired by you` for one a person made. */
+export function matchedWords(stamp: RowStamp, confidence: MatchConfidence | null): string {
+  if (stamp !== "matched") return STAMP_WORDS[stamp];
+  return confidence === "close" ? "Close match" : confidence === "by_hand" ? "Paired by you" : STAMP_WORDS[stamp];
+}
+
 const ordinalSong = (number: number, title: string | null, side: "plan" | "Playback") =>
   title ? `${side === "plan" ? "plan song" : "Playback song"} ${number}, ${title}` : `${side === "plan" ? "plan song" : "Playback song"} ${number}`;
 
@@ -121,7 +139,7 @@ const ordinalSong = (number: number, title: string | null, side: "plan" | "Playb
 function sentenceOf(row: Omit<MatchRow, "sentence">): string {
   const plan = row.plan ? ordinalSong(row.plan.number, row.plan.title, "plan") : null;
   const playback = row.playback ? ordinalSong(row.playback.number, row.playback.title, "Playback") : null;
-  const stamp = row.stamp === "matched" && row.confidence === "close" ? "Close match" : STAMP_WORDS[row.stamp];
+  const stamp = matchedWords(row.stamp, row.confidence);
   const lead = plan && playback ? `${plan[0]!.toUpperCase()}${plan.slice(1)} goes with ${playback}.`
     : plan ? `${plan[0]!.toUpperCase()}${plan.slice(1)} has no Playback song.`
       : `${playback![0]!.toUpperCase()}${playback!.slice(1)} has no plan song.`;
@@ -299,7 +317,7 @@ export function libraryRows(input: MatchupInput, library: LibraryPlan, scan: boo
       const notes = [PLAN_ONLY_WORDS[entry.status] ?? PLAN_ONLY_WORDS.missing!];
       const extra = runtimeNote(index, null);
       if (extra) notes.push(extra);
-      rows.push(finish({ id: `plan-only-${index}`, kind: "plan-only", stamp: cell.skipped ? "skipped" : "only-plan", confidence: null, plan: cell, playback: null, notes }));
+      rows.push(finish({ id: `plan-only-${index}`, kind: "plan-only", stamp: cell.skipped ? "skipped" : "only-plan", confidence: null, plan: cell, playback: null, notes, pairing: { planKey: entry.key, choices: entry.pair_choices ?? [], byHand: false } }));
       return;
     }
     emitted.add(partner);
@@ -315,6 +333,8 @@ export function libraryRows(input: MatchupInput, library: LibraryPlan, scan: boo
       flag("check-title");
     } else if (confidence === "close") {
       notes.push(`Close match: the plan says “${plan_.title}”, Playback has “${partner.title}”.`);
+    } else if (confidence === "by_hand") {
+      notes.push(`Paired by you: the plan says “${plan_.title}”, Playback has “${partner.title}”.`);
     }
     const order_ = runtimeNote(index, partner);
     if (order_) { notes.push(order_); flag("check-order"); }
@@ -329,7 +349,9 @@ export function libraryRows(input: MatchupInput, library: LibraryPlan, scan: boo
       if (length) { notes.push(length); flag("check-length"); }
     }
     if (plan_.skipped || playback.skipped) stamp = "skipped";
-    rows.push(finish({ id: `pair-${index}-${partner.position}`, kind: "pair", stamp, confidence, plan: plan_, playback, notes }));
+    const pairing: RowPairing | undefined = uncertain ? { planKey: entry.key, choices: entry.pair_choices ?? [], byHand: false }
+      : confidence === "by_hand" ? { planKey: entry.key, choices: [], byHand: true } : undefined;
+    rows.push(finish({ id: `pair-${index}-${partner.position}`, kind: "pair", stamp, confidence, plan: plan_, playback, notes, pairing }));
   });
   flushPlaybackOnly(Infinity);
   return { rows, live: join !== null, join: join?.by ?? null };

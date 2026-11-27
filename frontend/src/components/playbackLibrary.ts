@@ -121,6 +121,8 @@ export function chipLibrary(song: LibraryPlanSong | undefined, now: number): Chi
   }
   if (!facts.length) return null;
   const title = [`Playback: ${facts.join(", ")}`];
+  // A pair a person made says so, so nobody mistakes it for a match by name.
+  if (song.confidence === "by_hand") title.unshift(`Paired by you: “${song.title}” goes with “${song.library.title}” in Playback`);
   if (different) title.push(`Playback counts this song down to ${different.playback}; the plan says ${different.plan}.`);
   const why = song.library.countdown_length_s !== null && song.library.length_source ? LENGTH_SOURCE_WORDS[song.library.length_source] : null;
   if (why) title.push(why);

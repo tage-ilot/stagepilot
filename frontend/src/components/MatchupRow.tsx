@@ -1,10 +1,12 @@
 import { playbackLibraryArtworkUrl } from "../api";
+import type { MatchConfidence } from "../types";
 import type { PlaybackDraft } from "./PlaybackSaveFooter";
 import { ArrangementBar } from "./ArrangementBar";
 import { CoverSlot } from "./CoverSlot";
 import { bpmText, lengthSourceTitle } from "./playbackLibrary";
 import { FactChips, type Fact } from "./sections";
-import { clock, STAMP_WORDS, type MatchRow, type RowStamp } from "./songMatchup";
+import { PairByHand, type PairActions } from "./PairByHand";
+import { clock, matchedWords, type MatchRow, type RowStamp } from "./songMatchup";
 import { Switch } from "./ui/Switch";
 import { cx } from "./ui/cx";
 
@@ -27,12 +29,12 @@ const STAMP_STYLE: Record<RowStamp, { mark: string; box: string }> = {
   skipped: { mark: "⌀", box: "border-dashed border-ink-muted text-ink-muted" },
 };
 
-export function Stamp({ stamp, close }: { stamp: RowStamp; close?: boolean }) {
+export function Stamp({ stamp, confidence = null }: { stamp: RowStamp; confidence?: MatchConfidence | null }) {
   const style = STAMP_STYLE[stamp];
   return (
     <span className={cx("arr-stamp inline-flex items-center gap-1.5 border-2 bg-surface-950 px-2 py-0.5 font-pixel !text-type-badge uppercase tracking-wider", style.box)} data-stamp={stamp}>
       <span aria-hidden="true">{style.mark}</span>
-      {stamp === "matched" && close ? "Close match" : STAMP_WORDS[stamp]}
+      {matchedWords(stamp, confidence)}
     </span>
   );
 }
@@ -53,10 +55,10 @@ function Join({ row }: { row: MatchRow }) {
 /**
  * One line of the matchup ledger: plan song on the left, Playback song on the right, a join mark between, and above them the stamp with the
  * differences, in plain words, beside it. The line is one list item and reads aloud as ONE sentence (`row.sentence`); the drawn parts are
- * hidden from a screen reader so nothing is said twice, but the two Skip switches stay real controls. `hideKeyAndBpm` leaves out the key and
+ * hidden from a screen reader so nothing is said twice, but the two Skip switches (and, with `pair`, the pairing by hand under the row) stay real controls. `hideKeyAndBpm` leaves out the key and
  * BPM chips under the songs (Playback's Song order section); the length beside each song stays, and so does every other use of the row.
  */
-export function MatchupRow({ row, draft, skips, hideKeyAndBpm = false }: { row: MatchRow; draft?: PlaybackDraft; skips: boolean; hideKeyAndBpm?: boolean }) {
+export function MatchupRow({ row, draft, skips, hideKeyAndBpm = false, pair }: { row: MatchRow; draft?: PlaybackDraft; skips: boolean; hideKeyAndBpm?: boolean; pair?: PairActions }) {
   const { plan, playback } = row;
   const spacer = (words: string) => <div aria-hidden="true" className="arr-spacer grid place-items-center border-2 border-dashed border-edge-medium p-3 text-center font-pixel !text-type-badge uppercase tracking-wider text-ink-muted">{words}</div>;
   const planBox = plan && (
@@ -99,12 +101,13 @@ export function MatchupRow({ row, draft, skips, hideKeyAndBpm = false }: { row: 
     <li className="arr-line" data-kind={row.kind} data-stamp={row.stamp} data-confidence={row.confidence ?? undefined}>
       <p className="sr-only">{row.sentence}</p>
       <div aria-hidden="true" className="arr-head">
-        <Stamp stamp={row.stamp} close={row.confidence === "close"} />
+        <Stamp stamp={row.stamp} confidence={row.confidence} />
         {row.notes.length > 0 && <ul className="arr-notes m-0 min-w-0 list-none space-y-0.5 p-0 text-sm">{row.notes.map((note) => <li key={note} className="break-words text-ink-body">{note}</li>)}</ul>}
       </div>
       {planBox ?? spacer("Not in the plan")}
       <Join row={row} />
       {playbackBox ?? spacer("No Playback song")}
+      {pair && row.pairing && row.plan && <PairByHand actions={pair} pairing={row.pairing} title={row.plan.title} />}
     </li>
   );
 }

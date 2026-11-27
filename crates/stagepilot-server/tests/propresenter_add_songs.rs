@@ -12,7 +12,8 @@ use stagepilot_core::config::TimerOutput;
 use stagepilot_core::settings::{PersistentSettings, RuntimeSettings, SettingsService};
 use stagepilot_core::state::TimerStatus;
 use stagepilot_playback::library::{
-    LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySong, LibraryState, PlanMatch,
+    LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySong, LibraryState, MatchConfidence,
+    PlanMatch,
 };
 use stagepilot_propresenter::link::add_songs::Timing;
 use stagepilot_propresenter::link::api::fake::{entry_uuid, FakeApi, Loading};
@@ -98,6 +99,7 @@ fn lib_plan(songs: Vec<LibrarySong>) -> LibraryPlan {
                 confidence: None,
                 library: Some(song),
                 candidate: None,
+                pair_choices: vec![],
             })
             .collect(),
         playback_only: vec![],
@@ -327,6 +329,76 @@ async fn a_preview_says_what_would_happen_and_changes_nothing() {
     );
     // The error shape is the existing one (`detail`), with a code beside it.
     assert!(body["detail"].as_str().unwrap().contains("playlist"));
+}
+
+#[tokio::test]
+async fn a_song_paired_by_hand_is_found_by_playbacks_number_and_added_under_the_plan_songs_own_name(
+) {
+    let w = world(Loading::Immediately).await;
+    let mut plan = lib_plan(vec![
+        lib_song(11, Some(1001), 1, "Alpha", &["Intro", "Verse 1", "Chorus"]),
+        lib_song(12, Some(2002), 2, "Delta", &["Intro", "Chorus"]),
+        lib_song(13, Some(1002), 3, "Beta", &["Chorus", "Intro"]),
+    ]);
+    // The plan calls Playback's Alpha and Delta something else; a person paired them. Beta matches by name.
+    for (i, name) in [(0, "Our Own Alpha"), (1, "Our Own Delta")] {
+        plan.songs[i].title = name.to_string();
+        plan.songs[i].confidence = Some(MatchConfidence::ByHand);
+    }
+    w.rt.propresenter_add_songs.set_plan_for_test(Some(plan));
+    let (status, preview) = call(
+        &w.app,
+        "POST",
+        PREVIEW,
+        Some(ask(&w, &[11, 12, 13], worship())),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    let shown: Vec<(&str, &str, &str, &str)> = preview["songs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| {
+            (
+                s["title"].as_str().unwrap(),
+                s["action"].as_str().unwrap(),
+                s["file"].as_str().unwrap(),
+                s["source"].as_str().unwrap_or(""),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shown,
+        [
+            (
+                "Our Own Alpha",
+                "copy",
+                "Our Own Alpha (1)",
+                "Songs / Alpha.pro"
+            ),
+            ("Our Own Delta", "import_then_copy", "Our Own Delta (1)", ""),
+            ("Beta", "copy", "Beta (1)", "Songs / Beta.pro"),
+        ],
+        "found by Playback's number, named after the plan song"
+    );
+    assert_eq!(preview["songs"][0]["content_id"], 1001);
+    assert_eq!(preview["songs"][1]["import_as"], "Our Own Delta");
+    let job = run_job(&w, &[11, 12, 13]).await;
+    assert_eq!(job["state"], "done", "{job}");
+    let names: Vec<String> = w
+        .host
+        .files_of("Playback")
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "Beta (1).pro",
+            "Our Own Alpha (1).pro",
+            "Our Own Delta (1).pro"
+        ]
+    );
 }
 
 #[tokio::test]

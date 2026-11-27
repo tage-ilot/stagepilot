@@ -39,7 +39,7 @@ describe("side by side", () => {
     const frames = within(columns).getAllByTestId("gallery-column-frame");
     expect(frames.map((frame) => frame.getAttribute("src"))).toEqual([
       "?frame=1&only=presentation,page-presentation,presenter-link,auto-presenter",
-      "?frame=1&only=playback,page-playback",
+      "?frame=1&only=playback,song-pairs,page-playback",
       "?frame=1&only=lighting,page-lighting",
       "?frame=1&only=page-services",
       "?frame=1&only=page-backend,page-remote",

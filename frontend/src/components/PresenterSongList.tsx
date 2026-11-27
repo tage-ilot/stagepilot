@@ -38,8 +38,8 @@ function marksOf(add: AddSongsController): Map<string, Marks> {
 }
 
 /** A small quiet chip in the status chip's shape: where a card's song comes from. */
-function SourceChip({ children }: { children: string }) {
-  return <span className="inline-flex flex-none items-center border border-edge-medium bg-surface-950 px-2 py-0.5 text-[0.8125rem] text-ink-muted" data-testid="add-songs-source-chip">{children}</span>;
+function SourceChip({ children, title }: { children: string; title?: string }) {
+  return <span className="inline-flex flex-none items-center border border-edge-medium bg-surface-950 px-2 py-0.5 text-[0.8125rem] text-ink-muted" data-testid="add-songs-source-chip" title={title}>{children}</span>;
 }
 
 /** Why a card cannot be ticked, as a chip, one short phrase, and the full sentence for hover and screen readers. */
@@ -92,6 +92,7 @@ function SongCard({ add, row, busy, now, marks }: { add: AddSongsController; row
   const chips = (
     <span className="contents" id={`${uid}-chips`}>
       {!playback && <SourceChip>{PLANNING_CENTER}</SourceChip>}
+      {row.pairedAs && <SourceChip title={`Paired by you: “${row.pairedAs}” in the plan goes with “${row.title}” in Playback. A copy StagePilot makes is named “${row.pairedAs}”.`}>Paired by you</SourceChip>}
       {stopped && block && <><StatusChip mark="!" testId="add-songs-blocked" title={stopped.why} tone={stopped.tone} word={stopped.word} /><span className="text-xs text-ink-body" data-testid="add-songs-why" title={stopped.why}>{stopped.phrase}</span></>}
       {marks?.stuck && <StatusChip {...words(marks.stuck)} testId="add-songs-stuck" />}
       {using && using.key !== "check" && <><StatusChip {...words(using)} testId="add-songs-using-chip" title={using.detail} /><span className="text-xs text-ink-body" data-testid="add-songs-using" title={using.detail}>{using.phrase}</span></>}

@@ -297,7 +297,7 @@ pub enum PlanMatch {
     DuplicateInPlayback,
 }
 
-/// How sure the title match is.
+/// How sure the title match is (`by_hand` is no guess: a person said so).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
@@ -308,6 +308,9 @@ pub enum MatchConfidence {
     Close,
     /// Alike, not the same: shown with both titles for the operator to judge.
     Uncertain,
+    /// A person paired this plan song with this Playback song by hand (`PUT /api/v1/playback-library/pairs`). It is
+    /// used everywhere an exact pair is; only the words say "Paired by you".
+    ByHand,
 }
 
 /// One plan song, in plan order, with its Playback song when there is exactly one.
@@ -329,6 +332,35 @@ pub struct LibraryPlanSong {
     pub library: Option<LibrarySong>,
     /// The Playback song an `uncertain` pairing is about. Never a source of cover, key or waveform for anything.
     pub candidate: Option<LibrarySong>,
+    /// The Playback songs a person may pair with this plan song by hand: only for a plan song that is not paired (or only
+    /// `uncertain`). The uncertain suggestion first, then the setlist's other unpaired songs in setlist order. Empty for a
+    /// paired song and when Playback has no other song to pair.
+    pub pair_choices: Vec<PairChoice>,
+}
+
+/// A Playback song a person may pick for a plan song (`LibraryPlanSong::pair_choices`): only what the chooser shows.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct PairChoice {
+    #[ts(type = "number | null")]
+    pub setlist_song_id: Option<i64>,
+    /// The song's MultiTracks number: what a pair is kept by. A song without one is never offered.
+    #[ts(type = "number")]
+    pub content_id: u64,
+    pub position: u32,
+    pub title: String,
+    pub key: Option<String>,
+    pub countdown_length_s: Option<f64>,
+    /// True for the one song StagePilot found alike (the `uncertain` suggestion), which is always first.
+    pub suggested: bool,
+}
+
+/// A pair a person confirmed, as far as the matcher needs it: the Playback song's MultiTracks number and the title it had
+/// when it was confirmed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HandPair {
+    pub content_id: u64,
+    pub title_seen: String,
 }
 
 /// A setlist in a few words.
@@ -934,6 +966,8 @@ pub struct PlanTitle {
     pub seconds: Option<u32>,
     /// The key the plan names for the song, when it names one.
     pub key_name: Option<String>,
+    /// The pair a person confirmed for this song, when there is one. Used only when the title steps did not pair it.
+    pub pair: Option<HandPair>,
 }
 
 /// The words of a title that say which song it is: every bracket group and a "feat." tail are set aside, then the
@@ -1090,6 +1124,23 @@ pub fn match_setlist(plan: &[PlanTitle], playback: &[LibrarySong]) -> SetlistMat
             taken[candidates[0]] = true;
         }
     }
+    // By hand: a pair a person confirmed settles a plan song the title steps did not pair, with the Playback song that has
+    // the pair's MultiTracks number (exactly one in the setlist, and not already paired). The pair is never made here and
+    // never read as a guess: it only stands for what a person said.
+    for (i, song) in plan.iter().enumerate() {
+        let Some(pair) = song.pair.as_ref().filter(|_| paired[i].is_none()) else {
+            continue;
+        };
+        let with_number: Vec<usize> = (0..playback.len())
+            .filter(|k| playback[*k].content_id == Some(pair.content_id))
+            .collect();
+        if let [k] = with_number[..] {
+            if !taken[k] {
+                paired[i] = Some((k, MatchConfidence::ByHand));
+                taken[k] = true;
+            }
+        }
+    }
     // Step 3: uncertain, only when the choice is one to one both ways among what is left.
     let left_plan: Vec<usize> = (0..plan.len())
         .filter(|i| open_plan(*i) && paired[*i].is_none())
@@ -1132,6 +1183,7 @@ pub fn match_setlist(plan: &[PlanTitle], playback: &[LibrarySong]) -> SetlistMat
                 confidence: None,
                 library: None,
                 candidate: None,
+                pair_choices: Vec::new(),
             };
             if let Some((k, confidence)) = paired[index] {
                 entry.status = PlanMatch::Matched;
@@ -1141,6 +1193,9 @@ pub fn match_setlist(plan: &[PlanTitle], playback: &[LibrarySong]) -> SetlistMat
                 entry.status = PlanMatch::Uncertain;
                 entry.confidence = Some(MatchConfidence::Uncertain);
                 entry.candidate = playback.get(k).cloned();
+            }
+            if entry.status != PlanMatch::Matched {
+                entry.pair_choices = pair_choices(playback, &taken, entry.candidate.as_ref());
             }
             entry
         })
@@ -1155,6 +1210,45 @@ pub fn match_setlist(plan: &[PlanTitle], playback: &[LibrarySong]) -> SetlistMat
         songs,
         playback_only,
     }
+}
+
+/// The Playback songs a person may pick for a plan song that is not paired: the uncertain suggestion first, then every other
+/// song of the setlist that no plan song is paired with, in setlist order. A song with no MultiTracks number is left out (a
+/// pair is kept by that number), and so is one whose number the setlist holds twice (it could not be told apart).
+fn pair_choices(
+    playback: &[LibrarySong],
+    taken: &[bool],
+    suggested: Option<&LibrarySong>,
+) -> Vec<PairChoice> {
+    let mut seen: HashMap<u64, usize> = HashMap::new();
+    for number in playback.iter().filter_map(|song| song.content_id) {
+        *seen.entry(number).or_default() += 1;
+    }
+    let choice = |song: &LibrarySong, is_suggestion: bool| -> Option<PairChoice> {
+        let content_id = song.content_id.filter(|n| seen.get(n) == Some(&1))?;
+        Some(PairChoice {
+            setlist_song_id: song.setlist_song_id,
+            content_id,
+            position: song.position,
+            title: song.title.clone(),
+            key: song.key.clone(),
+            countdown_length_s: song.countdown_length_s,
+            suggested: is_suggestion,
+        })
+    };
+    let first = suggested.and_then(|song| choice(song, true));
+    let first_id = first.as_ref().map(|c| c.content_id);
+    first
+        .into_iter()
+        .chain(
+            playback
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| !taken[*k])
+                .filter_map(|(_, song)| choice(song, false))
+                .filter(|c| Some(c.content_id) != first_id),
+        )
+        .collect()
 }
 
 /// `match_setlist` for a caller that wants only the plan's side.
@@ -1238,6 +1332,7 @@ mod tests {
             title: title.into(),
             seconds: Some(300),
             key_name: None,
+            pair: None,
         }
     }
 
@@ -2180,5 +2275,174 @@ mod tests {
         );
         assert!(parse_setlist_list(&serde_json::json!({"setlists": "x"})).is_empty());
         assert!(parse_setlist_list(&serde_json::json!(null)).is_empty());
+    }
+    // ---- pairs made by hand -----------------------------------------------------------------------------
+
+    fn numbered(title: &str, order: u32) -> LibrarySong {
+        let mut s = song(title, order);
+        s.content_id = Some(5_000_000 + u64::from(order));
+        s
+    }
+
+    fn by_hand(title: &str, to: u64) -> PlanTitle {
+        let mut p = plan_song(title);
+        p.pair = Some(HandPair {
+            content_id: to,
+            title_seen: "seen".into(),
+        });
+        p
+    }
+
+    #[test]
+    fn a_pair_made_by_hand_is_an_exact_pair_for_a_song_with_another_name() {
+        let playback = [numbered("Song One", 1), numbered("Totally Other Name", 2)];
+        let plan = [
+            plan_song("Song One"),
+            by_hand("Mine Is Called This", 5_000_002),
+        ];
+        let m = match_setlist(&plan, &playback);
+        assert_eq!(m.songs[1].status, PlanMatch::Matched);
+        assert_eq!(m.songs[1].confidence, Some(MatchConfidence::ByHand));
+        assert_eq!(
+            m.songs[1].library.as_ref().map(|l| l.title.as_str()),
+            Some("Totally Other Name")
+        );
+        assert!(
+            m.songs[1].pair_choices.is_empty(),
+            "a paired song offers nothing"
+        );
+        assert!(
+            m.playback_only.is_empty(),
+            "the paired song is no longer Playback's alone"
+        );
+    }
+
+    #[test]
+    fn without_a_pair_nothing_is_paired_by_hand_and_an_uncertain_match_is_never_used() {
+        let playback = [numbered("Oceans Where Feet May Fail", 1)];
+        let m = match_setlist(&[plan_song("Oceans")], &playback);
+        assert_eq!(m.songs[0].status, PlanMatch::Uncertain);
+        assert!(
+            m.songs[0].library.is_none(),
+            "an uncertain match is never the song's library"
+        );
+        assert_eq!(m.songs[0].pair_choices.len(), 1);
+        assert!(m.songs[0].pair_choices[0].suggested);
+    }
+
+    #[test]
+    fn choices_list_the_suggestion_first_then_the_unpaired_songs_in_setlist_order() {
+        let playback = [
+            numbered("Zebra", 1),
+            numbered("Song One", 2),
+            numbered("Oceans Where Feet May Fail", 3),
+            numbered("Alpha", 4),
+        ];
+        let plan = [
+            plan_song("Song One"),
+            plan_song("Oceans"),
+            plan_song("Nothing Alike"),
+        ];
+        let m = match_setlist(&plan, &playback);
+        assert!(
+            m.songs[0].pair_choices.is_empty(),
+            "an exact pair has no choices"
+        );
+        let titles = |i: usize| -> Vec<&str> {
+            m.songs[i]
+                .pair_choices
+                .iter()
+                .map(|c| c.title.as_str())
+                .collect()
+        };
+        assert_eq!(
+            titles(1),
+            ["Oceans Where Feet May Fail", "Zebra", "Alpha"],
+            "the suggestion first, the rest in setlist order, the exact pair never"
+        );
+        assert_eq!(
+            titles(2),
+            ["Zebra", "Oceans Where Feet May Fail", "Alpha"],
+            "another plan song's suggestion is still unpaired"
+        );
+        assert!(!m.songs[2].pair_choices.iter().any(|c| c.suggested));
+        let first = &m.songs[1].pair_choices[0];
+        assert_eq!(
+            (
+                first.setlist_song_id,
+                first.content_id,
+                first.position,
+                first.key.as_deref()
+            ),
+            (Some(103), 5_000_003, 3, Some("G"))
+        );
+        assert_eq!(first.countdown_length_s, Some(300.0));
+    }
+
+    #[test]
+    fn a_playback_song_pairs_with_one_plan_song_only() {
+        let playback = [numbered("Name A", 1), numbered("Name B", 2)];
+        // Two plan songs say the same Playback song: the first in plan order has it, the other is left unpaired and the
+        // taken song is no longer one of its choices.
+        let plan = [by_hand("First", 5_000_001), by_hand("Second", 5_000_001)];
+        let m = match_setlist(&plan, &playback);
+        assert_eq!(m.songs[0].status, PlanMatch::Matched);
+        assert_eq!(m.songs[1].status, PlanMatch::Missing);
+        assert!(m.songs[1].library.is_none());
+        let titles: Vec<&str> = m.songs[1]
+            .pair_choices
+            .iter()
+            .map(|c| c.title.as_str())
+            .collect();
+        assert_eq!(titles, ["Name B"]);
+        // A pair never takes a song an exact title pair has.
+        let plan = [plan_song("Name A"), by_hand("Other", 5_000_001)];
+        let m = match_setlist(&plan, &playback);
+        assert_eq!(m.songs[0].confidence, Some(MatchConfidence::Exact));
+        assert_eq!(m.songs[1].status, PlanMatch::Missing);
+    }
+
+    #[test]
+    fn a_pair_for_a_song_playback_no_longer_has_is_ignored_and_a_number_held_twice_is_not_offered()
+    {
+        let mut twin = numbered("Twin B", 3);
+        twin.content_id = Some(5_000_002);
+        let playback = [numbered("Name A", 1), numbered("Twin A", 2), twin, {
+            let mut s = song("No Number", 4);
+            s.content_id = None;
+            s
+        }];
+        let plan = [by_hand("Gone", 9_999_999), by_hand("Twins", 5_000_002)];
+        let m = match_setlist(&plan, &playback);
+        assert_eq!(
+            m.songs[0].status,
+            PlanMatch::Missing,
+            "its song left the setlist"
+        );
+        assert_eq!(
+            m.songs[1].status,
+            PlanMatch::Missing,
+            "the number is on two songs"
+        );
+        let titles: Vec<&str> = m.songs[0]
+            .pair_choices
+            .iter()
+            .map(|c| c.title.as_str())
+            .collect();
+        assert_eq!(
+            titles,
+            ["Name A"],
+            "no number, or a number held twice, is not offered"
+        );
+    }
+
+    #[test]
+    fn a_pair_replaces_an_uncertain_suggestion_for_the_same_song() {
+        let playback = [numbered("Oceans Where Feet May Fail", 1)];
+        let m = match_setlist(&[by_hand("Oceans", 5_000_001)], &playback);
+        assert_eq!(m.songs[0].status, PlanMatch::Matched);
+        assert_eq!(m.songs[0].confidence, Some(MatchConfidence::ByHand));
+        assert!(m.songs[0].candidate.is_none());
+        assert!(m.playback_only.is_empty());
     }
 }

@@ -423,7 +423,10 @@ impl AddSongs {
         let pick = sources.get(&wanted.ref_id);
         let mut plan = SongPlan {
             ref_id: wanted.ref_id.clone(),
-            title: wanted.title.clone(),
+            title: wanted
+                .plan_name
+                .clone()
+                .unwrap_or_else(|| wanted.title.clone()),
             position: wanted.position,
             content_id: wanted.content_id,
             action: SongAction::Blocked,
@@ -556,7 +559,7 @@ impl AddSongs {
             ));
             return plan;
         }
-        let base = clean_name(&wanted.title);
+        let base = clean_name(wanted.plan_name.as_deref().unwrap_or(&wanted.title));
         if base.is_empty() {
             plan.reason =
                 Some("The song's title has no letters StagePilot can use as a file name.".into());
@@ -713,8 +716,14 @@ impl AddSongs {
         } else {
             source_stem
         };
+        // A song a person paired by hand is named after the plan song; every other copy keeps its source's name.
+        let named = wanted
+            .plan_name
+            .as_deref()
+            .map(clean_name)
+            .filter(|name| !name.is_empty());
         plan.action = SongAction::Copy;
-        plan.file = Some(claim_copy_name(base, taken));
+        plan.file = Some(claim_copy_name(named.as_deref().unwrap_or(base), taken));
         plan.source = Some(format!("{} / {}", chosen.entry.library, chosen.entry.file));
         plan.source_file = Some((chosen.entry.library.clone(), chosen.entry.file.clone()));
         plan

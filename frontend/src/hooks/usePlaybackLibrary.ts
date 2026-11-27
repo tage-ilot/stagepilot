@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { choosePlaybackLibrarySetlist, getPlaybackLibraryPlan, getPlaybackLibraryStatus, getSettings, updatePlaybackLibrarySettings } from "../api";
+import { choosePlaybackLibrarySetlist, getPlaybackLibraryPlan, getPlaybackLibraryStatus, getSettings, pairPlaybackLibrarySong, unpairPlaybackLibrarySong, updatePlaybackLibrarySettings } from "../api";
 import { describeError } from "../errorText";
 import type { LibraryPlan, LibraryStatus, SettingsResponse } from "../types";
 
@@ -17,11 +17,17 @@ export interface PlaybackLibraryController {
   status: LibraryStatus | null;
   plan: LibraryPlan | null;
   error: string | null;
-  pending: "save" | "check" | "setlist" | null;
+  pending: "save" | "check" | "setlist" | "pair" | null;
+  /** Whether this window may change settings: a remote viewer may look but never pair. */
+  canPair: boolean;
   /** Saves the override of the helper's computer (empty: the Playback host). */
   saveAddress: (address: string) => Promise<boolean>;
   /** Chooses which Playback setlist the loaded plan is matched with (null: the one on the plan's date). The backend keeps it in memory for this plan only; nothing is saved or sent to Playback. */
   chooseSetlist: (setlistId: number | null) => Promise<boolean>;
+  /** A person confirms that a plan song goes with a Playback song of another name (the plan song's key and Playback's setlist song number). Kept by StagePilot beside its settings; nothing is sent to Playback. */
+  pairSong: (key: string, setlistSongId: number) => Promise<boolean>;
+  /** Undoes the pair a person made for that plan song. */
+  unpairSong: (key: string) => Promise<boolean>;
   /** The Check button: reads the helper's health now. */
   check: () => void;
   /** A setup box is waiting for the script: look every few seconds instead of every 30. */
@@ -41,7 +47,7 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
   const [status, setStatus] = useState<LibraryStatus | null>(null);
   const [plan, setPlan] = useState<LibraryPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<"save" | "check" | "setlist" | null>(null);
+  const [pending, setPending] = useState<"save" | "check" | "setlist" | "pair" | null>(null);
   const [watching, setWatching] = useState(false);
   const generation = useRef(0);
   // A background read clears the error a read left, never the one an action (save) left: that one stays until the next action.
@@ -119,6 +125,25 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
     }
   }, [canConfigure]);
 
+  const changePair = useCallback(async (change: () => Promise<LibraryPlan>, failure: string): Promise<boolean> => {
+    if (!canConfigure) return false;
+    setPending("pair");
+    errorFrom.current = null;
+    setError(null);
+    try {
+      setPlan(await change());
+      return true;
+    } catch (cause) {
+      errorFrom.current = "action";
+      setError(describeError(cause, failure));
+      return false;
+    } finally {
+      setPending(null);
+    }
+  }, [canConfigure]);
+  const pairSong = useCallback((key: string, setlistSongId: number) => changePair(() => pairPlaybackLibrarySong(key, setlistSongId), "StagePilot could not pair these two songs."), [changePair]);
+  const unpairSong = useCallback((key: string) => changePair(() => unpairPlaybackLibrarySong(key), "StagePilot could not undo the pair."), [changePair]);
+
   const check = useCallback(() => {
     if (!enabled) return;
     setPending("check");
@@ -127,5 +152,5 @@ export function usePlaybackLibrary(canConfigure: boolean, settings: SettingsResp
 
   const watch = useCallback((on: boolean) => setWatching(on), []);
 
-  return { target, address, status, plan, error, pending, saveAddress, chooseSetlist, check, watch };
+  return { target, address, status, plan, error, pending, canPair: canConfigure, saveAddress, chooseSetlist, pairSong, unpairSong, check, watch };
 }

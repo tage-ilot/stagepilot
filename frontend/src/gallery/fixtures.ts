@@ -63,7 +63,7 @@ export const libraryOf = (state: HelperState, over: Partial<LibraryStatus["helpe
   };
 };
 export const libraryController = (status: LibraryStatus | null): PlaybackLibraryController => ({
-  target: "10.30.0.141", address: "", status, plan: null, error: null, pending: null, saveAddress: nobody, chooseSetlist: nobody, check: none, watch: none,
+  target: "10.30.0.141", address: "", status, plan: null, error: null, pending: null, canPair: true, saveAddress: nobody, chooseSetlist: nobody, pairSong: nobody, unpairSong: nobody, check: none, watch: none,
 });
 
 // ---- Lighting (Lightkey) ----------------------------------------------------------------------------------------------
