@@ -30,11 +30,11 @@ beforeEach(() => {
 afterEach(() => { vi.clearAllMocks(); window.localStorage.clear(); });
 
 describe("the readiness chip on each song", () => {
-  it("is not drawn while the window has no follow status, and the switch is drawn locked without a controller", async () => {
+  it("is not drawn while the window has no follow status, and the box is not drawn at all without a controller", async () => {
     draw(undefined);
     await screen.findByRole("option", { name: "Sunday Morning Service" });
     expect(screen.queryByTestId("follow-song")).toBeNull();
-    expect(screen.getByRole("switch", { name: "Follow Playback in ProPresenter" })).toBeDisabled();
+    expect(screen.queryByRole("switch", { name: "Follow Playback in ProPresenter" })).toBeNull();
   });
 
   it("says in the backend's words whether each song is followed, by cues, by bars, or why not", async () => {

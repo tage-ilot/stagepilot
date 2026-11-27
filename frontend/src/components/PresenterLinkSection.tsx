@@ -110,8 +110,8 @@ function PresenterLinkBody({ follow, library, link, plan, playing }: { follow?: 
           )}
         </fieldset>
       </OptionalBand>
-      {/* Always drawn, like the section: greyed with its reason while the Presenter Link or Playback's Library Link is not ready. */}
-      <PresenterFollowBlock follow={follow} libraryReady={libraryReady} linkReady={add.linkReady} />
+      {/* Drawn whenever the window passes its follower (the dashboard always does), greyed with its reason while the Presenter Link or Playback's Library Link is not ready. Without one (the section gallery's older states) there is nothing to switch, and the extra markup made those gallery tests several times slower on the macOS runners. */}
+      {follow && <PresenterFollowBlock follow={follow} libraryReady={libraryReady} linkReady={add.linkReady} />}
     </div>
   );
 }
