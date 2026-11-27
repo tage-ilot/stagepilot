@@ -998,7 +998,7 @@ describe("the song map on the panel's timeline (the Playback library's arrangeme
     setlist_song_id: 2000001, content_id: null, position: 1, title: "Holy Forever", key: "Ab", key_original: "Ab", key_was: null, key_changed_at: null, has_waveform: false, bpm: 65, scan_length_s: 330, countdown_length_s: 330,
     length_source: "last_measure", arrangement: "Default", section_count: 3,
     sections: [{ name: "Count Off", start: 0, end: 4 }, { name: "Verse 1", start: 4, end: 100 }, { name: "Chorus", start: 100, end: 335 }],
-    artwork: null, rental_expires_utc: null, ...over,
+    artwork: null, rental_expires_utc: null, lyric_cue_count: 0, lyric_cue_max_slide: null, ...over,
   });
   const libraryOf = (songs: unknown[], over: Record<string, unknown> = {}) => ({
     target: "10.0.0.5", address: "", status: null, error: null, pending: null, saveAddress: vi.fn(), check: vi.fn(), watch: vi.fn(),
@@ -1100,7 +1100,7 @@ describe("the Playback waveform replaces the room loudness", () => {
     setlist_song_id: id, content_id: null, position: id - 2000000, title: "Song", key: "Ab", key_original: "Ab", key_was: null, key_changed_at: null, has_waveform: false, bpm: 65, scan_length_s: 330, countdown_length_s: 330,
     length_source: "last_measure", arrangement: "Default", section_count: 2,
     sections: [{ name: "Verse 1", start: 0, end: 100 }, { name: "Chorus", start: 100, end: 335 }],
-    artwork: null, rental_expires_utc: null, ...over,
+    artwork: null, rental_expires_utc: null, lyric_cue_count: 0, lyric_cue_max_slide: null, ...over,
   });
   const planOf = (songs: unknown[]) => ({
     target: "10.0.0.5", address: "", status: null, error: null, pending: null, saveAddress: vi.fn(), check: vi.fn(), watch: vi.fn(),

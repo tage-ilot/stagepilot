@@ -70,4 +70,12 @@ artwork: LibraryArtwork | null,
 /**
  * When a rented song stops being available (RFC 3339), null when it is not a rental.
  */
-rental_expires_utc: string | null, };
+rental_expires_utc: string | null, 
+/**
+ * How many lyric cues the song has (0 when none or not read).
+ */
+lyric_cue_count: number, 
+/**
+ * The highest slide number among the lyric cues, null when there are none.
+ */
+lyric_cue_max_slide: number | null, };

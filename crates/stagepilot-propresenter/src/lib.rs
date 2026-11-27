@@ -5,6 +5,7 @@
 
 pub mod client;
 pub mod errors;
+pub mod follow;
 pub mod models;
 pub mod plugin;
 pub mod snapshot;

@@ -1110,6 +1110,10 @@ export interface LibrarySong {
   /** The cover picture, described (never the bytes: the window asks for them on `playbackLibraryArtworkUrl`); null when the song has none. */
   artwork: LibraryArtwork | null;
   rental_expires_utc: string | null;
+  /** How many lyric cues Playback holds for the song (0 when none or not read). The cues themselves are never sent. */
+  lyric_cue_count: number;
+  /** The highest slide number among them, null when there are none. */
+  lyric_cue_max_slide: number | null;
 }
 
 export interface LibrarySection {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **StagePilot reads Playback's lyric cues and works out which ProPresenter slide each one means (groundwork for following Playback with lyrics; nothing is sent to ProPresenter yet).** For a song that has a ProPresenter Line Template in Playback, the plan now says how many lyric cues the song has and the highest slide number among them. StagePilot also reads which slides of a song file show text, and can turn Playback's cue numbers into ProPresenter's slide numbers for the `Playback` arrangement (repeated choruses and same-named groups included), say whether the cues fit the file, and spread slides over the sections when they do not. There is no switch or screen for it yet and ProPresenter is not contacted.
+
 ### Changed
 
 - **StagePilot is always built with the newest VerseVision release.** VerseVision is followed through the `stable` branch of its repository, which its release workflow moves to each final release, and the release script refreshes both lockfiles from it (`node scripts/update-versevision.mjs`). No version or commit has to be edited by hand. This build takes VerseVision 1.0.0: the Rust app with the "Add a Bible key first" card on a computer that has no key and no StagePilot service (inside StagePilot the shared service counts, so nothing changes there).

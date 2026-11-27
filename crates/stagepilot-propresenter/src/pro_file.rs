@@ -343,6 +343,9 @@ pub struct Group {
     pub name: String,
     /// The cues (slides) in it, in order.
     pub cue_ids: Vec<String>,
+    /// For each cue of the group, in the same order as `cue_ids`: whether the slide has a text element with at least one
+    /// visible character. A blank slide, a background-only slide and a text element that holds only spaces are `false`.
+    pub cue_has_text: Vec<bool>,
     /// What its slides say (the text of every text element), to tell two groups of the same name apart.
     signature: Vec<Vec<Vec<u8>>>,
 }
@@ -432,6 +435,122 @@ fn cue_texts(cue: &[u8]) -> Vec<Vec<u8>> {
     out
 }
 
+/// Whether the text of one text element (the `rtf_data` ProPresenter keeps, or plain text) shows at least one character:
+/// RTF control words, font and colour tables, spaces and line breaks do not count.
+pub fn rtf_has_visible_text(rtf: &[u8]) -> bool {
+    const SKIPPED: [&str; 14] = [
+        "fonttbl",
+        "colortbl",
+        "expandedcolortbl",
+        "stylesheet",
+        "info",
+        "pict",
+        "header",
+        "footer",
+        "listtable",
+        "listoverridetable",
+        "generator",
+        "filetbl",
+        "themedata",
+        "latentstyles",
+    ];
+    let visible = |b: u8| b > 0x20 && b != 0x7f;
+    let rtf = rtf.trim_ascii_start();
+    if !rtf.starts_with(b"{\\rtf") {
+        return String::from_utf8_lossy(rtf)
+            .chars()
+            .any(|c| !c.is_whitespace() && !c.is_control());
+    }
+    // One entry per open group: true while inside a part that never shows (a table, a `{\*...}` destination).
+    let mut skipping: Vec<bool> = Vec::new();
+    let mut i = 0;
+    while i < rtf.len() {
+        let b = rtf[i];
+        match b {
+            b'{' => {
+                let inherited = skipping.last().copied().unwrap_or(false);
+                let rest = &rtf[i + 1..];
+                let hidden = rest.starts_with(b"\\*") || {
+                    let word: String = rest
+                        .strip_prefix(b"\\")
+                        .unwrap_or(&[])
+                        .iter()
+                        .take_while(|c| c.is_ascii_alphabetic())
+                        .map(|c| char::from(*c))
+                        .collect();
+                    SKIPPED.contains(&word.as_str())
+                };
+                skipping.push(inherited || hidden);
+                i += 1;
+            }
+            b'}' => {
+                skipping.pop();
+                i += 1;
+            }
+            b'\\' => {
+                let hidden = skipping.last().copied().unwrap_or(false);
+                let Some(&next) = rtf.get(i + 1) else {
+                    break;
+                };
+                if next.is_ascii_alphabetic() {
+                    let end = rtf[i + 1..]
+                        .iter()
+                        .position(|c| !c.is_ascii_alphabetic())
+                        .map_or(rtf.len(), |n| i + 1 + n);
+                    let word = &rtf[i + 1..end];
+                    let mut at = end;
+                    if rtf.get(at) == Some(&b'-') {
+                        at += 1;
+                    }
+                    while rtf.get(at).is_some_and(u8::is_ascii_digit) {
+                        at += 1;
+                    }
+                    if rtf.get(at) == Some(&b' ') {
+                        at += 1;
+                    }
+                    if word == b"u" && !hidden {
+                        // A unicode character, then the one plain character (or `\'xx`) that stands in for it.
+                        let number = String::from_utf8_lossy(&rtf[end..at]).trim().to_string();
+                        if number.parse::<i32>().is_ok_and(|n| n != 32 && n != 160) {
+                            return true;
+                        }
+                        if rtf[at..].starts_with(b"\\'") {
+                            at += 4;
+                        } else {
+                            at += 1;
+                        }
+                    }
+                    i = at.min(rtf.len());
+                } else if next == b'\'' {
+                    if !hidden {
+                        let hex = rtf.get(i + 2..i + 4).unwrap_or(&[]);
+                        let value = std::str::from_utf8(hex)
+                            .ok()
+                            .and_then(|h| u8::from_str_radix(h, 16).ok());
+                        if value.is_some_and(|v| v != 0xa0 && (visible(v) || v >= 0x80)) {
+                            return true;
+                        }
+                    }
+                    i += 4;
+                } else {
+                    // `\\`, `\{`, `\}` are visible characters; `\~` (a hard space), `\-`, `\_` and the like are not.
+                    if !hidden && matches!(next, b'\\' | b'{' | b'}') {
+                        return true;
+                    }
+                    i += 2;
+                }
+            }
+            _ => {
+                if !skipping.last().copied().unwrap_or(false) && visible(b) {
+                    return true;
+                }
+                i += 1;
+            }
+        }
+    }
+    false
+}
+
 fn read_music(message: &[u8]) -> Music {
     let Some(recs) = records(message) else {
         return Music::default();
@@ -496,6 +615,7 @@ impl Song {
                             .ok_or(ProError::NotASong)?,
                         name: first(group, &inner, 2).map(text).unwrap_or_default(),
                         cue_ids: ids,
+                        cue_has_text: Vec::new(),
                         signature: Vec::new(),
                     });
                 }
@@ -526,6 +646,11 @@ impl Song {
                         .cloned()
                         .unwrap_or_default()
                 })
+                .collect();
+            song.groups[index].cue_has_text = song.groups[index]
+                .signature
+                .iter()
+                .map(|texts| texts.iter().any(|rtf| rtf_has_visible_text(rtf)))
                 .collect();
         }
         if song.uuid.is_empty() && song.groups.is_empty() && song.arrangements.is_empty() {

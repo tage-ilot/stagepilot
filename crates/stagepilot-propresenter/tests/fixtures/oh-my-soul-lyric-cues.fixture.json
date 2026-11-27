@@ -1,0 +1,477 @@
+{
+ "about": "Numbers only, no lyrics. Real Playback 'ProPresenter 1 Line Template' cues for a 54-cue song (Lyrics bus, note 19), plus Playback's sections and the song file's groups (name, cue count) in file order. Recorded 2026-11-26.",
+ "cues": [
+  {
+   "time_s": 3.53,
+   "slide": 1
+  },
+  {
+   "time_s": 8.17,
+   "slide": 2
+  },
+  {
+   "time_s": 11.12,
+   "slide": 3
+  },
+  {
+   "time_s": 15.13,
+   "slide": 4
+  },
+  {
+   "time_s": 19.33,
+   "slide": 5
+  },
+  {
+   "time_s": 23.12,
+   "slide": 6
+  },
+  {
+   "time_s": 27.48,
+   "slide": 7
+  },
+  {
+   "time_s": 31.18,
+   "slide": 8
+  },
+  {
+   "time_s": 35.5,
+   "slide": 9
+  },
+  {
+   "time_s": 39.3,
+   "slide": 10
+  },
+  {
+   "time_s": 44.01,
+   "slide": 11
+  },
+  {
+   "time_s": 48.22,
+   "slide": 12
+  },
+  {
+   "time_s": 52.33,
+   "slide": 13
+  },
+  {
+   "time_s": 55.85,
+   "slide": 14
+  },
+  {
+   "time_s": 59.73,
+   "slide": 15
+  },
+  {
+   "time_s": 62.25,
+   "slide": 16
+  },
+  {
+   "time_s": 63.2,
+   "slide": 17
+  },
+  {
+   "time_s": 64.57,
+   "slide": 18
+  },
+  {
+   "time_s": 68.62,
+   "slide": 19
+  },
+  {
+   "time_s": 71.69,
+   "slide": 20
+  },
+  {
+   "time_s": 75.59,
+   "slide": 21
+  },
+  {
+   "time_s": 79.79,
+   "slide": 22
+  },
+  {
+   "time_s": 83.55,
+   "slide": 23
+  },
+  {
+   "time_s": 88.38,
+   "slide": 11
+  },
+  {
+   "time_s": 92.59,
+   "slide": 12
+  },
+  {
+   "time_s": 96.7,
+   "slide": 13
+  },
+  {
+   "time_s": 100.22,
+   "slide": 14
+  },
+  {
+   "time_s": 104.13,
+   "slide": 24
+  },
+  {
+   "time_s": 106.62,
+   "slide": 25
+  },
+  {
+   "time_s": 107.53,
+   "slide": 26
+  },
+  {
+   "time_s": 112.16,
+   "slide": 15
+  },
+  {
+   "time_s": 114.69,
+   "slide": 16
+  },
+  {
+   "time_s": 116.95,
+   "slide": 27
+  },
+  {
+   "time_s": 121.06,
+   "slide": 28
+  },
+  {
+   "time_s": 124.33,
+   "slide": 29
+  },
+  {
+   "time_s": 128.65,
+   "slide": 30
+  },
+  {
+   "time_s": 132.62,
+   "slide": 31
+  },
+  {
+   "time_s": 136.41,
+   "slide": 32
+  },
+  {
+   "time_s": 137.93,
+   "slide": 33
+  },
+  {
+   "time_s": 140.46,
+   "slide": 29
+  },
+  {
+   "time_s": 144.78,
+   "slide": 30
+  },
+  {
+   "time_s": 148.75,
+   "slide": 31
+  },
+  {
+   "time_s": 152.54,
+   "slide": 32
+  },
+  {
+   "time_s": 154.06,
+   "slide": 33
+  },
+  {
+   "time_s": 156.88,
+   "slide": 34
+  },
+  {
+   "time_s": 160.79,
+   "slide": 35
+  },
+  {
+   "time_s": 164.83,
+   "slide": 36
+  },
+  {
+   "time_s": 168.5,
+   "slide": 37
+  },
+  {
+   "time_s": 170.5,
+   "slide": 38
+  },
+  {
+   "time_s": 173.44,
+   "slide": 39
+  },
+  {
+   "time_s": 176.98,
+   "slide": 40
+  },
+  {
+   "time_s": 181.16,
+   "slide": 41
+  },
+  {
+   "time_s": 184.97,
+   "slide": 42
+  },
+  {
+   "time_s": 189.08,
+   "slide": 43
+  },
+  {
+   "time_s": 193.57,
+   "slide": 44
+  },
+  {
+   "time_s": 197.38,
+   "slide": 45
+  },
+  {
+   "time_s": 201.45,
+   "slide": 46
+  },
+  {
+   "time_s": 205.32,
+   "slide": 47
+  },
+  {
+   "time_s": 209.0,
+   "slide": 24
+  },
+  {
+   "time_s": 211.49,
+   "slide": 25
+  },
+  {
+   "time_s": 212.41,
+   "slide": 26
+  },
+  {
+   "time_s": 217.07,
+   "slide": 24
+  },
+  {
+   "time_s": 219.56,
+   "slide": 25
+  },
+  {
+   "time_s": 220.47,
+   "slide": 26
+  },
+  {
+   "time_s": 225.16,
+   "slide": 48
+  },
+  {
+   "time_s": 227.71,
+   "slide": 49
+  },
+  {
+   "time_s": 228.6,
+   "slide": 50
+  },
+  {
+   "time_s": 229.91,
+   "slide": 51
+  },
+  {
+   "time_s": 234.03,
+   "slide": 52
+  },
+  {
+   "time_s": 238.02,
+   "slide": 53
+  }
+ ],
+ "sections": [
+  {
+   "name": "Count Off",
+   "start_s": 0.0,
+   "end_s": 4.03
+  },
+  {
+   "name": "Intro",
+   "start_s": 4.03,
+   "end_s": 12.1
+  },
+  {
+   "name": "Verse 1",
+   "start_s": 12.1,
+   "end_s": 28.23
+  },
+  {
+   "name": "Verse 1",
+   "start_s": 28.23,
+   "end_s": 44.37
+  },
+  {
+   "name": "Chorus",
+   "start_s": 44.37,
+   "end_s": 60.5
+  },
+  {
+   "name": "Refrain",
+   "start_s": 60.5,
+   "end_s": 64.54
+  },
+  {
+   "name": "Interlude",
+   "start_s": 64.54,
+   "end_s": 72.61
+  },
+  {
+   "name": "Verse 2",
+   "start_s": 72.61,
+   "end_s": 88.74
+  },
+  {
+   "name": "Chorus",
+   "start_s": 88.74,
+   "end_s": 104.87
+  },
+  {
+   "name": "Refrain",
+   "start_s": 104.87,
+   "end_s": 112.94
+  },
+  {
+   "name": "Refrain",
+   "start_s": 112.94,
+   "end_s": 116.97
+  },
+  {
+   "name": "Interlude",
+   "start_s": 116.97,
+   "end_s": 125.04
+  },
+  {
+   "name": "Bridge",
+   "start_s": 125.04,
+   "end_s": 141.18
+  },
+  {
+   "name": "Bridge",
+   "start_s": 141.18,
+   "end_s": 157.31
+  },
+  {
+   "name": "Bridge",
+   "start_s": 157.31,
+   "end_s": 173.44
+  },
+  {
+   "name": "Vamp",
+   "start_s": 173.44,
+   "end_s": 177.48
+  },
+  {
+   "name": "Chorus",
+   "start_s": 177.48,
+   "end_s": 193.61
+  },
+  {
+   "name": "Chorus",
+   "start_s": 193.61,
+   "end_s": 209.75
+  },
+  {
+   "name": "Refrain",
+   "start_s": 209.75,
+   "end_s": 217.81
+  },
+  {
+   "name": "Refrain",
+   "start_s": 217.81,
+   "end_s": 225.88
+  },
+  {
+   "name": "Refrain",
+   "start_s": 225.88,
+   "end_s": 229.91
+  },
+  {
+   "name": "Outro",
+   "start_s": 229.91,
+   "end_s": 237.98
+  },
+  {
+   "name": "Ending",
+   "start_s": 237.98,
+   "end_s": 248.07
+  }
+ ],
+ "file_groups": [
+  {
+   "name": "",
+   "cues": 1
+  },
+  {
+   "name": "Intro",
+   "cues": 2
+  },
+  {
+   "name": "Verse 1",
+   "cues": 4
+  },
+  {
+   "name": "Verse 1",
+   "cues": 4
+  },
+  {
+   "name": "Chorus",
+   "cues": 4
+  },
+  {
+   "name": "Refrain",
+   "cues": 3
+  },
+  {
+   "name": "Interlude",
+   "cues": 2
+  },
+  {
+   "name": "Verse 2",
+   "cues": 4
+  },
+  {
+   "name": "Refrain",
+   "cues": 3
+  },
+  {
+   "name": "Interlude",
+   "cues": 2
+  },
+  {
+   "name": "Bridge",
+   "cues": 5
+  },
+  {
+   "name": "Bridge",
+   "cues": 5
+  },
+  {
+   "name": "Vamp",
+   "cues": 1
+  },
+  {
+   "name": "Chorus",
+   "cues": 4
+  },
+  {
+   "name": "Chorus",
+   "cues": 4
+  },
+  {
+   "name": "Refrain",
+   "cues": 3
+  },
+  {
+   "name": "Outro",
+   "cues": 2
+  },
+  {
+   "name": "Ending",
+   "cues": 1
+  }
+ ],
+ "file_cue_total": 54
+}

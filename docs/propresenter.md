@@ -423,6 +423,19 @@ Playback plays a song in.
 
 To look at all of this without ProPresenter, see `docs/preview-live-link.md` ("The ProPresenter Link").
 
+## Following Playback
+
+StagePilot is being taught to show a song's lyrics in ProPresenter while Playback plays it. **Today only the groundwork exists, and nothing is sent to ProPresenter: there is no switch, no setting and no button for it yet, and ProPresenter behaves exactly as before.**
+
+What StagePilot can already work out, from data it reads and never changes:
+
+- **Playback's lyric cues.** When someone chose a ProPresenter Line Template for a song in Playback (Edit, the "..." on the song, MIDI OUT, Lyrics Bus), the Playback library holds one cue per lyric slide: the second it appears and its slide number. The plan lists only how many cues a song has and its highest slide number (`lyric_cue_count`, `lyric_cue_max_slide`), never the cues.
+- **The song file's slides.** For each group of a song file StagePilot reads how many slides it has and which of them show text (a blank or background-only slide does not).
+- **Which ProPresenter slide each cue means.** A cue's slide number counts the slides of the file in file order; ProPresenter counts the slides of the selected `Playback` arrangement, where a repeated chorus plays its slides again. StagePilot turns one into the other, picking the arrangement entry nearest the section Playback is in, so repeated sections and groups with the same name stay right.
+- **Whether a song's cues can be trusted.** They can when the highest slide number is the file's slide count minus one (the Line Template fits the file), there are at least three, and each one falls in a section. Otherwise StagePilot says why in a few words (for example "template does not match the file (cues go to slide 30, the file has 54)") and spreads the song's text slides over each section instead.
+
+None of this is shown on screen yet, and none of it has been tried against a real ProPresenter.
+
 ## VerseVision
 
 The **VerseVision** button under the settings of the Presentation panel opens VerseVision, which builds verse slides in ProPresenter from a pastor's notes, on the same address and behind the same PIN as the dashboard. It uses this connection (host and port) and works on the computer StagePilot runs on. See [versevision.md](versevision.md).
