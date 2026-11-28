@@ -1061,7 +1061,23 @@ export interface LibraryHelper {
   updater?: boolean;
   /** Why the last automatic update did not stay (the helper put the old version back), when it says. */
   last_update_error?: string;
+  /** Whether the Library Link has switched on Playback's Remote Connections (helper 0.5.0 and newer; absent on an older one). */
+  playback_remote?: PlaybackRemote;
   update?: HelperUpdateStatus;
+}
+
+export type RemoteState = "on" | "switching" | "off" | "needs_permission" | "playback_not_running" | "user_busy" | "failed";
+
+/** `playback_remote` of the Library Link's health: the Library Link switches Playback's Remote Connections on by itself. */
+export interface PlaybackRemote {
+  /** Something accepts connections on Playback's port on the tracks computer; null when the helper cannot tell. */
+  listening: boolean | null;
+  /** The helper is allowed to switch it on by itself. */
+  auto: boolean;
+  state: RemoteState;
+  /** The helper's own plain sentence (for `failed`). */
+  message: string | null;
+  last_attempt_utc: string | null;
 }
 
 export interface LibraryStatus {

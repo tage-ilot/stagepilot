@@ -6,7 +6,7 @@ import type { PlaybackController } from "../hooks/usePlaybackInput";
 import type { PlaybackLibraryController } from "../hooks/usePlaybackLibrary";
 import { helperOf, libraryController, libraryPlan, librarySongOf, libraryStatus } from "../test/libraryFixtures";
 import { playbackStatus } from "../test/playbackFixtures";
-import type { HelperState, LibraryStatus } from "../types";
+import type { HelperState, LibraryStatus, PlaybackRemote } from "../types";
 import { PlaybackApiPanel } from "./PlaybackApiPanel";
 import { PlaybackLiveLink } from "./PlaybackLiveLink";
 
@@ -307,3 +307,40 @@ describe("a computer with no Library Link looks like a build without the library
   });
 });
 
+
+describe("Playback Live Link: the Library Link switches Playback's Remote Connections on by itself", () => {
+  const refusedController = () => controller({
+    status: playbackStatus({
+      connected: false, active_source: "none", last_error: "Playback refused the connection; remote connections may be off",
+      reason: "Disconnected. Looking for Playback… If it stays offline, turn on Remote Connections.",
+      sources: { playback_api: { connected: false, reason: "Playback is disconnected." }, midi: { connected: false, reason: "MIDI is disconnected." } },
+      settings: { enabled: true, host: "10.30.0.141", port: 8080, auto_scan: true, fast_transport: true },
+    }),
+  });
+  const withRemote = (remote?: PlaybackRemote) => ({ ...libraryController("ready"), status: libraryStatus("ready", { helper: helperOf("ready", { playback_remote: remote }) }) });
+
+  it("keeps today's words with an older Library Link and when Remote Connections are on", () => {
+    const { rerender } = render(<PlaybackLiveLink library={withRemote()} playback={refusedController()} />);
+    expect(line("playback-banner").textContent).toBe("Playback API: Not connected. Looking for Playback… If it stays offline, turn on Remote Connections.");
+    rerender(<PlaybackLiveLink library={withRemote({ listening: true, auto: true, state: "on", message: null, last_attempt_utc: null })} playback={refusedController()} />);
+    expect(line("playback-banner").textContent).toBe("Playback API: Not connected. Looking for Playback… If it stays offline, turn on Remote Connections.");
+  });
+
+  it.each([
+    ["switching", "The Library Link is switching on Playback's Remote Connections. This takes a few seconds."],
+    ["user_busy", "Playback is being used; the Library Link will switch on Remote Connections when it is quiet."],
+    ["playback_not_running", "Playback is not open on its computer."],
+  ] as const)("says %s in plain words and leaves the pills alone", (state, words) => {
+    render(<PlaybackLiveLink library={withRemote({ listening: false, auto: true, state, message: null, last_attempt_utc: null })} playback={refusedController()} />);
+    expect(line("playback-banner").textContent).toBe(`Playback API: ${words}`);
+    expect(screen.getByTestId("playback-api-pill")).toHaveTextContent("Playback API: Not connected");
+    expect(screen.getByTestId("library-link-pill")).toHaveTextContent("Library Link: Connected");
+  });
+
+  it("says what the Mac has to allow, and shows the helper's own sentence when it failed", () => {
+    const { rerender } = render(<PlaybackLiveLink library={withRemote({ listening: false, auto: true, state: "needs_permission", message: null, last_attempt_utc: null })} playback={refusedController()} />);
+    expect(line("playback-banner").textContent).toContain("turn on \"Playback Library\". Until then turn on Playback > menu > Playback Remote > Allow Remote Connections by hand.");
+    rerender(<PlaybackLiveLink library={withRemote({ listening: false, auto: true, state: "failed", message: "The Allow Remote Connections switch was not found.", last_attempt_utc: null })} playback={refusedController()} />);
+    expect(line("playback-banner").textContent).toBe("Playback API: The Allow Remote Connections switch was not found. Turn on Allow Remote Connections in Playback by hand.");
+  });
+});

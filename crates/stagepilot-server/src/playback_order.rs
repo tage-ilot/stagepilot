@@ -212,7 +212,17 @@ pub fn watch(rt: std::sync::Weak<Runtime>) -> tokio::task::JoinHandle<()> {
         loop {
             tokio::time::sleep(WATCH_EVERY).await;
             let Some(rt) = rt.upgrade() else { return };
-            refresh(&rt).await;
+            watch_tick(&rt).await;
         }
     })
+}
+
+/// One tick of the watcher: look at the song order, and when the Library Link has just switched on Playback's Remote
+/// Connections ask Playback's connection to try again now (it would otherwise wait for its next one-second retry, and
+/// a Playback that was never found for its next network search).
+pub async fn watch_tick(rt: &Runtime) {
+    refresh(rt).await;
+    if rt.playback_library.take_remote_came_on().await {
+        rt.playback.retry_connection();
+    }
 }

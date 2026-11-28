@@ -3812,3 +3812,74 @@ async fn the_pairs_routes_follow_the_origin_rule_of_every_other_write() {
     let (_, body) = call(&router, "GET", "/api/v1/playback-library/plan", None).await;
     assert_eq!(body["songs"][2]["status"], "missing", "nothing was paired");
 }
+
+#[tokio::test]
+async fn the_status_carries_playback_remote_through_and_says_nothing_without_it() {
+    let (helper, address, library) = keyed(BUNDLED).await;
+    // A helper before 0.5.0: no object, and the window's status has no such member.
+    let status = library.status(&settings_for(&address), false).await;
+    assert!(status.helper.playback_remote.is_none());
+    let as_json = serde_json::to_value(&status.helper).unwrap();
+    assert!(as_json.get("playback_remote").is_none(), "{as_json}");
+    let plain_message = status.message.clone();
+    // Helper 0.5.0: the object comes through, extra members are ignored, the Library Link's own words stay.
+    helper.set(|b| {
+        let mut health = ok_health();
+        health["version"] = json!(BUNDLED);
+        health["playback_remote"] = json!({
+            "listening": false, "auto": true, "state": "needs_permission",
+            "message": null, "last_attempt_utc": "2026-11-27T20:00:00Z", "future": [1, 2]
+        });
+        health["something_else"] = json!(true);
+        b.health = Some(health);
+    });
+    library.advance_clock(Duration::from_secs(31));
+    let status = library.status(&settings_for(&address), false).await;
+    assert_eq!(status.helper.state, HelperState::Ready);
+    assert!(status.active);
+    assert_eq!(status.message, plain_message);
+    let as_json = serde_json::to_value(&status.helper).unwrap();
+    assert_eq!(
+        as_json["playback_remote"],
+        json!({"listening": false, "auto": true, "state": "needs_permission", "message": null,
+               "last_attempt_utc": "2026-11-27T20:00:00Z"})
+    );
+}
+
+#[tokio::test]
+async fn remote_connections_going_on_after_switching_is_seen_within_seconds_and_once() {
+    let (helper, address, library) = keyed(BUNDLED).await;
+    let set_remote = |state: &str| {
+        let state = state.to_string();
+        helper.set(move |b| {
+            let mut health = ok_health();
+            health["version"] = json!(BUNDLED);
+            health["playback_remote"] =
+                json!({"listening": state == "on", "auto": true, "state": state});
+            b.health = Some(health);
+        });
+    };
+    // Playback's connection is "on" from the first answer: not a change, nothing to retry.
+    set_remote("on");
+    library.status(&settings_for(&address), false).await;
+    assert!(!library.take_remote_came_on().await);
+    // The helper starts switching it on.
+    set_remote("switching");
+    library.advance_clock(Duration::from_secs(31));
+    library.status(&settings_for(&address), false).await;
+    assert!(!library.take_remote_came_on().await);
+    set_remote("on");
+    // While it says "switching" the helper is asked again after 2 s, not 30: 3 s later the change is seen.
+    library.advance_clock(Duration::from_secs(3));
+    let status = library.status(&settings_for(&address), false).await;
+    assert_eq!(
+        serde_json::to_value(&status.helper).unwrap()["playback_remote"]["state"],
+        "on"
+    );
+    assert!(library.take_remote_came_on().await, "on after switching");
+    assert!(!library.take_remote_came_on().await, "said once");
+    // Staying on, or an older helper that says nothing, is no change.
+    library.advance_clock(Duration::from_secs(31));
+    library.status(&settings_for(&address), false).await;
+    assert!(!library.take_remote_came_on().await);
+}

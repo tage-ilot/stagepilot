@@ -63,6 +63,65 @@ impl HelperState {
     }
 }
 
+/// Where the Library Link stands with switching on Playback's Remote Connections (`playback_remote.state` of `GET /health`,
+/// helper 0.5.0 and newer).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum RemoteState {
+    /// Something accepts connections on Playback's port.
+    On,
+    /// The helper is switching it on now.
+    Switching,
+    /// It is off (and, with `auto`, the helper will switch it on).
+    Off,
+    /// macOS has not yet allowed the helper to operate Playback's window.
+    NeedsPermission,
+    PlaybackNotRunning,
+    /// Someone is using Playback; the helper waits until it is quiet.
+    UserBusy,
+    Failed,
+}
+
+/// `playback_remote` of `GET /health`: absent on helpers older than 0.5.0 (and then nothing about it is said).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct PlaybackRemote {
+    /// Something accepts connections on Playback's port on the tracks computer; unknown when the helper cannot tell.
+    pub listening: Option<bool>,
+    /// The helper is allowed to switch Remote Connections on by itself.
+    pub auto: bool,
+    pub state: RemoteState,
+    /// The helper's own plain sentence (for `failed`), when it has one.
+    pub message: Option<String>,
+    pub last_attempt_utc: Option<String>,
+}
+
+/// Reads `playback_remote`. Anything that is not an object with a known `state` is left out, as if the helper were older
+/// (today's wording); fields it does not know are ignored.
+pub fn parse_playback_remote(value: &Value) -> Option<PlaybackRemote> {
+    let object = value.get("playback_remote")?.as_object()?;
+    let object = Value::Object(object.clone());
+    let state = match object.get("state").and_then(Value::as_str)? {
+        "on" => RemoteState::On,
+        "switching" => RemoteState::Switching,
+        "off" => RemoteState::Off,
+        "needs_permission" => RemoteState::NeedsPermission,
+        "playback_not_running" => RemoteState::PlaybackNotRunning,
+        "user_busy" => RemoteState::UserBusy,
+        "failed" => RemoteState::Failed,
+        _ => return None,
+    };
+    Some(PlaybackRemote {
+        listening: object.get("listening").and_then(Value::as_bool),
+        auto: object.get("auto").and_then(Value::as_bool).unwrap_or(false),
+        state,
+        message: text_of(&object, "message").map(|m| m.chars().take(200).collect()),
+        last_attempt_utc: text_of(&object, "last_attempt_utc")
+            .map(|m| m.chars().take(40).collect()),
+    })
+}
+
 /// The helper's state in `GET /api/v1/playback-library/status`. The key is never part of it.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -83,6 +142,10 @@ pub struct HelperStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional, as = "Option<String>")]
     pub last_update_error: Option<String>,
+    /// Whether the Library Link has switched on Playback's Remote Connections (helper 0.5.0 and newer; left out for an older one).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, as = "Option<PlaybackRemote>")]
+    pub playback_remote: Option<PlaybackRemote>,
     /// What StagePilot is doing about an older helper (added by the route; left out when there is nothing to say).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(
@@ -489,6 +552,8 @@ pub struct Health {
     pub updater: Option<u32>,
     /// The helper's own sentence about why the last update was undone (`last_update_error`), when there is one.
     pub last_update_error: Option<String>,
+    /// `playback_remote` from helper 0.5.0: whether Playback's Remote Connections are on. Absent on older helpers.
+    pub playback_remote: Option<PlaybackRemote>,
 }
 
 /// Reads `GET /health`. Anything odd gives `Database::Unknown`, never a panic.
@@ -513,6 +578,7 @@ pub fn parse_health(value: &Value) -> Health {
         updater: count_of(value, "updater"),
         last_update_error: text_of(value, "last_update_error")
             .map(|v| v.chars().take(200).collect()),
+        playback_remote: parse_playback_remote(value),
     }
 }
 
@@ -2044,6 +2110,65 @@ mod tests {
         ] {
             assert_eq!(parse_health(&none).library_revision, None);
         }
+    }
+
+    #[test]
+    fn health_reads_playback_remote_and_ignores_what_it_does_not_know() {
+        for (word, state) in [
+            ("on", RemoteState::On),
+            ("switching", RemoteState::Switching),
+            ("off", RemoteState::Off),
+            ("needs_permission", RemoteState::NeedsPermission),
+            ("playback_not_running", RemoteState::PlaybackNotRunning),
+            ("user_busy", RemoteState::UserBusy),
+            ("failed", RemoteState::Failed),
+        ] {
+            let health = parse_health(&json!({
+                "ok": true, "database": "ok",
+                "playback_remote": {
+                    "listening": false, "auto": true, "state": word, "message": " It did not work. ",
+                    "last_attempt_utc": "2026-11-27T20:00:00Z", "something_new": {"a": 1}
+                },
+                "another_new_field": 5
+            }));
+            let remote = health.playback_remote.expect(word);
+            assert_eq!(remote.state, state, "{word}");
+            assert_eq!(remote.listening, Some(false));
+            assert!(remote.auto);
+            assert_eq!(remote.message.as_deref(), Some("It did not work."));
+            assert_eq!(
+                remote.last_attempt_utc.as_deref(),
+                Some("2026-11-27T20:00:00Z")
+            );
+        }
+        // null and missing members are fine.
+        let minimal = parse_health(
+            &json!({"playback_remote": {"state": "on", "listening": null, "message": null}}),
+        );
+        let remote = minimal.playback_remote.unwrap();
+        assert_eq!(
+            (remote.listening, remote.auto, remote.message),
+            (None, false, None)
+        );
+        // An older helper, or an object this StagePilot cannot read, is as if it said nothing.
+        for none in [
+            json!({"ok": true}),
+            json!({"playback_remote": null}),
+            json!({"playback_remote": "on"}),
+            json!({"playback_remote": {"auto": true}}),
+            json!({"playback_remote": {"state": "exploded"}}),
+            json!({"playback_remote": {"state": 5}}),
+        ] {
+            assert_eq!(parse_health(&none).playback_remote, None, "{none}");
+        }
+        // The words for the Library Link do not change with it.
+        let plain = json!({"ok": true, "database": "ok", "songs": 3, "setlists": 1});
+        let mut with = plain.clone();
+        with["playback_remote"] = json!({"state": "switching", "auto": true});
+        assert_eq!(
+            health_words(&parse_health(&plain)),
+            health_words(&parse_health(&with))
+        );
     }
 
     fn found(

@@ -521,6 +521,7 @@ async fn the_window_says_updating_then_updated_once_and_never_for_a_current_help
         paired: true,
         updater: true,
         last_update_error: None,
+        playback_remote: None,
         update: None,
     };
     // Before anything: an older helper that will be updated by itself.
@@ -578,6 +579,7 @@ async fn a_helper_that_cannot_update_itself_is_left_alone_and_keeps_the_command_
         paired: true,
         updater: false,
         last_update_error: None,
+        playback_remote: None,
         update: None,
     };
     assert_eq!(
@@ -638,6 +640,7 @@ async fn a_bundle_that_is_not_signed_by_the_trusted_key_never_leaves() {
             paired: true,
             updater: true,
             last_update_error: None,
+            playback_remote: None,
             update: None,
         };
         assert_eq!(
@@ -687,6 +690,7 @@ async fn with_the_switch_off_in_the_settings_file_nothing_is_asked_or_sent() {
         paired: true,
         updater: true,
         last_update_error: None,
+        playback_remote: None,
         update: None,
     };
     assert_eq!(
@@ -707,6 +711,7 @@ async fn three_failed_attempts_per_version_then_the_command_box_and_one_plain_se
         paired: true,
         updater: true,
         last_update_error: None,
+        playback_remote: None,
         update: None,
     };
     for attempt in 1..=3 {

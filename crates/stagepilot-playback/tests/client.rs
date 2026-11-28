@@ -393,3 +393,32 @@ fn songless_detection_requires_an_otherwise_valid_beat_and_no_song_field() {
     let junk = body(r#"{"heartbeat":{"stateData":{"sequenceTime":0.0}}}"#);
     assert!(!is_songless_heartbeat(&junk));
 }
+
+#[tokio::test]
+async fn retry_now_connects_at_once_instead_of_after_the_wait() {
+    // Playback is off, then switched on (the Library Link did it): with a one-minute wait between tries the client would not
+    // notice for a minute; `retry_now` makes the next try happen now.
+    let port = {
+        let spare = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        spare.local_addr().unwrap().port()
+    };
+    let mut c = PlaybackClient::start(
+        ConnectionOptions {
+            reconnect_delay: Duration::from_secs(60),
+            ..opts(port)
+        },
+        None,
+    )
+    .unwrap();
+    until("the first refusal", || c.status().last_error.is_some()).await;
+    let fake = FakePlayback::start_on(port, None).await;
+    fake.auto_beat(Duration::from_millis(50));
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!c.status().connected, "it is waiting out its minute");
+    c.retry_now();
+    until("connected after retry_now", || c.status().connected).await;
+    // Once connected a call changes nothing (no stored wake-up for the next drop).
+    c.retry_now();
+    assert!(c.status().connected);
+    c.stop().await;
+}

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { libraryStatus } from "../test/libraryFixtures";
+import { helperOf, libraryStatus } from "../test/libraryFixtures";
 import { playbackStatus } from "../test/playbackFixtures";
-import type { HelperState } from "../types";
-import { apiGood, apiLine, pillParts, scriptActive, scriptLine, scriptNote } from "./playbackLiveLinkState";
+import type { HelperState, PlaybackRemote } from "../types";
+import { REMOTE_NEEDS_PERMISSION, REMOTE_NOT_RUNNING, REMOTE_SWITCHING, REMOTE_USER_BUSY, apiGood, apiLine, pillParts, remoteWords, scriptActive, scriptLine, scriptNote, withRemoteWords } from "./playbackLiveLinkState";
 
 describe("the Playback API line: the backend's own sentence, with a tone", () => {
   it("connected, MIDI, searching and not connected", () => {
@@ -92,3 +92,60 @@ describe("the note under the script line", () => {
   });
 });
 
+
+describe("Library Link switching on Playback's Remote Connections: the words", () => {
+  const remote = (over: Partial<PlaybackRemote> = {}): PlaybackRemote => ({ listening: false, auto: true, state: "switching", message: null, last_attempt_utc: null, ...over });
+  const refused = (over = {}) => playbackStatus({ connected: false, active_source: "none", last_error: "Playback refused the connection; remote connections may be off", reason: "Disconnected. Looking for Playback… If it stays offline, turn on Remote Connections.", sources: { playback_api: { connected: false, reason: "" }, midi: { connected: false, reason: "" } }, ...over });
+  const link = (state: HelperState, playback_remote?: PlaybackRemote) => libraryStatus(state, { helper: helperOf(state, { playback_remote }) });
+  const today = apiLine(refused(), "x");
+
+  it("says each state in the words Hunter chose", () => {
+    expect(remoteWords(remote({ state: "switching" }))).toBe("The Library Link is switching on Playback's Remote Connections. This takes a few seconds.");
+    expect(remoteWords(remote({ state: "off", auto: true }))).toBe(REMOTE_SWITCHING);
+    expect(remoteWords(remote({ state: "needs_permission" }))).toBe(REMOTE_NEEDS_PERMISSION);
+    expect(REMOTE_NEEDS_PERMISSION).toBe("The Library Link can switch on Playback's Remote Connections by itself once this Mac allows it. At the Playback computer open System Settings > Privacy & Security > Accessibility and turn on \"Playback Library\". Until then turn on Playback > menu > Playback Remote > Allow Remote Connections by hand.");
+    expect(remoteWords(remote({ state: "user_busy" }))).toBe("Playback is being used; the Library Link will switch on Remote Connections when it is quiet.");
+    expect(remoteWords(remote({ state: "playback_not_running" }))).toBe("Playback is not open on its computer.");
+    expect(remoteWords(remote({ state: "failed", message: "macOS did not let it click." }))).toBe("macOS did not let it click. Turn on Allow Remote Connections in Playback by hand.");
+    expect(remoteWords(remote({ state: "failed", message: "It did not work" }))).toBe("It did not work. Turn on Allow Remote Connections in Playback by hand.");
+    expect(remoteWords(remote({ state: "failed", message: null }))).toBe("Turn on Allow Remote Connections in Playback by hand.");
+  });
+
+  it("says nothing when it is on, or off with no permission to switch it on", () => {
+    expect(remoteWords(remote({ state: "on", listening: true }))).toBeNull();
+    expect(remoteWords(remote({ state: "off", auto: false }))).toBeNull();
+    expect(remoteWords(remote({ state: "switching", auto: false }))).toBeNull();
+  });
+
+  it("replaces the refused sentence, keeping the dot's tone", () => {
+    const got = withRemoteWords(today, refused(), link("ready", remote()));
+    expect(got).toEqual({ tone: "idle", text: REMOTE_SWITCHING });
+    expect(withRemoteWords(apiLine(refused({ last_error: "Playback unavailable; remote connections may be off" }), "x"), refused({ last_error: "Playback unavailable; remote connections may be off" }), link("ready", remote({ state: "user_busy" }))).text).toBe(REMOTE_USER_BUSY);
+    expect(withRemoteWords(today, refused(), link("outdated", remote({ state: "playback_not_running" }))).text).toBe(REMOTE_NOT_RUNNING);
+  });
+
+  it("leaves today's words alone: an older helper, on, a Library Link that is not working, a connected Playback, a search, another failure", () => {
+    expect(withRemoteWords(today, refused(), link("ready"))).toBe(today);
+    expect(withRemoteWords(today, refused(), link("ready", remote({ state: "on", listening: true })))).toBe(today);
+    expect(withRemoteWords(today, refused(), link("ready", remote({ state: "off", auto: false })))).toBe(today);
+    for (const state of ["not_installed", "needs_key", "unreachable"] as const) expect(withRemoteWords(today, refused(), link(state, remote()))).toBe(today);
+    expect(withRemoteWords(today, refused(), null)).toBe(today);
+    expect(withRemoteWords(today, null, link("ready", remote()))).toBe(today);
+    const connected = playbackStatus();
+    expect(withRemoteWords(apiLine(connected, "x"), connected, link("ready", remote()))).toEqual(apiLine(connected, "x"));
+    const searching = refused({ scan: { state: "scanning", candidates: [], reason: null, current: 1, total: 2 } });
+    expect(withRemoteWords(apiLine(searching, "x"), searching, link("ready", remote())).text).toBe(apiLine(searching, "x").text);
+    const network = refused({ last_error: "Cannot reach Playback at 10.30.0.141: network unreachable" });
+    expect(withRemoteWords(apiLine(network, "x"), network, link("ready", remote())).text).toBe(apiLine(network, "x").text);
+    const idle = refused({ last_error: null });
+    expect(withRemoteWords(apiLine(idle, "x"), idle, link("ready", remote())).text).toBe(apiLine(idle, "x").text);
+  });
+
+  it("never changes the pills' words", () => {
+    const status = refused();
+    const status2 = link("ready", remote({ state: "needs_permission" }));
+    const before = pillParts({ good: apiGood(status), line: apiLine(status, "x") }, status2, true);
+    const after = pillParts({ good: apiGood(status), line: withRemoteWords(apiLine(status, "x"), status, status2) }, status2, true);
+    expect(after).toEqual(before);
+  });
+});

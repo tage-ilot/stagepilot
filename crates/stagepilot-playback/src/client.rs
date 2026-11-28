@@ -212,6 +212,9 @@ struct Shared {
     last_heartbeat_at: Mutex<tokio::time::Instant>,
     /// Bumped on every publish; lets measurement code wait for "anything changed".
     changed: watch::Sender<u64>,
+    /// `retry_now` was called: the connection task skips its wait and may scan the network at once.
+    kicked: std::sync::atomic::AtomicBool,
+    kick: tokio::sync::Notify,
 }
 
 struct Request {
@@ -270,6 +273,8 @@ impl PlaybackClient {
             heartbeat_serial: AtomicU64::new(0),
             last_heartbeat_at: Mutex::new(tokio::time::Instant::now()),
             changed: watch::channel(0).0,
+            kicked: std::sync::atomic::AtomicBool::new(false),
+            kick: tokio::sync::Notify::new(),
         });
         let (cmd_tx, cmd_rx) = mpsc::channel(32);
         let (stop_tx, stop_rx) = watch::channel(false);
@@ -297,6 +302,19 @@ impl PlaybackClient {
             cancel,
             port,
         })
+    }
+
+    /// Try to connect now instead of after the usual wait (one second), and let the attempt scan the network even when the last
+    /// scan was recent. Used when something outside knows Playback has just become reachable (the Library Link switched its
+    /// Remote Connections on). Does nothing while connected, or when the connection was never enabled.
+    pub fn retry_now(&self) {
+        if self.shared.status.lock().unwrap().connected {
+            return;
+        }
+        self.shared
+            .kicked
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.shared.kick.notify_one();
     }
 
     pub fn status(&self) -> PlaybackStatus {
@@ -562,6 +580,9 @@ async fn run(
     let mut connect_log = ConnectLog::default();
     while !*stop.borrow() {
         let mut valid_heartbeat = false;
+        if shared.kicked.swap(false, Ordering::SeqCst) {
+            last_scan = None;
+        }
         let result: Result<(), ConnError> = async {
             // Python `_locate`: a manual host is used as is and never falls back to scanning;
             // otherwise the last good address, then loopback, then (auto-scan only, at most once
@@ -747,7 +768,11 @@ async fn run(
         if *stop.borrow() {
             break;
         }
-        let _ = tokio::time::timeout(options.reconnect_delay, stop.changed()).await;
+        tokio::select! {
+            _ = stop.changed() => {}
+            _ = shared.kick.notified() => {}
+            _ = tokio::time::sleep(options.reconnect_delay) => {}
+        }
     }
 }
 
