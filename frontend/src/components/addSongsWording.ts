@@ -41,6 +41,9 @@ export const NO_NUMBER = "Can't import";
 export const NO_NUMBER_PHRASE = "No Playback number";
 export const NO_NUMBER_WHY = "Playback gave this song no number, so it cannot be imported.";
 export const NO_PLAN_SONGS = "The loaded plan has no songs yet.";
+
+/** The Auto-Presenter's one sentence for plan songs with no Playback song behind them. */
+export const unpairedSentence = (titles: readonly string[]): string => `Not followed: ${titles.join(", ")}. ${titles.length === 1 ? "It is" : "They are"} not in Playback's setlist, or not paired with a Playback song yet. Pair a song by hand in the Song order section of Configuration \u2192 Playback.`;
 export const CHECK_IN_PROPRESENTER = "Check in ProPresenter:";
 export const OPEN_LIBRARY_ONCE = "Open the Playback library in ProPresenter, then Try again";
 /** The one line at the top when a song is playing (the whole job waits). */

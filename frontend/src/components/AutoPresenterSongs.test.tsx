@@ -97,6 +97,16 @@ describe("the song list of the Auto-Presenter", () => {
     expect(chip("Battle Belongs")).toHaveTextContent("Switch is off");
   });
 
+  it("says in one sentence which plan songs have no Playback song behind them, and nothing when all are paired or while locked", () => {
+    const some = libraryController("ready", { plan: libraryPlan([librarySongOf("Holy Forever", 1), librarySongOf("Oh My Soul", 2, { library: null, confidence: null, status: "missing" }), librarySongOf("Give Thanks", 3, { library: null, confidence: null, status: "missing" })]) });
+    const view = draw(followController({ status: null }), { library: some });
+    expect(screen.getAllByTestId("auto-presenter-song")).toHaveLength(1);
+    expect(screen.getByTestId("auto-presenter-unpaired")).toHaveTextContent("Not followed: Oh My Soul, Give Thanks. They are not in Playback's setlist, or not paired with a Playback song yet. Pair a song by hand in the Song order section");
+    view.unmount();
+    draw(followController({ status: null }));
+    expect(screen.queryByTestId("auto-presenter-unpaired")).toBeNull();
+  });
+
   it("while locked the rows are only the cover and title, greyed: no chip, no fix, the reason is said once above", () => {
     render(<AutoPresenterSection follow={followController({ status: followStatus({ songs: followSongs().map((song, i) => ({ ...song, key: `s${i}` })) }) })} library={libraryController("unreachable")} link={linkController(helperStatus("ready"))} plan={names(...TITLES)} />);
     expect(screen.getAllByTestId("auto-presenter-song")).toHaveLength(4);

@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- **The Auto-Presenter says which service songs it cannot follow.** A plan song that is not in Playback's setlist, or not paired with a Playback song yet, has no row in the list; one sentence under the list now names those songs and says to pair them by hand in the Song order section.
 - **The Auto-Presenter no longer says "Following" while Playback is stopped or paused.** The summary line says `Ready: waiting for Playback to play the song` until the song plays again.
 - **The Auto-Presenter no longer copies the whole settings file ten times a second.** On the rig the settings file was 49 MB and StagePilot used 86 to 122 % of a core while idle with the switch on; the follower and the song reader now copy only what they need (the switch, the offset, ProPresenter's address) and only after a save, and read the plan where it lies.
 

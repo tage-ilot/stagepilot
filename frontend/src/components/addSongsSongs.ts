@@ -96,6 +96,15 @@ export function addToProPresenterAvailable(link: Pick<ProPresenterLinkController
   return presenterLinkReady(link) && libraryReady && addSongsRows(library.plan).length > 0;
 }
 
+/**
+ * The plan songs that have no Playback song behind them (not in Playback's setlist, not paired yet, or only an uncertain guess). Playback's
+ * rows leave them out, so the Auto-Presenter names them in one sentence. Empty while the plan's own names are the rows.
+ */
+export function unpairedPlanTitles(link: Pick<ProPresenterLinkController, "status"> | undefined, library: Pick<PlaybackLibraryController, "status" | "plan"> | undefined): string[] {
+  if (!addToProPresenterAvailable(link, library)) return [];
+  return (library?.plan?.songs ?? []).filter((song) => !song.library).map((song) => song.title.trim()).filter((title) => title !== "");
+}
+
 /** The rows of the one list: Playback's setlist while it has given the songs, else the plan's Planning Center names. */
 export function presenterRows(link: Pick<ProPresenterLinkController, "status"> | undefined, library: Pick<PlaybackLibraryController, "status" | "plan"> | undefined, plan: Pick<ServicePlan, "songs"> | null | undefined): AddSongsRow[] {
   return addToProPresenterAvailable(link, library) ? addSongsRows(library?.plan) : planNameRows(plan);

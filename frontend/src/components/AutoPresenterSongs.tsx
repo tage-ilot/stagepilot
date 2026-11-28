@@ -1,7 +1,7 @@
 import type { FollowLock, FollowSong } from "../presenterFollow";
 import { hasFix, songChipWords, songPhrase, templateFix } from "../presenterFollow";
 import type { AddSongsRow } from "./addSongsSongs";
-import { NO_PLAN_SONGS } from "./addSongsWording";
+import { NO_PLAN_SONGS, unpairedSentence } from "./addSongsWording";
 import { CoverSlot } from "./CoverSlot";
 import { librarySongCover } from "./playbackLibrary";
 import { StatusChip } from "./StatusChips";
@@ -42,7 +42,7 @@ function SongRow({ row, song, locked }: { row: AddSongsRow; song: FollowSong | u
  * docs/propresenter.md. A song with no Playback cues says ONE thing, `No cues: following by bars`, and the one sentence that fixes it in
  * Playback, naming the Lyrics Bus template the song file needs. While the section is locked the rows are titles only (no chip), greyed.
  */
-export function AutoPresenterSongs({ rows, follow, lock, headingId }: { rows: readonly AddSongsRow[]; follow: ReadonlyMap<string, FollowSong>; lock: FollowLock | null; headingId: string }) {
+export function AutoPresenterSongs({ rows, follow, lock, headingId, unpaired = [] }: { rows: readonly AddSongsRow[]; follow: ReadonlyMap<string, FollowSong>; lock: FollowLock | null; headingId: string; unpaired?: readonly string[] }) {
   return (
     <section aria-labelledby={headingId} className="space-y-2" data-testid="auto-presenter-songs">
       <h4 className="sr-only" id={headingId}>Songs</h4>
@@ -51,6 +51,7 @@ export function AutoPresenterSongs({ rows, follow, lock, headingId }: { rows: re
           {rows.map((row) => <SongRow key={row.id} locked={lock !== null} row={row} song={follow.get(row.id)} />)}
         </ul>
       )}
+      {lock === null && unpaired.length > 0 && <p className="text-sm text-ink-muted" data-testid="auto-presenter-unpaired">{unpairedSentence(unpaired)}</p>}
     </section>
   );
 }

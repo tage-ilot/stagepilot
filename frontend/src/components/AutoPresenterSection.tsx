@@ -5,7 +5,7 @@ import type { PresenterFollowController } from "../hooks/usePresenterFollow";
 import type { ProPresenterLinkController } from "../hooks/useProPresenterLink";
 import { AUTO_PRESENTER_OPEN_KEY, followLine, followLock, FOLLOW_LABEL, libraryLinkState, lockWords, MARK_IDLE, shortLine, type FollowLine } from "../presenterFollow";
 import type { ServicePlan } from "../types";
-import { followByRow, presenterLinkReady, presenterRows } from "./addSongsSongs";
+import { followByRow, presenterLinkReady, presenterRows, unpairedPlanTitles } from "./addSongsSongs";
 import { AutoPresenterSongs } from "./AutoPresenterSongs";
 import { AutoPresenterTiming } from "./AutoPresenterTiming";
 import { ActionButton, ActionRow, OptionalBand, SectionNotice } from "./sections";
@@ -66,6 +66,7 @@ const NEEDS_ATTENTION = new Set<FollowLine["state"]>(["paused", "not_followed", 
 export function AutoPresenterSection({ follow, library, link, plan }: { follow?: PresenterFollowController; library?: PlaybackLibraryController; link?: ProPresenterLinkController; plan?: Pick<ServicePlan, "songs"> | null }) {
   const ids = { heading: useId(), songs: useId(), live: useId() };
   const rows = useMemo(() => presenterRows(link, library, plan), [link, library, plan]);
+  const unpaired = useMemo(() => unpairedPlanTitles(link, library), [link, library]);
   const followed = useMemo(() => followByRow(rows, follow?.status?.songs), [rows, follow?.status?.songs]);
   const lock = followLock(presenterLinkReady(link), libraryLinkState(library?.status));
   const enabled = follow?.enabled ?? false;
@@ -129,7 +130,7 @@ export function AutoPresenterSection({ follow, library, link, plan }: { follow?:
               <ActionButton busy={follow?.pending === "retry"} busyLabel="Trying again…" label="Try again" onClick={() => follow?.tryAgain()} tone="presentation" />
             </ActionRow>
           )}
-          <AutoPresenterSongs follow={followed} headingId={ids.songs} lock={lock} rows={rows} />
+          <AutoPresenterSongs follow={followed} headingId={ids.songs} lock={lock} rows={rows} unpaired={unpaired} />
         </fieldset>
         {/* Timing is a setting like any other: it stays readable and usable while the list above is locked. */}
         <div className="pt-2"><AutoPresenterTiming follow={follow} /></div>
