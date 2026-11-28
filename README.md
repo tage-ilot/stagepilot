@@ -5,7 +5,7 @@
 
 **Your production tech stack, working as one.** StagePilot connects Planning Center, MultiTracks Playback, ProPresenter and a software lighting controller like Lightkey. Everything follows the tracks: the screens, the countdown, and the lights in sync.
 
-<img src="docs/img/now-playing.gif" width="50%" alt="Now Playing: the current song, time remaining, position in the set and the next song">
+<img src="docs/img/now-playing.png" width="50%" alt="Now Playing: the current song, time remaining, position in the set and the next song">
 
 ### The Plan
 
