@@ -201,6 +201,9 @@ pub trait ProPresenterApi: Send + Sync {
     async fn active_presentation(&self) -> Result<Option<String>, ApiError>;
     /// `GET /v1/presentation/slide_index`: the active presentation and its current slide; `None` when there is none.
     async fn slide_position(&self) -> Result<Option<SlidePosition>, ApiError>;
+    /// `GET /v1/presentation/{uuid}`: whether ProPresenter has opened this presentation. A file that is listed in a library but
+    /// that ProPresenter has not opened yet answers 404 (`false`); a playlist that holds it is then refused as a whole.
+    async fn presentation_opened(&self, uuid: &str) -> Result<bool, ApiError>;
 }
 
 fn text(value: &Value, name: &str) -> Option<String> {
@@ -489,6 +492,17 @@ impl ProPresenterApi for HttpApi {
         match self.get("/v1/presentation/active").await {
             Ok(value) => Ok(parse_active_presentation(&value)),
             Err(ApiError::NotFound) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn presentation_opened(&self, uuid: &str) -> Result<bool, ApiError> {
+        match self
+            .get(&format!("/v1/presentation/{}", plain_id(uuid)?))
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(ApiError::NotFound) => Ok(false),
             Err(error) => Err(error),
         }
     }

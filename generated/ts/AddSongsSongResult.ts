@@ -8,7 +8,7 @@ export type AddSongsSongResult = { ref_id: string, title: string, status: AddSon
  */
 file: string | null, text: string, 
 /**
- * `wrong_song`, `needs_library_open`, `unmapped`, `live_on_screen`, ...
+ * `wrong_song`, `needs_library_open`, `unmapped`, `live_on_screen`, `not_opened` (ProPresenter lists the copy but has not opened it), ...
  */
 code: string | null, 
 /**

@@ -92,6 +92,10 @@ struct State {
     fail_triggers: Option<ApiError>,
     ignore_items: bool,
     delay: Duration,
+    /// ProPresenter has not opened any file that was not there when the API started, until a person adds it by hand
+    /// ([`FakeApi::add_by_hand`]) or opens it ([`FakeApi::open_in_library`]).
+    unopened_copies: bool,
+    opened: BTreeSet<(String, String)>,
 }
 
 pub struct FakeApi {
@@ -146,6 +150,8 @@ impl FakeApi {
                 fail_triggers: None,
                 ignore_items: false,
                 delay: Duration::ZERO,
+                unopened_copies: false,
+                opened: BTreeSet::new(),
             }),
         }
     }
@@ -361,6 +367,49 @@ impl FakeApi {
         self.lock().delay = delay;
     }
 
+    /// Every file made after the API started is listed with an id in its library, but `GET /v1/presentation/{uuid}` answers 404
+    /// for it and a playlist that holds it is refused as a whole, until a person registers it (what a real ProPresenter 19.0.1
+    /// does with a copy it has not opened).
+    pub fn set_unopened_copies(&self, on: bool) {
+        self.lock().unopened_copies = on;
+    }
+
+    /// A person opened the file (`Alpha (1)`, without `.pro`) in the library: ProPresenter knows it now.
+    pub fn open_in_library(&self, library: &str, stem: &str) {
+        self.lock()
+            .opened
+            .insert((library.to_string(), format!("{stem}.pro")));
+    }
+
+    /// A person chose Add to > the playlist for the file (`Alpha (1)`, without `.pro`) in ProPresenter: it is one more item at
+    /// the end of the playlist, and ProPresenter knows the file from now on. `false` when the file or the playlist is not there.
+    pub fn add_by_hand(&self, playlist_uuid: &str, library: &str, stem: &str) -> bool {
+        let file = format!("{stem}.pro");
+        let mut s = self.lock();
+        let uuid = match self
+            .entries(&s, Some(library))
+            .into_iter()
+            .find(|(_, f, id)| *f == file && id.is_some())
+        {
+            Some((_, _, Some(uuid))) => uuid,
+            _ => return false,
+        };
+        let Some(at) = s.playlists.iter().position(|p| p.uuid == playlist_uuid) else {
+            return false;
+        };
+        s.opened.insert((library.to_string(), file));
+        let items = &mut s.playlists[at].items;
+        let mut item = Self::presentation_item(&uuid, stem, "Default", 0.0);
+        item["id"]["index"] = json!(items.len());
+        items.push(item);
+        true
+    }
+
+    fn is_unopened(&self, s: &State, library: &str, file: &str) -> bool {
+        let key = (library.to_string(), file.to_string());
+        s.unopened_copies && !s.known.contains(&key) && !s.opened.contains(&key)
+    }
+
     /// A person clicked slide `n` of the active presentation in ProPresenter. Nothing is logged as a trigger.
     pub fn click_slide(&self, n: usize) {
         let mut s = self.lock();
@@ -565,6 +614,9 @@ impl ProPresenterApi for FakeApi {
             let Some((library, file)) = self.song_by_uuid(&s, uuid) else {
                 return Err(ApiError::NotFound);
             };
+            if self.is_unopened(&s, &library, &file) {
+                return Err(ApiError::NotFound);
+            }
             let shown = file.strip_suffix(".pro").unwrap_or(&file);
             if item["presentation_info"]["presentation_uuid"].as_str() != Some(uuid)
                 || item["id"]["name"].as_str() != Some(shown)
@@ -717,6 +769,15 @@ impl ProPresenterApi for FakeApi {
         self.pause().await;
         let s = self.up("active_presentation".into())?;
         Ok(s.active.as_ref().map(|a| a.uuid.clone()))
+    }
+
+    async fn presentation_opened(&self, uuid: &str) -> Result<bool, ApiError> {
+        super::plain_id(uuid)?;
+        let s = self.up(format!("presentation({uuid})"))?;
+        Ok(match self.song_by_uuid(&s, uuid) {
+            Some((library, file)) => !self.is_unopened(&s, &library, &file),
+            None => false,
+        })
     }
 
     async fn slide_position(&self) -> Result<Option<SlidePosition>, ApiError> {

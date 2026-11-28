@@ -210,6 +210,14 @@ preview says so.
 ProPresenter's import) and **one** named playlist. It does not delete playlists (ProPresenter has no such call). When the
 playlist write is refused (a `404` makes ProPresenter drop the whole write), nothing in the playlist changed and the answer
 says so and names the backup.
+When that `404` happens StagePilot asks `GET /v1/presentation/<uuid>` for each copy of the run that was in the write (made or
+reused, not a song that goes in as it is). ProPresenter lists a fresh Playback file before it has opened it and answers `404` for
+it; such a copy is named in the answer as `not_opened` (its row shows `! Not opened`, the same warning look as `! Not loaded`) and
+the message becomes one sentence: *ProPresenter has "Alpha (1)" in its Playback library but has not opened it yet, so it cannot go
+in the playlist from here. In ProPresenter click the Playback library, right-click "Alpha (1)", choose Add to > "Sunday", then
+press Try again.* (several copies are all listed). The whole write stays refused, so a song that is fine is not added either, and
+only one write is tried. Try again skips a copy that is already an item of the playlist. What makes ProPresenter open a copy
+without a person is not known; nothing is clicked for you.
 
 **Safety conditions** (checked again when the change is applied): the Presenter Link is Ready; no song is playing in
 StagePilot (Playback says playing, or StagePilot's countdown runs), checked before anything starts and again before every song
