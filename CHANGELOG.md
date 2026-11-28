@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.46.0-rc.2] - 2026-11-27
+
 ### Added
 
 - **The Auto-Presenter's first slide appears as the song starts.** With the Auto-Presenter on, the song's first slide (the one that usually carries the song's own background) is shown in ProPresenter the moment you press Play in Playback, not up to a second and a half later when Playback's next heartbeat arrived. A song started in the middle shows that first slide and then the right slide at once; pausing and resuming does not show it again, starting the song again from the top does, and so does the next song. A seek in Playback is followed at once too. Nothing changes with the switch off, for a song that cannot be followed, or when a song is only selected.
