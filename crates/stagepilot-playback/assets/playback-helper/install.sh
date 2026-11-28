@@ -471,4 +471,6 @@ elif ! grep -q allow_interfaces "$APP/config.json"; then
   echo "  Other computers get 'forbidden' until you allow a network interface or install a key. Run the installer again with"
   echo "  --key-file <file> (recommended), or --allow <interface> or --allow-for <ip of that computer>."
 fi
+echo
+echo "The Library Link can also switch Playback's Remote Connections on by itself when StagePilot asks for data, so nobody has to do it by hand after Playback starts. For that, once, open System Settings > Privacy & Security > Accessibility and enable \"Playback Library\". macOS may also ask once whether \"Playback Library\" may control \"System Events\": choose Allow. It only presses that one switch, and only when nobody is using the Mac. Without this permission everything else keeps working; /health then says what is missing. To turn it off, set \"auto_remote\": false in config.json."
 [ "$UP" = yes ] || { echo "  It did not answer. See ~/Library/Logs/playback-library.log"; exit 1; }

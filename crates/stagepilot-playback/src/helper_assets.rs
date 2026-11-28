@@ -17,7 +17,7 @@ use stagepilot_core::helper_update::UpdateBundle;
 pub const FILE_NAMES: [&str; 3] = ["install.sh", "playback_library.py", "SHA256SUMS"];
 
 /// The helper version bundled here. A test keeps it equal to `__version__` in `playback_library.py`.
-pub const BUNDLED_HELPER_VERSION: &str = "0.4.1";
+pub const BUNDLED_HELPER_VERSION: &str = "0.5.0";
 
 const INSTALL_SH: &[u8] = include_bytes!("../assets/playback-helper/install.sh");
 const PLAYBACK_LIBRARY_PY: &[u8] = include_bytes!("../assets/playback-helper/playback_library.py");

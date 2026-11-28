@@ -6,7 +6,8 @@ song's waveform on the Mac that runs it. This agent reads that library (a read-o
 database and the waveform pictures) and serves it as JSON to other computers on your network: setlists,
 songs, key, BPM, length, sections in the order they are played, beats, tempo changes, stems, cues, and the
 waveform as plain numbers re-timed to the arranged song. It never sends audio, never reads the song audio
-files and never changes anything in Playback. The song and setlist list is only what Playback itself holds.
+files and never changes anything in Playback's data. The song and setlist list is only what Playback itself holds. (0.5.0: when a
+request arrives and Playback's Remote Connections is off, it presses that one switch by itself; see docs/api.md.)
 
 With a key in config.json (0.3.0), every request except the bare /health must be signed with it (docs/api.md, "Key"); any network
 path then works. Without a key it behaves as 0.2.0.
@@ -43,7 +44,7 @@ import urllib.parse
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 HOME = os.path.expanduser("~")
 BUNDLE_ID = "com.multitracks.custommixplayer"
@@ -68,6 +69,18 @@ DEFAULTS = {
     "prefetch_waveforms": True,      # decode the newest setlists' waveform pictures in the background
     "prefetch_setlists": 2,
     "process_name": "Playback",
+    "auto_remote": True,             # switch Playback's Allow Remote Connections on by itself (false: never touch Playback's window)
+    "remote_port": 8080,             # the port Playback listens on while Remote Connections is on
+    "remote_idle_s": 8.0,            # only act when nobody has touched the keyboard or mouse for this long
+    "remote_min_interval_s": 120.0,  # at most one attempt in this time
+    "remote_max_failures": 3,        # this many failed attempts in a row ...
+    "remote_backoff_s": 1800.0,      # ... and the helper stops trying for this long
+    "remote_permission_wait_s": 600.0,   # after macOS said no, look again at most this often
+    "remote_script_timeout_s": 25.0,     # hard limit for one run of the switching script
+    "remote_hamburger_names": ["Menu", "Main Menu", "Hamburger", "Open Menu"],   # names of the top-right menu button; tried in order
+    "remote_close_names": ["Close", "Close Menu", "Dismiss"],                     # names of the control that closes the menu
+    "remote_point_recipe": {"screen": [1512, 982], "hamburger": [1463, 96], "close": [1248, 83]},   # fallback clicks; null = never click a point
+    "osascript": "/usr/bin/osascript",
     "log_file": os.path.join(HOME, "Library", "Logs", "playback-library.log"),
 }
 CFG = dict(DEFAULTS)
@@ -1180,7 +1193,8 @@ class Library:
         # answer at once with "waiting" so the installer and StagePilot see an agent that is up and only waiting for the answer.
         if not self.lock.acquire(timeout=1.0):
             return dict({"ok": True, "version": __version__, "auth": auth_label(), "database": "waiting",
-                         "detail": "waiting for macOS to answer the data-access question, or for a copy of Playback's database to finish"}, **update_health())
+                         "detail": "waiting for macOS to answer the data-access question, or for a copy of Playback's database to finish",
+                         "playback_remote": REMOTE.status()}, **update_health())
         try:
             return self._health()
         finally:
@@ -1205,6 +1219,7 @@ class Library:
         except Exception:
             body["playback_running"] = None
         body["songs_folder"] = os.path.isdir(self.songs_dir())
+        body["playback_remote"] = REMOTE.status(body["playback_running"])
         return body
 
 
@@ -1218,6 +1233,494 @@ def update_health():
 
 
 LIB = Library()
+
+
+# ---------------------------------------------------------------- remote_switch: Playback's Remote Connections
+# Playback keeps "Allow Remote Connections" in memory only: it is off again after every restart of Playback, and port 8080
+# accepts connections only while it is on. When an authenticated request arrives and 8080 is closed, the helper presses that one
+# switch through System Events (the macOS accessibility interface). Everything it reads or presses is named below; arguments go
+# to the script as arguments, never into its text. It never touches Settings, Playback Sync, Network or Log Out, never clicks
+# while a sheet or dialog is open, and always leaves the menu closed.
+REMOTE_SCRIPT = r"""
+property pbProc : ""
+property pbPort : "8080"
+property pbRow : "Playback Remote"
+property pbBox : "Allow Remote Connections"
+property pbDeadline : missing value
+
+on run argv
+	set my pbProc to item 1 of argv
+	set runMode to item 2 of argv
+	set hamburgerNames to paragraphs of (item 3 of argv)
+	set closeNames to paragraphs of (item 4 of argv)
+	set my pbRow to item 5 of argv
+	set my pbBox to item 6 of argv
+	set recipe to my parseInts(item 7 of argv)
+	set my pbPort to item 8 of argv
+	set my pbDeadline to (current date) + ((item 9 of argv) as integer)
+	set outcome to "error|0|the script did not run"
+	try
+		tell application "System Events"
+			if not (exists process (my pbProc)) then return "playback_not_running|closed"
+		end tell
+		if runMode is "close" then
+			return "close|" & (my closeMenu(closeNames, recipe))
+		end if
+		set outcome to my doSwitch(hamburgerNames, closeNames, recipe)
+	on error errMsg number errNum
+		set outcome to "error|" & errNum & "|" & errMsg
+	end try
+	set closedState to "unknown"
+	try
+		set closedState to my closeMenu(closeNames, recipe)
+	end try
+	return outcome & "|" & closedState
+end run
+
+on doSwitch(hamburgerNames, closeNames, recipe)
+	if (my countWindows()) is 0 then return "no_window"
+	if my dialogOpen() then return "dialog_open"
+	if (my findElement("AXButton", {"DONE"})) is not missing value then return "edit_mode"
+	if my portOpen() then return "already_on"
+	set rowEl to my findElement("AXStaticText", {my pbRow})
+	if rowEl is missing value then
+		set hamburger to my findElement("AXButton", hamburgerNames)
+		if hamburger is not missing value then
+			my pressElement(hamburger)
+			set rowEl to my waitFor("AXStaticText", {my pbRow}, 2)
+		end if
+		if rowEl is missing value and (count of recipe) is 6 then
+			if my clickPoint(item 3 of recipe, item 4 of recipe, item 1 of recipe, item 2 of recipe) then
+				set rowEl to my waitFor("AXStaticText", {my pbRow}, 3)
+			end if
+		end if
+		if rowEl is missing value then
+			if hamburger is missing value then return "no_hamburger"
+			return "no_remote_row"
+		end if
+	end if
+	if my dialogOpen() then return "dialog_open"
+	my pressElement(rowEl)
+	set boxEl to my waitFor("AXCheckBox", {my pbBox}, 2)
+	if boxEl is missing value then
+		my clickElement(rowEl)
+		set boxEl to my waitFor("AXCheckBox", {my pbBox}, 3)
+	end if
+	if boxEl is missing value then return "no_checkbox"
+	set wasOn to my checkboxIsOn(boxEl)
+	if not wasOn then
+		my pressElement(boxEl)
+		delay 0.4
+	end if
+	set pollUntil to (current date) + 5
+	repeat while (current date) < pollUntil and (current date) < (my pbDeadline)
+		if my portOpen() then
+			if wasOn then return "ui_on"
+			return "switched"
+		end if
+		delay 0.4
+	end repeat
+	return "not_listening"
+end doSwitch
+
+on closeMenu(closeNames, recipe)
+	if my dialogOpen() then return "dialog_open"
+	repeat 5 times
+		if (my findElement("AXStaticText", {my pbRow})) is missing value then return "closed"
+		set backEl to my findElement("AXButton", {"Back"})
+		if backEl is not missing value then
+			my pressElement(backEl)
+		else
+			set closeEl to my findElement("AXButton", closeNames)
+			if closeEl is not missing value then
+				my pressElement(closeEl)
+			else if (count of recipe) is 6 then
+				my clickPoint(item 5 of recipe, item 6 of recipe, item 1 of recipe, item 2 of recipe)
+			end if
+		end if
+		delay 0.6
+	end repeat
+	if (my findElement("AXStaticText", {my pbRow})) is missing value then return "closed"
+	return "open"
+end closeMenu
+
+on parseInts(t)
+	set out to {}
+	if t is "" then return out
+	set oldDelims to AppleScript's text item delimiters
+	set AppleScript's text item delimiters to ","
+	set parts to text items of t
+	set AppleScript's text item delimiters to oldDelims
+	repeat with part in parts
+		set end of out to ((contents of part) as integer)
+	end repeat
+	return out
+end parseInts
+
+on countWindows()
+	tell application "System Events"
+		tell process (my pbProc)
+			return count of windows
+		end tell
+	end tell
+end countWindows
+
+on allElements()
+	set out to {}
+	tell application "System Events"
+		tell process (my pbProc)
+			repeat with w in windows
+				try
+					set out to out & (entire contents of w)
+				end try
+			end repeat
+		end tell
+	end tell
+	return out
+end allElements
+
+on dialogOpen()
+	tell application "System Events"
+		tell process (my pbProc)
+			repeat with w in windows
+				try
+					if (count of sheets of w) > 0 then return true
+				end try
+				try
+					set sr to subrole of w
+					if sr is "AXDialog" or sr is "AXSystemDialog" then return true
+				end try
+			end repeat
+		end tell
+	end tell
+	return false
+end dialogOpen
+
+on findElement(roleName, names)
+	set els to my allElements()
+	repeat with e in els
+		try
+			tell application "System Events"
+				if (role of e) is roleName then
+					set labels to {}
+					try
+						set end of labels to ((name of e) as text)
+					end try
+					try
+						set end of labels to ((description of e) as text)
+					end try
+					try
+						set end of labels to ((title of e) as text)
+					end try
+					try
+						set end of labels to ((value of e) as text)
+					end try
+					repeat with n in names
+						set wanted to (contents of n) as text
+						if wanted is not "" and labels contains wanted then return contents of e
+					end repeat
+				end if
+			end tell
+		end try
+	end repeat
+	return missing value
+end findElement
+
+on waitFor(roleName, names, seconds)
+	set untilTime to (current date) + seconds
+	repeat
+		set found to my findElement(roleName, names)
+		if found is not missing value then return found
+		if (current date) > untilTime or (current date) > (my pbDeadline) then return missing value
+		delay 0.3
+	end repeat
+end waitFor
+
+on pressElement(e)
+	tell application "System Events"
+		try
+			perform action "AXPress" of e
+			return true
+		end try
+	end tell
+	return my clickElement(e)
+end pressElement
+
+on clickElement(e)
+	tell application "System Events"
+		try
+			set {px, py} to position of e
+			set {sx, sy} to size of e
+			click at {px + (sx div 2), py + (sy div 2)}
+			return true
+		end try
+	end tell
+	return false
+end clickElement
+
+on checkboxIsOn(boxEl)
+	tell application "System Events"
+		try
+			return ((value of boxEl) as text) is "1"
+		end try
+	end tell
+	return false
+end checkboxIsOn
+
+on clickPoint(px, py, refW, refH)
+	tell application "System Events"
+		try
+			tell process (my pbProc)
+				set {wx, wy} to position of window 1
+				set {ww, wh} to size of window 1
+			end tell
+			if wx < -4 or wx > 4 or wy < -4 or wy > 40 then return false
+			if ww < refW * 0.96 or ww > refW * 1.04 or wh < refH * 0.9 or wh > refH * 1.04 then return false
+			click at {px, py}
+			return true
+		end try
+	end tell
+	return false
+end clickPoint
+
+on portOpen()
+	try
+		do shell script "/usr/bin/nc -z -w 1 127.0.0.1 " & quoted form of (my pbPort)
+		return true
+	on error
+		return false
+	end try
+end portOpen
+"""
+
+REMOTE_NEEDS_PERMISSION = ("-25211", "-1719", "-1743", "assistive access", "not authorized to send apple events")
+REMOTE_MESSAGES = {
+    "auto_off": "Switching Remote Connections on by itself is turned off in the helper's settings.",
+    "off": "Remote Connections is off in Playback; the Library Link switches it on at the next request.",
+    "switching": "The Library Link is switching Remote Connections on in Playback.",
+    "playback_not_running": "Playback is not running on this Mac.",
+    "needs_permission": "macOS has not allowed the Library Link to control Playback yet. Open System Settings > Privacy & Security > Accessibility and enable Playback Library; if macOS asks whether Playback Library may control System Events, choose Allow.",
+    "idle": "Someone is using this Mac, so the Library Link waits before touching Playback.",
+    "edit_mode": "Playback is in Edit mode, so the Library Link leaves it alone.",
+    "dialog_open": "A window or dialog is open in Playback, so the Library Link leaves it alone.",
+    "no_osascript": "This Mac has no osascript, so Remote Connections cannot be switched on by itself.",
+    "no_window": "Playback has no open window, so the Remote Connections switch could not be reached.",
+    "no_hamburger": "The Library Link could not find the menu button in Playback's window.",
+    "no_remote_row": "The Library Link opened Playback's menu but did not find Playback Remote in it.",
+    "no_checkbox": "The Library Link did not find the Allow Remote Connections switch in Playback.",
+    "not_listening": "Allow Remote Connections is switched on in Playback but its port is not answering yet.",
+    "timeout": "Switching Remote Connections took too long and was stopped.",
+    "menu_open": "The Library Link could not close Playback's menu again.",
+    "error": "The Library Link could not switch Remote Connections on in Playback.",
+}
+
+
+def remote_opt(name):
+    return CFG.get(name, DEFAULTS[name])
+
+
+class RemoteSwitch:
+    """Keeps Playback's Allow Remote Connections on. `ensure_remote_on()` does nothing unless every precondition holds, runs one
+    attempt at a time, and records the state that /health reports. The clock is injectable so the rate limits can be tested."""
+
+    def __init__(self, clock=None):
+        self.clock = clock or time.time
+        self.flight = threading.Lock()          # one attempt at a time
+        self.guard = threading.Lock()           # the fields below
+        self.state, self.message_key, self.detail = None, None, None
+        self.last_attempt = None                # unix seconds of the last attempt (started the script)
+        self.failures = 0                       # failed attempts in a row
+        self.blocked_until = 0.0
+        self.permission_wait_until = 0.0
+        self.last_kick = float("-inf")
+
+    # -- what the Mac says
+    def listening(self):
+        """True: port answers. False: refused. None: could not tell."""
+        try:
+            with socket.create_connection(("127.0.0.1", int(remote_opt("remote_port"))), timeout=1.0):
+                return True
+        except ConnectionRefusedError:
+            return False
+        except (OSError, ValueError, OverflowError):
+            return None
+
+    def playback_running(self):
+        try:
+            return subprocess.run(["/usr/bin/pgrep", "-x", CFG.get("process_name", DEFAULTS["process_name"])], capture_output=True, timeout=3).returncode == 0
+        except Exception:
+            return None
+
+    def idle_seconds(self):
+        """Seconds since the last keyboard or mouse input (IOHIDSystem's HIDIdleTime is in nanoseconds), None when unknown."""
+        try:
+            out = subprocess.run(["/usr/sbin/ioreg", "-c", "IOHIDSystem"], capture_output=True, text=True, timeout=5).stdout
+        except Exception:
+            return None
+        values = [int(v) for v in re.findall(r'"HIDIdleTime"\s*=\s*(\d+)', out)]
+        return min(values) / 1e9 if values else None
+
+    def run_script(self, mode, timeout):
+        """One run of the bundled script. Everything variable travels as an argument, never inside the script text."""
+        recipe = remote_opt("remote_point_recipe")
+        recipe_text = ""
+        try:
+            if recipe:
+                values = list(recipe["screen"]) + list(recipe["hamburger"]) + list(recipe["close"])
+                recipe_text = ",".join(str(int(v)) for v in values)
+        except Exception:
+            recipe_text = ""
+        args = [remote_opt("osascript"), "-e", REMOTE_SCRIPT, str(remote_opt("process_name")), mode,
+                "\n".join(str(n) for n in remote_opt("remote_hamburger_names")), "\n".join(str(n) for n in remote_opt("remote_close_names")),
+                "Playback Remote", "Allow Remote Connections", recipe_text, str(int(remote_opt("remote_port"))), str(int(max(5, timeout - 4)))]
+        return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+
+    # -- state
+    def _set(self, state, key=None, detail=None):
+        with self.guard:
+            changed = (state, key) != (self.state, self.message_key)
+            self.state, self.message_key, self.detail = state, key if key is not None else state, detail
+        if changed:
+            log.info("remote switch: %s", state if key in (None, state) else "%s (%s)" % (state, key))
+        return state
+
+    def _fail(self, key, hard=False):
+        now = self.clock()
+        with self.guard:
+            self.failures += 1
+            blocked = hard or self.failures >= int(remote_opt("remote_max_failures"))
+            if blocked:
+                self.blocked_until = now + float(remote_opt("remote_backoff_s"))
+        return self._set("failed", key, "blocked" if blocked else None)
+
+    def status(self, running=None):
+        """What /health says: {"listening", "auto", "state", "message", "last_attempt_utc"}."""
+        listening = self.listening()
+        auto = bool(remote_opt("auto_remote"))
+        with self.guard:
+            state, key, detail, last = self.state, self.message_key, self.detail, self.last_attempt
+            blocked_until = self.blocked_until
+        minutes = int(round(float(remote_opt("remote_backoff_s")) / 60))
+        if listening is True:
+            state, key = "on", "on"
+        elif running is False:
+            state, key = "playback_not_running", "playback_not_running"
+        elif not auto:
+            state, key = "off", "auto_off"
+        elif state in (None, "on"):
+            state, key = "off", "off"
+        message = REMOTE_MESSAGES.get(key) if state != "on" else None
+        if state == "failed" and message and detail == "blocked":
+            message += " It stops trying for %d minutes." % minutes
+        return {"listening": listening, "auto": auto, "state": state, "message": message,
+                "last_attempt_utc": iso_utc(last) if last is not None else None}
+
+    # -- the work
+    def kick(self):
+        """Called after an authenticated request was answered: look at Remote Connections in the background, never more than
+        one at a time and not more often than every 2 seconds."""
+        if not remote_opt("auto_remote"):
+            return
+        now = self.clock()
+        with self.guard:
+            if now - self.last_kick < 2.0:
+                return
+            self.last_kick = now
+        if self.flight.locked():
+            return
+        threading.Thread(target=self.ensure_remote_on, name="remote-switch", daemon=True).start()
+
+    def ensure_remote_on(self):
+        """Switch Remote Connections on when it is off. Returns the state it ended in, or None when it did nothing."""
+        if not remote_opt("auto_remote"):
+            return None
+        if not self.flight.acquire(False):
+            return None                                     # another attempt is running
+        try:
+            return self._ensure()
+        except Exception:
+            log.exception("remote switch")
+            return self._fail("error")
+        finally:
+            self.flight.release()
+
+    def _ensure(self):
+        now = self.clock()
+        listening = self.listening()
+        if listening is True:
+            with self.guard:
+                self.failures, self.blocked_until, self.permission_wait_until = 0, 0.0, 0.0
+            return self._set("on")
+        if listening is None:
+            return None
+        if now < self.blocked_until or now < self.permission_wait_until:
+            return None
+        running = self.playback_running()
+        if running is False:
+            return self._set("playback_not_running")
+        if running is None:
+            return None
+        if self.last_attempt is not None and now - self.last_attempt < float(remote_opt("remote_min_interval_s")):
+            return None
+        idle = self.idle_seconds()
+        if idle is None or idle < float(remote_opt("remote_idle_s")):
+            return self._set("user_busy", "idle")
+        with self.guard:
+            self.last_attempt = now
+        self._set("switching")
+        return self._attempt(now)
+
+    def _attempt(self, now):
+        timeout = float(remote_opt("remote_script_timeout_s"))
+        try:
+            done = self.run_script("switch", timeout)
+        except subprocess.TimeoutExpired:
+            self._close_again()
+            return self._fail("timeout")
+        except OSError:
+            return self._fail("no_osascript", hard=True)
+        lines = (done.stdout or "").strip().splitlines()
+        reply = lines[-1].strip() if lines else ""
+        parts = reply.split("|")
+        code = parts[0]
+        closed = parts[-1] if len(parts) > 1 else ""
+        evidence = ((reply if code == "error" else "") + " " + (done.stderr or "")).lower() if (done.returncode != 0 or code == "error") else ""
+        if any(marker in evidence for marker in REMOTE_NEEDS_PERMISSION):
+            with self.guard:
+                self.permission_wait_until = now + float(remote_opt("remote_permission_wait_s"))
+            return self._set("needs_permission")
+        if closed == "open" and not self._close_again():
+            return self._fail("menu_open")
+        if code in ("switched", "already_on", "ui_on"):
+            if self.listening() is True:
+                with self.guard:
+                    self.failures = 0
+                return self._set("on")
+            return self._fail("not_listening")
+        if code == "edit_mode":
+            return self._set("user_busy", "edit_mode")
+        if code == "dialog_open":
+            return self._set("user_busy", "dialog_open")
+        if code == "playback_not_running":
+            return self._set("playback_not_running")
+        if code in ("no_window", "no_hamburger", "no_remote_row", "no_checkbox", "not_listening"):
+            return self._fail(code)
+        if done.returncode != 0 or code == "error" or not reply:
+            log.warning("remote switch: osascript answered with an error (exit %s)", done.returncode)
+        return self._fail("error")
+
+    def _close_again(self):
+        """After a stopped or unfinished run: one more short run of the same script that only closes the menu. True when it
+        reports the menu closed."""
+        try:
+            done = self.run_script("close", 10.0)
+        except Exception:
+            log.warning("remote switch: could not run the menu-closing step")
+            return False
+        return (done.stdout or "").strip().endswith("closed")
+
+
+REMOTE = RemoteSwitch()
 
 
 # ---------------------------------------------------------------- key authentication
@@ -1492,11 +1995,25 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def do_GET(self):
+        if self._serve():
+            try:
+                REMOTE.kick()        # the answer has been sent; look at Remote Connections in the background (never delays or fails it)
+            except Exception:
+                log.exception("remote switch")
+
+    def _serve(self):
+        """Answer a GET. True when the request was an authenticated data request (everything except a refused request and the
+        bare, unsigned /health), whatever the answer was."""
         if not self._permitted():
-            return
+            return False
         path, _, query = self.path.partition("?")
         if auth_mode() != "none" and not self._authorized(path):
-            return
+            return False
+        unsigned_health = path.rstrip("/") == "/health" and self.headers.get("X-PBL-Sig") is None
+        self._answer(path, query)
+        return not unsigned_health
+
+    def _answer(self, path, query):
         q = {k: urllib.parse.unquote_plus(v) for k, v in (p.split("=", 1) for p in query.split("&") if "=" in p)}
         try:
             body = route(path.rstrip("/") or "/", q)
