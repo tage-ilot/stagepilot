@@ -70,7 +70,7 @@ use stagepilot_playback::library::{
     normalise_title, parse_health, parse_setlist, parse_setlist_list, HandPair, HelperState,
     HelperStatus, LibraryArtwork, LibraryPlan, LibraryPlanSong, LibrarySection, LibrarySetlist,
     LibraryState, LibraryStatus, LyricCue, MatchConfidence, ParsedSetlist, PlanMatch, PlanTitle,
-    MAX_ARTWORK_BYTES, MAX_SETLISTS,
+    RemoteState, MAX_ARTWORK_BYTES, MAX_SETLISTS,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -378,6 +378,10 @@ struct Inner {
     /// Whom the slots belong to; they are dropped when the address changes.
     base: String,
     health: HealthSlot,
+    /// What `playback_remote.state` said the last time `/health` was answered (none: it said nothing, as an older helper).
+    remote_seen: Option<RemoteState>,
+    /// Remote Connections were seen going from not on to on, and nobody has acted on it yet (`take_remote_came_on`).
+    remote_came_on: bool,
     /// The setlist for one plan date.
     setlist_ask: String,
     setlist: Slot<Fetched>,
@@ -504,6 +508,12 @@ pub enum WaveformFailure {
     NoWaveform,
     /// The Playback computer did not answer (or answered with an error).
     NoAnswer,
+}
+
+/// Remote Connections went from a state that is not `on` (the helper said so) to `on`. A first answer that is already `on`, or a
+/// helper that says nothing, is not a change worth a retry: the connection retries every second by itself.
+fn came_on(before: Option<RemoteState>, now: Option<RemoteState>) -> bool {
+    now == Some(RemoteState::On) && before.is_some_and(|b| b != RemoteState::On)
 }
 
 pub struct PlaybackLibrary {
@@ -755,6 +765,12 @@ impl PlaybackLibrary {
         }
     }
 
+    /// Whether the helper has reported Playback's Remote Connections on since they were last seen not on, once: the caller then
+    /// asks Playback's connection to retry at once. Reading it clears it.
+    pub async fn take_remote_came_on(&self) -> bool {
+        std::mem::take(&mut self.inner.lock().await.remote_came_on)
+    }
+
     /// Whether the last ask of `/health` was answered: `Some(true)` it was (the helper answered, with or without our key), `Some(false)`
     /// it was not (nothing there), `None` nothing was asked yet or the answer is being read right now. Asks nothing; the automatic
     /// update uses it to notice that a helper that was silent is there again.
@@ -898,6 +914,7 @@ impl PlaybackLibrary {
                 paired: self.key().is_some(),
                 updater: false,
                 last_update_error: None,
+                playback_remote: None,
                 update: None,
             },
             address: settings.address.clone(),
@@ -946,12 +963,27 @@ impl PlaybackLibrary {
         ) {
             gap = gap.max(MIN_RETRY_AFTER_REFUSAL);
         }
+        // While the helper says it is switching Remote Connections on, ask as for a press of Check (2 s), so the moment it is
+        // on is seen within seconds instead of after the usual 30.
+        if matches!(
+            &inner.health.last,
+            Some(Ok(health)) if health.playback_remote.as_ref().is_some_and(|r| r.state == RemoteState::Switching)
+        ) {
+            gap = gap.min(MIN_CHECK);
+        }
         if inner.health.due(gap, self.now()) {
             let answer = self.get_ok(base, "/health", HEALTH_CAP).await;
             // A helper that answers 503 to /health is told apart from one that is silent.
             inner
                 .health
                 .record(answer.map(|value| parse_health(&value)), self.now());
+            if let Some(Ok(health)) = &inner.health.last {
+                let now = health.playback_remote.as_ref().map(|r| r.state);
+                if came_on(inner.remote_seen, now) {
+                    inner.remote_came_on = true;
+                }
+                inner.remote_seen = now;
+            }
         }
         match inner.health.shown(self.now()) {
             Ok((health, stale, when)) => {
@@ -974,6 +1006,7 @@ impl PlaybackLibrary {
                         paired: self.key().is_some(),
                         updater: health.updater.is_some_and(|level| level >= 1),
                         last_update_error: health.last_update_error.clone(),
+                        playback_remote: health.playback_remote.clone(),
                         update: None,
                     },
                     address: settings.address.clone(),

@@ -19,7 +19,7 @@ describe("the section gallery page", () => {
 
   it("shows every state the review asked for, for Playback (including scanning)", () => {
     render(<Frame />);
-    expect(ids("playback")).toEqual(["ready", "scanning", "not-connected", "error", "found-many", "found-one", "address-list", "blocked", "connecting", "not-installed", "update-by-hand", "update-by-itself", "needs-command", "not-answering", "no-link"]);
+    expect(ids("playback")).toEqual(["ready", "scanning", "not-connected", "error", "found-many", "found-one", "address-list", "blocked", "connecting", "not-installed", "update-by-hand", "update-by-itself", "needs-command", "not-answering", "remote-switching", "remote-permission", "remote-busy", "no-link"]);
   });
 
   it("shows every state the review asked for, for Lighting", () => {

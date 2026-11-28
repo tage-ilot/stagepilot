@@ -1,4 +1,4 @@
-import type { PlaybackConnection } from "../types";
+import type { PlaybackConnection, PlaybackRemote, PlaybackStatusResponse } from "../types";
 import type { HelperState, LibraryStatus } from "../types";
 import { playbackWords } from "./playbackStatus";
 import type { Tone } from "./ui/types";
@@ -25,6 +25,42 @@ export function apiLine(status: Pick<PlaybackConnection, "reason" | "active_sour
   if (status.active_source === "playback_api") return { tone: "success", text };
   if (status.active_source === "midi") return { tone: "midi", text };
   return { tone: "idle", text };
+}
+
+export const REMOTE_SWITCHING = "The Library Link is switching on Playback's Remote Connections. This takes a few seconds.";
+export const REMOTE_NEEDS_PERMISSION = "The Library Link can switch on Playback's Remote Connections by itself once this Mac allows it. At the Playback computer open System Settings > Privacy & Security > Accessibility and turn on \"Playback Library\". Until then turn on Playback > menu > Playback Remote > Allow Remote Connections by hand.";
+export const REMOTE_USER_BUSY = "Playback is being used; the Library Link will switch on Remote Connections when it is quiet.";
+export const REMOTE_NOT_RUNNING = "Playback is not open on its computer.";
+const REMOTE_BY_HAND = "Turn on Allow Remote Connections in Playback by hand.";
+
+/** What the Library Link says about Playback's Remote Connections, in the operator's words; null when it adds nothing (`on`, or `off` with no permission to switch). */
+export function remoteWords(remote: PlaybackRemote): string | null {
+  switch (remote.state) {
+    case "switching":
+    case "off": return remote.auto ? REMOTE_SWITCHING : null;
+    case "needs_permission": return REMOTE_NEEDS_PERMISSION;
+    case "user_busy": return REMOTE_USER_BUSY;
+    case "playback_not_running": return REMOTE_NOT_RUNNING;
+    case "failed": {
+      const said = remote.message?.trim();
+      return said ? `${/[.!?]$/.test(said) ? said : `${said}.`} ${REMOTE_BY_HAND}` : REMOTE_BY_HAND;
+    }
+    default: return null;
+  }
+}
+
+/**
+ * The Playback API line, with the Library Link's explanation in place of "turn on Remote Connections" when the Library Link is working and says
+ * what it is doing about it. Only the sentence for a Playback that refuses or does not answer is replaced (the backend's `last_error` says "remote
+ * connections may be off"); a Playback that is connected, being searched for, or unreachable for another reason keeps its own words. The dot's
+ * tone and every verdict stay as they were.
+ */
+export function withRemoteWords(line: LiveLinkLine, playback: Pick<PlaybackStatusResponse, "last_error" | "sources" | "scan"> | null | undefined, library: LibraryStatus | null | undefined): LiveLinkLine {
+  const remote = library?.active ? library.helper.playback_remote : undefined;
+  if (!remote || !playback || playback.sources.playback_api.connected || playback.scan?.state === "scanning") return line;
+  if (!/remote connections may be off/i.test(playback.last_error ?? "")) return line;
+  const words = remoteWords(remote);
+  return words ? { ...line, text: words } : line;
 }
 
 /** Whether the Playback API itself is connected (MIDI standing in does not count). */

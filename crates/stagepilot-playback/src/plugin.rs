@@ -607,6 +607,15 @@ impl PlaybackPlugin {
         self.inner.status()
     }
 
+    /// Connect to Playback now rather than at the next one-second retry, when it is not connected (the Library Link has just
+    /// switched on Playback's Remote Connections). Nothing happens when Playback is connected or not in use.
+    pub fn retry_connection(&self) {
+        let client = lock(&self.inner.shared).client.clone();
+        if let Some(client) = client {
+            client.retry_now();
+        }
+    }
+
     /// Where Playback's song is right now: the newest of the last heartbeat and the transport and seek events that came after it,
     /// moved on while it plays. `None` without a connection or a song. See `anchor`.
     pub fn moment(&self) -> Option<crate::anchor::Moment> {

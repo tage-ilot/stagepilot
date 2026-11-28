@@ -7,7 +7,7 @@ import { playbackBoxProps } from "./helperBoxProps";
 import { PLAYBACK_SCAN_WORDS, playbackScanState } from "./playbackScan";
 import { NO_SCAN, AddressBox, ConnectionRow, ConnectionSection, HelperSetupBox, LiveLinkField, LiveLinkPill, ScanArea, ScanChooser, ScanHelp, ScanProgress, SectionNotice, scannedAddresses } from "./sections";
 import { useRecheckNote } from "./useRecheckNote";
-import { apiGood, apiLine, pillParts, scriptLine, scriptNote } from "./playbackLiveLinkState";
+import { apiGood, apiLine, pillParts, scriptLine, scriptNote, withRemoteWords } from "./playbackLiveLinkState";
 import { validPlaybackHost } from "./playbackStatus";
 
 const SCAN_CANCEL_GUARD_MS = 600;
@@ -80,7 +80,7 @@ export function PlaybackLiveLink({ playback, library }: { playback?: PlaybackCon
   };
   const connectHint = !trimmed ? "Type an address to connect." : !hostOk ? "Enter a computer name or address like 192.0.2.10." : scanning ? "Wait for the search to finish, or cancel it." : undefined;
 
-  const api = status ? apiLine(status, "Checking Playback…") : { tone: "idle" as const, text: playback?.error ?? "Checking Playback…" };
+  const api = status ? withRemoteWords(apiLine(status, "Checking Playback…"), status, library?.status) : { tone: "idle" as const, text: playback?.error ?? "Checking Playback…" };
   const hasComputer = Boolean(library?.target || savedHost);
   const script = library ? scriptLine(library.status, hasComputer) : null;
   const parts = pillParts({ good: apiGood(status), line: api }, library?.status ?? null, hasComputer);

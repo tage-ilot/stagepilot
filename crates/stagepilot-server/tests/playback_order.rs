@@ -19,7 +19,7 @@ use stagepilot_core::settings::{RuntimeSettings, SettingsService};
 use stagepilot_playback::plugin::PluginOptions;
 use stagepilot_playback::testkit::FakePlayback;
 use stagepilot_server::playback_library::note_in_use;
-use stagepilot_server::playback_order::{refresh, start_wait};
+use stagepilot_server::playback_order::{refresh, start_wait, watch_tick};
 use stagepilot_server::{build_app, AppOptions, Runtime};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -44,6 +44,8 @@ struct Behaviour {
     current: Option<Value>,
     /// Answer everything with this status instead.
     broken: Option<u16>,
+    /// What `/health` says as `playback_remote` (helper 0.5.0); `None`: the member is not there.
+    remote: Option<Value>,
 }
 
 fn item(id: i64, order: usize, title: &str, scan_length: f64) -> Value {
@@ -134,10 +136,16 @@ async fn answer(State(helper): State<Helper>, uri: Uri) -> Response {
             .into_response()
     };
     match uri.path() {
-        "/health" => json_ok(json!({
-            "ok": true, "version": "0.1.1", "database": "ok", "detail": "", "songs": 12,
-            "setlists": 3, "library_revision": b.revision
-        })),
+        "/health" => {
+            let mut health = json!({
+                "ok": true, "version": "0.1.1", "database": "ok", "detail": "", "songs": 12,
+                "setlists": 3, "library_revision": b.revision
+            });
+            if let Some(remote) = &b.remote {
+                health["playback_remote"] = remote.clone();
+            }
+            json_ok(health)
+        }
         "/setlists/current" => match &b.current {
             Some(setlist) => json_ok(setlist.clone()),
             None => (StatusCode::NOT_FOUND, "{\"error\": \"none open\"}").into_response(),
@@ -1013,4 +1021,84 @@ async fn start_up_does_not_wait_for_a_helper_that_never_answers() {
     assert!(took < Duration::from_secs(1), "start-up waited {took:?}");
     r.runtime.stop().await;
     held.abort();
+}
+
+/// Playback is off when the Library Link starts switching its Remote Connections on, and the connection waits a whole minute
+/// between tries. The moment the helper says "on" after "switching", the watcher makes the connection try again at once.
+#[tokio::test]
+async fn the_connection_retries_at_once_when_the_library_link_reports_remote_connections_on_after_switching(
+) {
+    use stagepilot_playback::client::PlaybackClient;
+    let options = PluginOptions {
+        client_factory: Arc::new(|mut options, observer| {
+            options.reconnect_delay = Duration::from_secs(60);
+            PlaybackClient::start(options, Some(observer)).map_err(|e| e.to_string())
+        }),
+        ..PluginOptions::default()
+    };
+    let service = SettingsService::ephemeral(RuntimeSettings::demo());
+    let runtime = Runtime::with_playback_options(Arc::new(service), false, options);
+    runtime.start().await;
+    let router = build_app(runtime.clone(), AppOptions { web_root: None });
+    let port = {
+        let spare = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        spare.local_addr().unwrap().port()
+    };
+    let helper = Helper::new(setlist(&IN_ORDER));
+    helper.set(|b| {
+        b.remote = Some(json!({"listening": false, "auto": true, "state": "switching"}));
+    });
+    let address = helper.serve().await;
+    let r = Rig {
+        router,
+        runtime,
+        fake: FakePlayback::start().await,
+        helper,
+    };
+    let (code, _) = r
+        .call(
+            "PUT",
+            "/api/v1/playback-api/settings",
+            Some(json!({"enabled": true, "host": "127.0.0.1", "port": port,
+            "auto_scan": false, "fast_transport": true})),
+        )
+        .await;
+    assert_eq!(code, StatusCode::OK);
+    let (code, _) = r
+        .call(
+            "PUT",
+            "/api/v1/playback-library/settings",
+            Some(json!({ "address": address })),
+        )
+        .await;
+    assert_eq!(code, StatusCode::OK);
+    r.library_in_use().await;
+    r.until("the first refusal", |s| {
+        s["connected"] == false && !s["last_error"].is_null()
+    })
+    .await;
+    // Still switching: a tick of the watcher changes nothing.
+    r.runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(31));
+    watch_tick(&r.runtime).await;
+    // Playback's Remote Connections come on, and the helper says so.
+    let fake = FakePlayback::start_on(port, None).await;
+    fake.auto_beat(Duration::from_millis(50));
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !r.runtime.playback.status().connected,
+        "it is waiting out its minute"
+    );
+    r.helper.set(|b| {
+        b.remote = Some(json!({"listening": true, "auto": true, "state": "on"}));
+    });
+    r.runtime
+        .playback_library
+        .advance_clock(Duration::from_secs(3));
+    watch_tick(&r.runtime).await;
+    r.until("connected right after the helper said on", |s| {
+        s["connected"] == true
+    })
+    .await;
 }

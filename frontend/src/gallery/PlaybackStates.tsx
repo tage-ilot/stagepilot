@@ -1,5 +1,5 @@
 import { PlaybackLiveLink } from "../components/PlaybackLiveLink";
-import type { HelperState } from "../types";
+import type { HelperState, PlaybackRemote } from "../types";
 import { Scripted } from "./Scripted";
 import { libraryController, libraryOf, playbackController, playbackDown, playbackOf, scanOf } from "./fixtures";
 import type { SampleState } from "./StateCard";
@@ -7,6 +7,10 @@ import type { SampleState } from "./StateCard";
 const block = (library: HelperState | null, status = playbackOf(), over: Partial<ReturnType<typeof libraryOf>["helper"]> = {}) => (
   <PlaybackLiveLink library={library ? libraryController(libraryOf(library, over)) : undefined} playback={playbackController(status)} />
 );
+
+// Playback refuses the connection while the Library Link is working and says what it is doing about Remote Connections.
+const refused = () => ({ ...playbackDown(), last_error: "Playback refused the connection; remote connections may be off" });
+const remote = (state: PlaybackRemote["state"], message: string | null = null) => ({ playback_remote: { listening: false, auto: true, state, message, last_attempt_utc: null } });
 
 export const playbackStates: SampleState[] = [
   { id: "ready", label: "Ready", look: "Both pills green; Search and Connect on top, the computer chooser; one status line; Details closed.", render: () => block("ready") },
@@ -23,5 +27,8 @@ export const playbackStates: SampleState[] = [
   { id: "update-by-itself", label: "Update available (StagePilot does it)", look: "Details closed; the line inside says StagePilot updates it.", render: () => block("outdated", playbackOf(), { update: { mode: "automatic", version: "0.4.0", message: "StagePilot updates the Library Link by itself when nothing is playing." } }) },
   { id: "needs-command", label: "Needs the command again", look: "Warning pill; the open Details.", render: () => block("needs_key") },
   { id: "not-answering", label: "Not answering", look: "Warning pill; the open Details.", render: () => block("unreachable") },
+  { id: "remote-switching", label: "Library Link switching on Remote Connections", look: "The Playback API line says the Library Link is switching it on and it takes a few seconds; the pills keep their words and tones.", render: () => block("ready", refused(), remote("switching")) },
+  { id: "remote-permission", label: "Library Link needs the Mac's permission", look: "The Playback API line says what to allow in System Settings and the by-hand step until then; the pills keep their words and tones.", render: () => block("ready", refused(), remote("needs_permission")) },
+  { id: "remote-busy", label: "Playback is being used", look: "The Playback API line says the Library Link will switch Remote Connections on when Playback is quiet; the pills keep their words and tones.", render: () => block("ready", refused(), remote("user_busy")) },
   { id: "no-link", label: "No Library Link offered", look: "Only the Playback API line and pill; no Library Link line, pill or Details button.", render: () => block(null) },
 ];
