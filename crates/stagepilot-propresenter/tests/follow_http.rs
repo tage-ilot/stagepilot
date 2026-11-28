@@ -154,3 +154,20 @@ async fn an_unreachable_propresenter_is_no_answer() {
         Err(ApiError::NoAnswer(_))
     ));
 }
+
+#[tokio::test]
+async fn a_presentation_that_answers_404_is_not_opened_and_another_error_is_not_a_no() {
+    let (base, seen) = serve(vec![
+        ("/v1/presentation/AAAA-1", 200, r#"{"presentation":{}}"#),
+        ("/v1/presentation/BBBB-2", 500, ""),
+    ]);
+    let api = HttpApi::at(&base);
+    assert_eq!(api.presentation_opened("AAAA-1").await, Ok(true));
+    assert_eq!(api.presentation_opened("CCCC-3").await, Ok(false));
+    assert_eq!(
+        api.presentation_opened("BBBB-2").await,
+        Err(ApiError::Status(500))
+    );
+    assert_eq!(api.presentation_opened("../x").await, Err(ApiError::BadId));
+    assert_eq!(seen.lock().unwrap().len(), 3, "a bad id is never sent");
+}

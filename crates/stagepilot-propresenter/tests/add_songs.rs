@@ -1236,6 +1236,173 @@ async fn a_refused_playlist_write_changes_nothing_and_keeps_the_backup() {
     assert_eq!(report.outcome, ApplyOutcome::PlaylistFailed);
 }
 
+fn puts_asked(rig: &Rig) -> usize {
+    rig.api
+        .calls()
+        .iter()
+        .filter(|c| c.starts_with("put_playlist"))
+        .count()
+}
+
+#[tokio::test]
+async fn a_copy_that_propresenter_has_not_opened_is_named_and_try_again_works_once_a_person_added_it(
+) {
+    let rig = rig(Loading::Immediately);
+    rig.api.set_unopened_copies(true);
+    let req = request(
+        &rig,
+        vec![wanted("1", "Alpha", 1, Some(1001), &["Intro"])],
+        Place::End,
+    );
+    let plan = rig.engine.preview(&req).await.unwrap();
+    let before = rig.api.stored(&rig.playlist);
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::PlaylistRefused, "{report:#?}");
+    assert_eq!(
+        report.message,
+        "ProPresenter has \"Alpha (1)\" in its Playback library but has not opened it yet, so it cannot go in the playlist from here. In ProPresenter click the Playback library, right-click \"Alpha (1)\", choose Add to > \"Sunday\", then press Try again."
+    );
+    assert!(!report.playlist_changed);
+    assert_eq!(report.songs[0].status, SongStatus::NotLoaded);
+    assert_eq!(report.songs[0].code.as_deref(), Some("not_opened"));
+    // Nothing else changed: the playlist is as it was, the backup is written, one write was tried.
+    assert_eq!(rig.api.stored(&rig.playlist), before);
+    assert!(std::path::Path::new(report.backup.as_deref().unwrap()).exists());
+    assert_eq!(puts_asked(&rig), 1);
+    assert!(rig.api.puts().is_empty());
+
+    // The person registers the copy by hand (Add to > the playlist).
+    assert!(rig.api.add_by_hand(&rig.playlist, "Playback", "Alpha (1)"));
+    let again = rig.engine.preview(&req).await.unwrap();
+    assert_eq!(again.songs[0].action, SongAction::Reuse);
+    assert!(again.songs[0].already_in_playlist);
+    assert_eq!(
+        rig.engine
+            .apply(&req, &again.plan_id, &[], &Quiet, &Log::default())
+            .await,
+        Err(ApplyRefusal::NothingToAdd)
+    );
+    let items = names_of(&rig.api.stored(&rig.playlist));
+    assert_eq!(items.iter().filter(|n| *n == "Alpha (1)").count(), 1);
+    assert_eq!(puts_asked(&rig), 1, "no second write");
+    assert_eq!(rig.host.files_of("Playback").len(), 1, "no second copy");
+}
+
+#[tokio::test]
+async fn one_unopened_copy_blocks_the_whole_write_and_is_named_while_the_rest_waits_and_goes_in_on_try_again(
+) {
+    let rig = rig(Loading::Immediately);
+    rig.api.set_unopened_copies(true);
+    // Beta goes in as it is (its file was there from the start); only Alpha's new copy is unopened.
+    let req = request(
+        &rig,
+        vec![
+            titled("t1", "Beta", 1),
+            wanted("11", "Alpha", 2, Some(1001), &["Intro"]),
+        ],
+        Place::End,
+    );
+    let plan = rig.engine.preview(&req).await.unwrap();
+    let before = rig.api.stored(&rig.playlist);
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::PlaylistRefused, "{report:#?}");
+    assert!(report
+        .message
+        .starts_with("ProPresenter has \"Alpha (1)\" in its Playback library"));
+    let beta = report.songs.iter().find(|s| s.ref_id == "t1").unwrap();
+    let alpha = report.songs.iter().find(|s| s.ref_id == "11").unwrap();
+    assert_eq!(
+        (beta.status, beta.code.as_deref()),
+        (SongStatus::NotLoaded, None)
+    );
+    assert!(beta.text.contains("\"Alpha (1)\""), "{}", beta.text);
+    assert_eq!(alpha.code.as_deref(), Some("not_opened"));
+    assert_eq!(rig.api.stored(&rig.playlist), before);
+    assert_eq!(puts_asked(&rig), 1, "no partial write and no extra write");
+
+    // The person adds Alpha's copy by hand; Try again adds Beta only and Alpha is not there twice.
+    assert!(rig.api.add_by_hand(&rig.playlist, "Playback", "Alpha (1)"));
+    let again = rig.engine.preview(&req).await.unwrap();
+    let report = rig
+        .engine
+        .apply(&req, &again.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::Done, "{report:#?}");
+    assert!(report.playlist_changed);
+    let items = names_of(&rig.api.stored(&rig.playlist));
+    assert_eq!(
+        items.iter().filter(|n| *n == "Alpha (1)").count(),
+        1,
+        "{items:?}"
+    );
+    assert_eq!(
+        items.iter().filter(|n| *n == "Beta").count(),
+        1,
+        "{items:?}"
+    );
+    assert_eq!(puts_asked(&rig), 2);
+}
+
+#[tokio::test]
+async fn several_unopened_copies_are_all_named_and_a_refusal_for_another_reason_keeps_the_generic_words(
+) {
+    let rig = rig(Loading::Immediately);
+    rig.api.set_unopened_copies(true);
+    let req = request(
+        &rig,
+        vec![
+            wanted("1", "Alpha", 1, Some(1001), &["Intro"]),
+            wanted("2", "Beta", 2, Some(1002), &["Intro"]),
+        ],
+        Place::End,
+    );
+    let plan = rig.engine.preview(&req).await.unwrap();
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::PlaylistRefused, "{report:#?}");
+    assert_eq!(
+        report.message,
+        "ProPresenter has \"Alpha (1)\" and \"Beta (1)\" in its Playback library but has not opened them yet, so they cannot go in the playlist from here. In ProPresenter click the Playback library, right-click each of \"Alpha (1)\" and \"Beta (1)\", choose Add to > \"Sunday\", then press Try again."
+    );
+    assert!(report
+        .songs
+        .iter()
+        .all(|s| s.code.as_deref() == Some("not_opened")));
+    assert_eq!(puts_asked(&rig), 1);
+
+    // Both copies are opened, yet ProPresenter still refuses (a 404 the copies do not explain): the generic words stay.
+    rig.api.open_in_library("Playback", "Alpha (1)");
+    rig.api.open_in_library("Playback", "Beta (1)");
+    rig.api.fail_put(Some(ApiError::NotFound));
+    let plan = rig.engine.preview(&req).await.unwrap();
+    let report = rig
+        .engine
+        .apply(&req, &plan.plan_id, &[], &Quiet, &Log::default())
+        .await
+        .unwrap();
+    assert_eq!(report.outcome, ApplyOutcome::PlaylistRefused);
+    assert!(
+        report
+            .message
+            .starts_with("ProPresenter refused the new playlist (404)"),
+        "{}",
+        report.message
+    );
+    assert!(report.songs.iter().all(|s| s.code.is_none()));
+}
+
 #[tokio::test]
 async fn a_read_back_that_differs_is_reported_item_by_item() {
     let rig = rig(Loading::Immediately);

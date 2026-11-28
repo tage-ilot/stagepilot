@@ -138,6 +138,8 @@ describe("the result in a few words", () => {
     expect(resultWord({ status: "failed", code: null })).toBe("Can't import");
     expect(resultWord({ status: "failed", code: "wrong_song" })).toBe("Wrong song");
     expect(resultWord({ status: "added", code: null })).toBe("");
+    expect(resultWord({ status: "not_loaded", code: "not_opened" })).toBe("Not opened");
+    expect(resultWord({ status: "not_loaded", code: null })).toBe("");
     expect(stoppedAt(report({ songs: [result("1", "A", "added")] }))).toBeNull();
   });
   it("shortens the read-back's lines to `Item 7: duration 80 \u2192 0`, and leaves what it does not know", () => {

@@ -1071,6 +1071,22 @@ describe("progress, the result and Try again, in the section", () => {
     expect(api.applyAddSongs).toHaveBeenCalledTimes(1);
   });
 
+  it("playlist_refused with a copy ProPresenter has not opened: the plain sentence is shown, the row says Not opened, Try again is offered", async () => {
+    const user = await start();
+    const sentence = "ProPresenter has \"Holy Forever (1)\" in its Playback library but has not opened it yet, so it cannot go in the playlist from here. In ProPresenter click the Playback library, right-click \"Holy Forever (1)\", choose Add to > \"Sunday\", then press Try again.";
+    vi.mocked(api.getAddSongsJob).mockResolvedValueOnce(jobOf({
+      state: "done",
+      report: report({ outcome: "playlist_refused", message: sentence, playlist_changed: false, songs: [{ ...result(REF[0]!, "Holy Forever", "not_loaded", "Not opened text."), code: "not_opened" }] }),
+    }));
+    await press(user);
+    await tick(5);
+    const done = await screen.findByTestId("add-songs-result");
+    expect(done).toHaveAttribute("data-outcome", "playlist_refused");
+    expect(screen.getByTestId("add-songs-not-opened")).toHaveTextContent(sentence);
+    expect(within(screen.getByTestId("add-songs-result-song")).getByText("Not opened")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
   it("Try again stops at a preview that is blocked now, and says so", async () => {
     const user = await start();
     vi.mocked(api.getAddSongsJob).mockResolvedValueOnce(jobOf({ state: "done", report: report({ outcome: "stopped", message: "Stopped.", playlist_changed: false }) }));

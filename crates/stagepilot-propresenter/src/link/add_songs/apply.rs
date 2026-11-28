@@ -129,7 +129,7 @@ pub struct SongResult {
     /// The Playback-library file used or made, without `.pro`.
     pub file: Option<String>,
     pub text: String,
-    /// `wrong_song`, `needs_library_open`, `unmapped`, `live_on_screen`, ...
+    /// `wrong_song`, `needs_library_open`, `unmapped`, `live_on_screen`, `not_opened` (ProPresenter lists the copy but has not opened it), ...
     pub code: Option<String>,
     /// Sections that fit more than one group and were given one: check them in ProPresenter. Never a reason to stop.
     pub guesses: Vec<SongGuess>,
@@ -879,13 +879,45 @@ impl AddSongs {
         if let Err(error) = self.api.put_playlist(&plan.playlist.id, &list).await {
             let backup = report.backup.clone().unwrap_or_default();
             run.say(None, Step::Playlist, StepState::Failed, error.words());
+            // The write was refused as a whole: which copies does ProPresenter list but has not opened?
+            let not_opened = if matches!(error, ApiError::NotFound) {
+                self.unopened_copies(&active, &stems, &uuids, &results)
+                    .await
+            } else {
+                Vec::new()
+            };
             for result in &mut results {
                 if result.status == SongStatus::Added {
                     result.status = SongStatus::NotLoaded;
-                    result.text = "Not added: ProPresenter did not take the new playlist.".into();
+                    result.text = if not_opened.is_empty() {
+                        "Not added: ProPresenter did not take the new playlist.".into()
+                    } else {
+                        let names = quoted_names(
+                            &not_opened
+                                .iter()
+                                .map(|(_, n)| n.clone())
+                                .collect::<Vec<_>>(),
+                        );
+                        format!("Not added: ProPresenter refused the whole new playlist because of {names}.")
+                    };
+                }
+                if let Some((_, name)) = not_opened
+                    .iter()
+                    .find(|(ref_id, _)| *ref_id == result.ref_id)
+                {
+                    result.status = SongStatus::NotLoaded;
+                    result.code = Some("not_opened".into());
+                    result.text = format!(
+                        "ProPresenter has \"{name}\" in its Playback library but has not opened it yet. In ProPresenter click the Playback library, right-click it and choose Add to > \"{}\", then press Try again.",
+                        plan.playlist.name
+                    );
                 }
             }
             let (outcome, message) = match error {
+                ApiError::NotFound if !not_opened.is_empty() => {
+                    let names: Vec<String> = not_opened.iter().map(|(_, n)| n.clone()).collect();
+                    (ApplyOutcome::PlaylistRefused, not_opened_sentence(&names, &plan.playlist.name))
+                }
                 ApiError::NotFound => (
                     ApplyOutcome::PlaylistRefused,
                     format!("ProPresenter refused the new playlist (404), so nothing in the playlist was changed. The playlist as it was is saved at {backup}."),
@@ -946,6 +978,34 @@ impl AddSongs {
             )
         };
         Ok(done(report, results, outcome, message))
+    }
+
+    /// The copies this write holds (made or reused, not songs that go in as they are) that ProPresenter lists but answers 404
+    /// for on `GET /v1/presentation/{uuid}`: (ref id, copy name). A question that gets no clear answer names nothing.
+    async fn unopened_copies(
+        &self,
+        active: &[&SongPlan],
+        stems: &HashMap<String, String>,
+        uuids: &HashMap<String, String>,
+        results: &[SongResult],
+    ) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for song in active {
+            if song.action == SongAction::AsIs {
+                continue;
+            }
+            let in_this_write = results
+                .iter()
+                .any(|r| r.ref_id == song.ref_id && r.status == SongStatus::Added);
+            let (Some(stem), Some(uuid)) = (stems.get(&song.ref_id), uuids.get(&song.ref_id))
+            else {
+                continue;
+            };
+            if in_this_write && matches!(self.api.presentation_opened(uuid).await, Ok(false)) {
+                out.push((song.ref_id.clone(), stem.clone()));
+            }
+        }
+        out
     }
 
     /// Imports (when the song is not in ProPresenter), then makes the copy. Returns the new file's name without `.pro`.
@@ -1392,4 +1452,31 @@ fn compare(sent: &[Value], new_from: usize, expected: &[String], back: &[Value])
         }
     }
     out
+}
+
+/// `"A"`, `"A" and "B"`, `"A", "B" and "C"`.
+fn quoted_names(names: &[String]) -> String {
+    let quoted: Vec<String> = names.iter().map(|n| format!("\"{n}\"")).collect();
+    match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+        Some((last, _)) => last.clone(),
+        None => String::new(),
+    }
+}
+
+/// The one sentence for copies ProPresenter lists in the Playback library but has not opened.
+fn not_opened_sentence(names: &[String], playlist: &str) -> String {
+    let (it, they, right_click) = if names.len() == 1 {
+        ("it", "it", format!("right-click {}", quoted_names(names)))
+    } else {
+        (
+            "them",
+            "they",
+            format!("right-click each of {}", quoted_names(names)),
+        )
+    };
+    format!(
+        "ProPresenter has {} in its Playback library but has not opened {it} yet, so {they} cannot go in the playlist from here. In ProPresenter click the Playback library, {right_click}, choose Add to > \"{playlist}\", then press Try again.",
+        quoted_names(names)
+    )
 }

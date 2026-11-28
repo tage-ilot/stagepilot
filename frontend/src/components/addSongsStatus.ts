@@ -145,8 +145,12 @@ export const placeHeading = (plan: Pick<AddSongsPlan, "playlist">, header: strin
 
 // ---- the result ---------------------------------------------------------------------------------------------------------------
 
+/** The chip of a copy ProPresenter lists in the Playback library but has not opened yet (same warning look as `! Not loaded`). */
+export const NOT_OPENED_WORD = "Not opened";
+
 /** The word of a song's result chip. A failure says what kind when the engine said (`unmapped`), else `Can't import`. */
 export function resultWord(song: Pick<AddSongsSongResult, "status" | "code">): string {
+  if (song.status === "not_loaded" && song.code === "not_opened") return NOT_OPENED_WORD;
   if (song.status !== "failed") return "";
   return song.code === "unmapped" ? STATUS.cant_map.word : song.code === "wrong_song" ? "Wrong song" : song.code === "live_on_screen" ? "Live on screen" : STATUS.cant_import.word;
 }
